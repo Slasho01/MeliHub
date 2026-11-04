@@ -1,5 +1,5 @@
-use crate::controller::{auth_controller as auth, health, ml_controller as ml, producto_controller as prod};
-use actix_web::web::{self, delete, get, post, resource as r};
+use crate::controller::{api_key_controller as keys, auth_controller as auth, health, ml_controller as ml, producto_controller as prod, pub_controller as pubc};
+use actix_web::web::{self, delete, get, post, put, resource as r};
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
@@ -18,7 +18,13 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(r("/ml/cuentas/{id}/sincronizar").route(post().to(ml::sincronizar)))
             // Catálogo unificado + gestor de inventario
             .service(r("/productos").route(get().to(prod::listar)))
-            .service(r("/productos/{id}/inventario").route(actix_web::web::put().to(prod::set_inventario)))
-            .service(r("/config/ganancias").route(get().to(prod::get_config)).route(actix_web::web::put().to(prod::set_config))),
+            .service(r("/productos/{id}/inventario").route(put().to(prod::set_inventario)))
+            .service(r("/config/ganancias").route(get().to(prod::get_config)).route(put().to(prod::set_config)))
+            // API keys (gestión por el vendedor autenticado)
+            .service(r("/api-keys").route(get().to(keys::listar)).route(post().to(keys::crear)))
+            .service(r("/api-keys/{id}").route(delete().to(keys::revocar)))
+            // Público: lo consumen las plataformas externas con X-API-Key
+            .service(r("/pub/productos").route(get().to(pubc::productos)))
+            .service(r("/pub/ventas").route(post().to(pubc::reportar_venta))),
     );
 }

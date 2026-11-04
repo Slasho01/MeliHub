@@ -74,6 +74,23 @@ diesel::table! {
 }
 
 diesel::table! {
+    api_keys (id) {
+        id -> Uuid,
+        vendedor_id -> Uuid,
+        #[max_length = 100]
+        nombre -> Varchar,
+        #[max_length = 64]
+        token_hash -> Varchar,
+        #[max_length = 20]
+        canal -> Varchar,
+        ml_cuenta_id -> Nullable<Uuid>,
+        activa -> Bool,
+        ultima_uso_at -> Nullable<Timestamp>,
+        created_at -> Timestamp,
+    }
+}
+
+diesel::table! {
     config_ganancias (vendedor_id) {
         vendedor_id -> Uuid,
         precios_con_iva -> Bool,
@@ -90,8 +107,10 @@ diesel::joinable!(ml_cuentas -> vendedores (vendedor_id));
 diesel::joinable!(ml_oauth_estados -> vendedores (vendedor_id));
 diesel::joinable!(productos -> ml_cuentas (ml_cuenta_id));
 diesel::joinable!(config_ganancias -> vendedores (vendedor_id));
+diesel::joinable!(api_keys -> vendedores (vendedor_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
+    api_keys,
     config_ganancias,
     ml_cuentas,
     ml_oauth_estados,

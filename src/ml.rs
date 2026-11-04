@@ -187,6 +187,25 @@ impl MlClient {
         }
     }
 
+    /// Actualiza el stock disponible de una publicación en Mercado Libre.
+    pub async fn update_stock(&self, access_token: &str, item_id: &str, qty: i32) -> ApiResult<()> {
+        let res = self
+            .http
+            .put(format!("{}/items/{item_id}", self.cfg.api_base))
+            .bearer_auth(access_token)
+            .header("Accept", "application/json")
+            .json(&serde_json::json!({ "available_quantity": qty.max(0) }))
+            .send()
+            .await
+            .map_err(|e| ApiError::internal(format!("Mercado Libre no respondió: {e}")))?;
+        let status = res.status();
+        if !status.is_success() {
+            let text = res.text().await.unwrap_or_default();
+            return Err(ApiError::bad_request(format!("Mercado Libre rechazó actualizar stock ({status}): {text}")));
+        }
+        Ok(())
+    }
+
     async fn get(&self, access_token: &str, path: &str) -> ApiResult<serde_json::Value> {
         let res = self
             .http

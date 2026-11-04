@@ -123,3 +123,33 @@ pub struct ConfigGanancias {
     #[serde(skip)]
     pub updated_at: NaiveDateTime,
 }
+
+// ----------------------------- API Key -----------------------------
+
+use crate::schema::api_keys;
+
+#[derive(Queryable, Selectable, Serialize, Debug, Clone)]
+#[diesel(table_name = api_keys, check_for_backend(diesel::pg::Pg))]
+pub struct ApiKey {
+    pub id: Uuid,
+    pub vendedor_id: Uuid,
+    pub nombre: String,
+    #[serde(skip_serializing)]
+    #[allow(dead_code)]
+    pub token_hash: String,
+    pub canal: String,
+    pub ml_cuenta_id: Option<Uuid>,
+    pub activa: bool,
+    pub ultima_uso_at: Option<NaiveDateTime>,
+    pub created_at: NaiveDateTime,
+}
+
+#[derive(Insertable)]
+#[diesel(table_name = api_keys)]
+pub struct NewApiKey {
+    pub vendedor_id: Uuid,
+    pub nombre: String,
+    pub token_hash: String,
+    pub canal: String,
+    pub ml_cuenta_id: Option<Uuid>,
+}
