@@ -30,4 +30,7 @@ async function api(path, { method = 'GET', body } = {}) {
 
 export const get = (p) => api(p)
 export const post = (p, b) => api(p, { method: 'POST', body: b ?? {} })
+export const put = (p, b) => api(p, { method: 'PUT', body: b ?? {} })
 export const del = (p) => api(p, { method: 'DELETE' })
+
+export const money = (v, m = 'CLP') => new Intl.NumberFormat('es-CL', { style: 'currency', currency: m, maximumFractionDigits: 0 }).format(v || 0)

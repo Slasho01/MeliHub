@@ -3,7 +3,9 @@ import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
 import { get, getToken, setToken } from './api'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
-import Catalogo from './pages/Catalogo'
+import Inventario from './pages/Inventario'
+import Ganancias from './pages/Ganancias'
+import ApiKeys from './pages/ApiKeys'
 
 export default function App() {
   const [auth, setAuth] = useState(() => !!getToken())
@@ -24,7 +26,9 @@ export default function App() {
         <div className="brand">Meli<b>Hub</b></div>
         <nav className="nav">
           <NavLink to="/" end className={cls}>Cuentas</NavLink>
-          <NavLink to="/catalogo" className={cls}>Catálogo</NavLink>
+          <NavLink to="/inventario" className={cls}>Inventario</NavLink>
+          <NavLink to="/ganancias" className={cls}>Ganancias</NavLink>
+          <NavLink to="/api-keys" className={cls}>API keys</NavLink>
         </nav>
         <div className="spacer" />
         {me && <span className="muted sm">{me.nombre}{me.rol === 'admin' ? ' · admin' : ''}</span>}
@@ -33,7 +37,9 @@ export default function App() {
       <main className="container">
         <Routes>
           <Route path="/" element={<Dashboard />} />
-          <Route path="/catalogo" element={<Catalogo />} />
+          <Route path="/inventario" element={<Inventario />} />
+          <Route path="/ganancias" element={<Ganancias />} />
+          <Route path="/api-keys" element={<ApiKeys />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
