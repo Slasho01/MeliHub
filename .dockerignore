@@ -1,0 +1,7 @@
+target
+web
+.git
+.env
+.env.*
+*.md
+wordpress-plugin
