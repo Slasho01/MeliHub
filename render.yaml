@@ -1,8 +1,6 @@
 # Blueprint de Render para MeliHub (API + panel).
-databases:
-  - name: melihub-db
-    databaseName: melihub
-    plan: free            # "free" se pausa; usa pago en producción
+# La base de datos es EXTERNA (Neon/Supabase), porque el plan free de Render
+# permite una sola BD por cuenta. Se pasa como DATABASE_URL (sync:false).
 
 services:
   # --- API (Rust, Docker) ---
@@ -15,7 +13,7 @@ services:
     autoDeploy: true
     envVars:
       - key: DATABASE_URL
-        fromDatabase: { name: melihub-db, property: connectionString }
+        sync: false        # cadena de conexión de Neon/Supabase (incluye ?sslmode=require)
       - key: HOST
         value: 0.0.0.0
       - key: JWT_SECRET
