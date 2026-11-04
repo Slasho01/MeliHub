@@ -83,6 +83,9 @@ pub struct Producto {
     pub datos: serde_json::Value,
     pub sincronizado_at: NaiveDateTime,
     pub created_at: NaiveDateTime,
+    /// Datos del gestor de inventario (no vienen de ML)
+    pub costo: Option<i64>,
+    pub precio_jarstore: Option<i64>,
 }
 
 #[derive(Insertable, AsChangeset)]
@@ -101,4 +104,22 @@ pub struct UpsertProducto {
     pub variantes: serde_json::Value,
     pub datos: serde_json::Value,
     pub sincronizado_at: NaiveDateTime,
+}
+
+// ----------------------------- Config de ganancias -----------------------------
+
+use crate::schema::config_ganancias;
+
+#[derive(Queryable, Selectable, Insertable, AsChangeset, Serialize, Debug, Clone)]
+#[diesel(table_name = config_ganancias, check_for_backend(diesel::pg::Pg))]
+pub struct ConfigGanancias {
+    pub vendedor_id: Uuid,
+    pub precios_con_iva: bool,
+    pub iva_pct: f64,
+    pub comision_ml_pct: f64,
+    pub comision_ml_fija: i64,
+    pub comision_mp_pct: f64,
+    pub comision_mp_fija: i64,
+    #[serde(skip)]
+    pub updated_at: NaiveDateTime,
 }

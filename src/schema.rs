@@ -68,14 +68,31 @@ diesel::table! {
         datos -> Jsonb,
         sincronizado_at -> Timestamp,
         created_at -> Timestamp,
+        costo -> Nullable<Int8>,
+        precio_jarstore -> Nullable<Int8>,
+    }
+}
+
+diesel::table! {
+    config_ganancias (vendedor_id) {
+        vendedor_id -> Uuid,
+        precios_con_iva -> Bool,
+        iva_pct -> Float8,
+        comision_ml_pct -> Float8,
+        comision_ml_fija -> Int8,
+        comision_mp_pct -> Float8,
+        comision_mp_fija -> Int8,
+        updated_at -> Timestamp,
     }
 }
 
 diesel::joinable!(ml_cuentas -> vendedores (vendedor_id));
 diesel::joinable!(ml_oauth_estados -> vendedores (vendedor_id));
 diesel::joinable!(productos -> ml_cuentas (ml_cuenta_id));
+diesel::joinable!(config_ganancias -> vendedores (vendedor_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
+    config_ganancias,
     ml_cuentas,
     ml_oauth_estados,
     productos,

@@ -16,7 +16,9 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(r("/ml/cuentas").route(get().to(ml::listar_cuentas)))
             .service(r("/ml/cuentas/{id}").route(delete().to(ml::desconectar)))
             .service(r("/ml/cuentas/{id}/sincronizar").route(post().to(ml::sincronizar)))
-            // Catálogo unificado
-            .service(r("/productos").route(get().to(prod::listar))),
+            // Catálogo unificado + gestor de inventario
+            .service(r("/productos").route(get().to(prod::listar)))
+            .service(r("/productos/{id}/inventario").route(actix_web::web::put().to(prod::set_inventario)))
+            .service(r("/config/ganancias").route(get().to(prod::get_config)).route(actix_web::web::put().to(prod::set_config))),
     );
 }
