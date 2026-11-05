@@ -6,4 +6,5 @@ pub mod ml_services;
 pub mod pub_services;
 pub mod producto_services;
 pub mod saas_services;
+pub mod suscripcion_services;
 pub mod venta_services;

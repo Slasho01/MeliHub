@@ -1,4 +1,4 @@
-use crate::schema::{historial_producto, ml_cuentas, notificaciones, ordenes_ml, productos, vendedores};
+use crate::schema::{historial_producto, ml_cuentas, notificaciones, ordenes_ml, productos, suscripciones, vendedores};
 use chrono::NaiveDateTime;
 use diesel::prelude::*;
 use serde::Serialize;
@@ -243,4 +243,32 @@ pub struct NewNotificacion {
     pub tipo: String,
     pub titulo: String,
     pub cuerpo: Option<String>,
+}
+
+// ----------------------------- Suscripción -----------------------------
+
+#[derive(Queryable, Selectable, Identifiable, AsChangeset, Serialize, Debug, Clone)]
+#[diesel(table_name = suscripciones, check_for_backend(diesel::pg::Pg))]
+pub struct Suscripcion {
+    pub id: Uuid,
+    pub vendedor_id: Uuid,
+    pub plan: String,
+    pub estado: String,
+    pub proveedor: String,
+    pub preapproval_id: Option<String>,
+    pub monto: i64,
+    pub vigente_hasta: Option<NaiveDateTime>,
+    pub created_at: NaiveDateTime,
+    pub updated_at: NaiveDateTime,
+}
+
+#[derive(Insertable, Debug)]
+#[diesel(table_name = suscripciones)]
+pub struct NewSuscripcion {
+    pub vendedor_id: Uuid,
+    pub plan: String,
+    pub estado: String,
+    pub proveedor: String,
+    pub preapproval_id: Option<String>,
+    pub monto: i64,
 }

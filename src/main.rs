@@ -6,6 +6,7 @@ mod errors;
 mod jobs;
 mod ml;
 mod models;
+mod mp;
 mod planes;
 mod routes;
 mod schema;
@@ -47,6 +48,7 @@ async fn main() -> std::io::Result<()> {
     let pool_data = web::Data::new(pool);
     let ml_client = web::Data::new(ml::MlClient::new(config.ml.clone()));
     let login_limiter = web::Data::new(auth::LoginLimiter::new());
+    let mp_client = web::Data::new(mp::MercadoPago::new(config.mp_access_token.clone()));
 
     jobs::start(pool_data.clone(), ml_client.clone(), config.ml.configurado());
 
@@ -65,6 +67,7 @@ async fn main() -> std::io::Result<()> {
             .app_data(pool_data.clone())
             .app_data(ml_client.clone())
             .app_data(login_limiter.clone())
+            .app_data(mp_client.clone())
             .app_data(web::JsonConfig::default().limit(1 << 20).error_handler(|err, _| {
                 actix_web::error::Error::from(errors::ApiError::bad_request(format!("JSON inválido: {err}")))
             }))

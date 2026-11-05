@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { get, money } from '../api'
+import { get, money, post } from '../api'
 
 const lim = (v) => (v < 0 ? '∞' : v)
 const precio = (v) => (v === 0 ? 'Gratis' : `${money(v)}/mes`)
@@ -24,16 +24,47 @@ function Barra({ label, used, max }) {
 
 export default function Plan() {
   const [data, setData] = useState(null)
+  const [sub, setSub] = useState(null)
   const [error, setError] = useState(null)
-  useEffect(() => { get('/mi-plan').then(setData).catch((e) => setError(e.message)) }, [])
+  const [busy, setBusy] = useState('')
 
-  if (error) return <div className="alert alert-bad">{error}</div>
+  const cargar = () => {
+    get('/mi-plan').then(setData).catch((e) => setError(e.message))
+    get('/suscripcion').then((r) => setSub(r.suscripcion)).catch(() => {})
+  }
+  useEffect(() => { cargar() }, [])
+
+  const suscribir = async (planId) => {
+    setBusy(planId); setError(null)
+    try {
+      const r = await post('/suscripcion/suscribir', { plan: planId })
+      if (r.init_point) window.location.href = r.init_point
+      else setError('No se pudo iniciar el pago.')
+    } catch (e) { setError(e.message) } finally { setBusy('') }
+  }
+
+  const cancelar = async () => {
+    if (!window.confirm('¿Cancelar tu suscripción? Volverás al plan Free.')) return
+    setBusy('cancelar'); setError(null)
+    try { await post('/suscripcion/cancelar', {}); cargar() } catch (e) { setError(e.message) } finally { setBusy('') }
+  }
+
+  if (error && !data) return <div className="alert alert-bad">{error}</div>
   if (!data) return <div className="empty">Cargando…</div>
   const { plan, uso, planes } = data
+  const activa = sub && sub.estado === 'authorized'
 
   return (
     <div className="stack">
       <div><h1>Plan y suscripción</h1><p className="muted sm" style={{ margin: 0 }}>Tu plan actual y cuánto usas.</p></div>
+      {error && <div className="alert alert-bad">{error}</div>}
+      {sub && (
+        <div className="muted sm">
+          Suscripción: <b>{sub.estado}</b>
+          {sub.vigente_hasta ? ` · vigente hasta ${new Date(sub.vigente_hasta + 'Z').toLocaleDateString('es-CL')}` : ''}
+          {activa && <> · <button className="link-btn" disabled={busy === 'cancelar'} onClick={cancelar}>cancelar</button></>}
+        </div>
+      )}
 
       <div className="card stack">
         <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
@@ -56,6 +87,13 @@ export default function Plan() {
               <li>{lim(p.max_productos)} productos</li>
               <li>{lim(p.max_plataformas)} plataforma(s)</li>
             </ul>
+            {p.id === plan.id ? (
+              <span className="badge" style={{ color: 'var(--ok)' }}>Plan actual</span>
+            ) : p.precio_mensual > 0 ? (
+              <button className="btn btn-sm btn-accent" disabled={busy === p.id} onClick={() => suscribir(p.id)}>
+                {busy === p.id ? 'Redirigiendo…' : 'Suscribirme'}
+              </button>
+            ) : null}
           </div>
         ))}
       </div>

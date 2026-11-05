@@ -8,6 +8,10 @@ pub struct Config {
     pub port: u16,
     pub cors_origins: Vec<String>,
     pub ml: MlConfig,
+    /// URL pública de MeliHub (para back_url de pagos, etc.).
+    pub app_url: String,
+    /// Access token de Mercado Pago (del dueño de MeliHub) para cobrar suscripciones.
+    pub mp_access_token: String,
 }
 
 #[derive(Clone)]
@@ -54,6 +58,8 @@ impl Config {
                 api_base: var("ML_API_BASE", "https://api.mercadolibre.com").trim_end_matches('/').to_string(),
                 auth_base: var("ML_AUTH_BASE", "https://auth.mercadolibre.cl").trim_end_matches('/').to_string(),
             },
+            app_url: var("APP_URL", "http://localhost:8090").trim_end_matches('/').to_string(),
+            mp_access_token: var("MP_ACCESS_TOKEN", ""),
         })
     }
 }

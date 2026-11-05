@@ -28,3 +28,11 @@ services:
       #   https://melihub.onrender.com/api/ml/callback
       - key: ML_REDIRECT_URI
         sync: false
+      # URL pública de ESTE servicio (para back_url / webhooks de pago):
+      #   https://melihub.onrender.com
+      - key: APP_URL
+        sync: false
+      # Access token de Mercado Pago (del dueño) para cobrar suscripciones.
+      # Usa primero el de PRUEBA (TEST-...) para validar sin cobros reales.
+      - key: MP_ACCESS_TOKEN
+        sync: false

@@ -130,6 +130,25 @@ diesel::table! {
 }
 
 diesel::table! {
+    suscripciones (id) {
+        id -> Uuid,
+        vendedor_id -> Uuid,
+        #[max_length = 20]
+        plan -> Varchar,
+        #[max_length = 20]
+        estado -> Varchar,
+        #[max_length = 20]
+        proveedor -> Varchar,
+        #[max_length = 80]
+        preapproval_id -> Nullable<Varchar>,
+        monto -> Int8,
+        vigente_hasta -> Nullable<Timestamp>,
+        created_at -> Timestamp,
+        updated_at -> Timestamp,
+    }
+}
+
+diesel::table! {
     notificaciones (id) {
         id -> Uuid,
         vendedor_id -> Uuid,
@@ -165,6 +184,7 @@ diesel::joinable!(api_keys -> vendedores (vendedor_id));
 diesel::joinable!(ordenes_ml -> ml_cuentas (ml_cuenta_id));
 diesel::joinable!(historial_producto -> productos (producto_id));
 diesel::joinable!(notificaciones -> vendedores (vendedor_id));
+diesel::joinable!(suscripciones -> vendedores (vendedor_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
     api_keys,
@@ -175,5 +195,6 @@ diesel::allow_tables_to_appear_in_same_query!(
     notificaciones,
     ordenes_ml,
     productos,
+    suscripciones,
     vendedores,
 );
