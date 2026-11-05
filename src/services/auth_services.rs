@@ -43,12 +43,13 @@ pub fn registrar(conn: &mut PgConnection, req: RegistroRequest) -> ApiResult<Ven
     let hash = bcrypt::hash(&req.password, bcrypt::DEFAULT_COST)
         .map_err(|e| ApiError::internal(format!("No se pudo cifrar la contraseña: {e}")))?;
 
-    // El primer vendedor registrado es admin del hub.
+    // El primer vendedor registrado es admin del hub y queda en Business; el
+    // resto arranca en Free (y puede mejorar su plan suscribiéndose).
     let total: i64 = vendedores::table.count().get_result(conn)?;
-    let rol = if total == 0 { "admin" } else { "vendedor" };
+    let (rol, plan) = if total == 0 { ("admin", "business") } else { ("vendedor", "free") };
 
     diesel::insert_into(vendedores::table)
-        .values(NewVendedor { email, password_hash: hash, nombre: nombre.to_string(), rol: rol.to_string() })
+        .values(NewVendedor { email, password_hash: hash, nombre: nombre.to_string(), rol: rol.to_string(), plan: plan.to_string() })
         .returning(Vendedor::as_returning())
         .get_result(conn)
         .map_err(|e| match ApiError::from(e) {

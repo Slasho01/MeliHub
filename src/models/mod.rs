@@ -28,6 +28,7 @@ pub struct NewVendedor {
     pub password_hash: String,
     pub nombre: String,
     pub rol: String,
+    pub plan: String,
 }
 
 // ----------------------------- Cuenta ML -----------------------------

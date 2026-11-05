@@ -39,6 +39,9 @@ export default function App() {
           <NavLink to="/perfil" className={cls}>Mi cuenta</NavLink>
         </nav>
         <div className="spacer" />
+        {me && (me.plan !== 'business'
+          ? <NavLink to="/plan" className="btn btn-sm btn-accent" style={{ marginRight: 10 }}>⭐ Mejorar plan</NavLink>
+          : <NavLink to="/plan" className="muted sm" style={{ marginRight: 10, textDecoration: 'none' }}>Plan Business ✓</NavLink>)}
         {me && <span className="muted sm">{me.nombre}{me.rol === 'admin' ? ' · admin' : ''}</span>}
         <button className="btn btn-sm" onClick={logout}>Salir</button>
       </header>
