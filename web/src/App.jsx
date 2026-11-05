@@ -6,6 +6,7 @@ import Dashboard from './pages/Dashboard'
 import Inventario from './pages/Inventario'
 import Ganancias from './pages/Ganancias'
 import ApiKeys from './pages/ApiKeys'
+import Ventas from './pages/Ventas'
 
 export default function App() {
   const [auth, setAuth] = useState(() => !!getToken())
@@ -28,6 +29,7 @@ export default function App() {
           <NavLink to="/" end className={cls}>Cuentas</NavLink>
           <NavLink to="/inventario" className={cls}>Inventario</NavLink>
           <NavLink to="/ganancias" className={cls}>Ganancias</NavLink>
+          <NavLink to="/ventas" className={cls}>Ventas</NavLink>
           <NavLink to="/api-keys" className={cls}>API keys</NavLink>
         </nav>
         <div className="spacer" />
@@ -39,6 +41,7 @@ export default function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/inventario" element={<Inventario />} />
           <Route path="/ganancias" element={<Ganancias />} />
+          <Route path="/ventas" element={<Ventas />} />
           <Route path="/api-keys" element={<ApiKeys />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

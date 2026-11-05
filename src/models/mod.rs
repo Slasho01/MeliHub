@@ -1,4 +1,4 @@
-use crate::schema::{ml_cuentas, productos, vendedores};
+use crate::schema::{ml_cuentas, ordenes_ml, productos, vendedores};
 use chrono::NaiveDateTime;
 use diesel::prelude::*;
 use serde::Serialize;
@@ -152,4 +152,43 @@ pub struct NewApiKey {
     pub token_hash: String,
     pub canal: String,
     pub ml_cuenta_id: Option<Uuid>,
+}
+
+// ----------------------------- Orden de Mercado Libre -----------------------------
+
+#[derive(Queryable, Selectable, Identifiable, Serialize, Debug, Clone)]
+#[diesel(table_name = ordenes_ml, check_for_backend(diesel::pg::Pg))]
+pub struct OrdenMl {
+    pub id: Uuid,
+    pub ml_cuenta_id: Uuid,
+    pub ml_order_id: i64,
+    pub estado: String,
+    pub fecha: NaiveDateTime,
+    pub moneda: String,
+    pub comprador: Option<String>,
+    pub venta_total: i64,
+    pub comision_total: i64,
+    pub costo_total: i64,
+    pub ganancia: i64,
+    pub items: serde_json::Value,
+    #[serde(skip_serializing)]
+    pub datos: serde_json::Value,
+    pub created_at: NaiveDateTime,
+}
+
+#[derive(Insertable, AsChangeset, Debug)]
+#[diesel(table_name = ordenes_ml)]
+pub struct NewOrdenMl {
+    pub ml_cuenta_id: Uuid,
+    pub ml_order_id: i64,
+    pub estado: String,
+    pub fecha: NaiveDateTime,
+    pub moneda: String,
+    pub comprador: Option<String>,
+    pub venta_total: i64,
+    pub comision_total: i64,
+    pub costo_total: i64,
+    pub ganancia: i64,
+    pub items: serde_json::Value,
+    pub datos: serde_json::Value,
 }

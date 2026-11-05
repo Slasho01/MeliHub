@@ -81,6 +81,34 @@ pub struct MlItem {
     pub currency_id: Option<String>,
     #[serde(default)]
     pub variations: serde_json::Value,
+    /// Ficha técnica de Mercado Libre: [{id, name, value_name, ...}, ...]
+    #[serde(default)]
+    pub attributes: serde_json::Value,
+    /// Descripción en texto plano. NO viene en el multiget (es otro endpoint);
+    /// la rellena la sync y se persiste dentro de `datos`.
+    #[serde(default, skip_deserializing)]
+    pub descripcion: Option<String>,
+    /// Nombre de la categoría de ML (resuelto desde `category_id`); lo rellena la
+    /// sync y se persiste en `datos`.
+    #[serde(default, skip_deserializing)]
+    pub categoria_nombre: Option<String>,
+    /// Id del producto de catálogo de ML. Dos publicaciones (catálogo + normal)
+    /// del mismo producto comparten este id → se usa para no duplicar.
+    #[serde(default)]
+    pub catalog_product_id: Option<String>,
+    /// Si esta publicación es la de catálogo.
+    #[serde(default)]
+    pub catalog_listing: Option<bool>,
+    /// Datos de envío de ML; se usa `logistic_type` ("fulfillment" = FULL).
+    #[serde(default)]
+    pub shipping: serde_json::Value,
+    /// Producto del usuario (agrupa el stock por ubicación: depósito + FULL).
+    #[serde(default)]
+    pub user_product_id: Option<String>,
+    /// Stock en bodega propia (ubicaciones ≠ `meli_facility`); lo rellena la sync
+    /// desde `/user-products/{id}/stock` y se persiste en `datos`.
+    #[serde(default, skip_deserializing)]
+    pub deposito_stock: Option<i64>,
 }
 
 /// Envoltorio del multiget: [{ "code": 200, "body": {item} }, ...]
@@ -171,7 +199,7 @@ impl MlClient {
         if ids.is_empty() {
             return Ok(vec![]);
         }
-        let attrs = "id,title,price,available_quantity,status,permalink,thumbnail,category_id,currency_id,variations";
+        let attrs = "id,title,price,available_quantity,status,permalink,thumbnail,category_id,currency_id,variations,attributes,catalog_product_id,catalog_listing,shipping,user_product_id";
         let v: serde_json::Value = self
             .get(access_token, &format!("/items?ids={}&attributes={attrs}", ids.join(",")))
             .await?;
@@ -185,6 +213,51 @@ impl MlClient {
         } else {
             Ok(serde_json::from_value::<Vec<MlItem>>(v).unwrap_or_default())
         }
+    }
+
+    /// Descripción en texto plano de una publicación (endpoint aparte del item).
+    /// Devuelve None si no tiene o si falla (es best-effort).
+    pub async fn get_description(&self, access_token: &str, item_id: &str) -> Option<String> {
+        let v: serde_json::Value = self.get(access_token, &format!("/items/{item_id}/description")).await.ok()?;
+        v.get("plain_text")
+            .or_else(|| v.get("text"))
+            .and_then(|t| t.as_str())
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+    }
+
+    /// Busca órdenes (ventas) del vendedor, más recientes primero. Devuelve el
+    /// objeto crudo de ML (con `results` y `paging`). Requiere permiso de lectura
+    /// de ventas en la app de ML.
+    pub async fn search_orders(&self, access_token: &str, seller_id: i64, offset: i64) -> ApiResult<serde_json::Value> {
+        self.get(
+            access_token,
+            &format!("/orders/search?seller={seller_id}&sort=date_desc&offset={offset}&limit=50"),
+        )
+        .await
+    }
+
+    /// Nombre de una categoría de Mercado Libre (p. ej. "MLC1234" -> "Taladros").
+    /// Best-effort: None si falla.
+    pub async fn get_category(&self, access_token: &str, cat_id: &str) -> Option<String> {
+        let v: serde_json::Value = self.get(access_token, &format!("/categories/{cat_id}")).await.ok()?;
+        v.get("name")
+            .and_then(|n| n.as_str())
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+    }
+
+    /// Stock en la **bodega propia** del vendedor (suma de ubicaciones que no son
+    /// `meli_facility`/FULL) desde `/user-products/{id}/stock`. None si falla.
+    pub async fn get_deposito_stock(&self, access_token: &str, user_product_id: &str) -> Option<i64> {
+        let v: serde_json::Value = self.get(access_token, &format!("/user-products/{user_product_id}/stock")).await.ok()?;
+        let locs = v.get("locations")?.as_array()?;
+        let dep: i64 = locs
+            .iter()
+            .filter(|l| l.get("type").and_then(|t| t.as_str()) != Some("meli_facility"))
+            .filter_map(|l| l.get("quantity").and_then(|q| q.as_i64()))
+            .sum();
+        Some(dep)
     }
 
     /// Actualiza el stock disponible de una publicación en Mercado Libre.
@@ -202,6 +275,58 @@ impl MlClient {
         if !status.is_success() {
             let text = res.text().await.unwrap_or_default();
             return Err(ApiError::bad_request(format!("Mercado Libre rechazó actualizar stock ({status}): {text}")));
+        }
+        Ok(())
+    }
+
+    /// Actualiza el **precio** de una publicación en Mercado Libre.
+    pub async fn update_price(&self, access_token: &str, item_id: &str, precio: i64) -> ApiResult<()> {
+        self.put_item(access_token, item_id, serde_json::json!({ "price": precio.max(0) })).await
+    }
+
+    /// Pausa o reactiva una publicación (`status` = "paused" | "active").
+    pub async fn set_status(&self, access_token: &str, item_id: &str, status: &str) -> ApiResult<()> {
+        self.put_item(access_token, item_id, serde_json::json!({ "status": status })).await
+    }
+
+    /// PUT genérico a /items/{id} con el cuerpo dado.
+    async fn put_item(&self, access_token: &str, item_id: &str, body: serde_json::Value) -> ApiResult<()> {
+        let res = self
+            .http
+            .put(format!("{}/items/{item_id}", self.cfg.api_base))
+            .bearer_auth(access_token)
+            .header("Accept", "application/json")
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| ApiError::internal(format!("Mercado Libre no respondió: {e}")))?;
+        let status = res.status();
+        if !status.is_success() {
+            let text = res.text().await.unwrap_or_default();
+            return Err(ApiError::bad_request(format!("Mercado Libre rechazó la actualización ({status}): {text}")));
+        }
+        Ok(())
+    }
+
+    /// Actualiza SOLO el stock de la bodega propia (ubicación `selling_address`)
+    /// de un user-product, sin tocar el de FULL (`meli_facility`).
+    pub async fn update_deposito_stock(&self, access_token: &str, user_product_id: &str, qty: i32) -> ApiResult<()> {
+        let body = serde_json::json!({
+            "locations": [{ "type": "selling_address", "quantity": qty.max(0) }]
+        });
+        let res = self
+            .http
+            .put(format!("{}/user-products/{user_product_id}/stock", self.cfg.api_base))
+            .bearer_auth(access_token)
+            .header("Accept", "application/json")
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| ApiError::internal(format!("Mercado Libre no respondió: {e}")))?;
+        let status = res.status();
+        if !status.is_success() {
+            let text = res.text().await.unwrap_or_default();
+            return Err(ApiError::bad_request(format!("Mercado Libre rechazó actualizar stock de depósito ({status}): {text}")));
         }
         Ok(())
     }

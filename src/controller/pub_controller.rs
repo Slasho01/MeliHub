@@ -53,10 +53,18 @@ pub async fn reportar_venta(
         let cuenta_id = venta.ml_cuenta_id;
         match db::run(&pool, move |conn| ml_services::get_cuenta(conn, cuenta_id, kvid, true)).await {
             Ok(cuenta) => match crate::sync::access_token_valido(&pool, &client, &cuenta).await {
-                Ok(token) => match client.update_stock(&token, &venta.ml_item_id, venta.nuevo_stock).await {
-                    Ok(()) => ml_actualizado = true,
-                    Err(e) => log::warn!("No se pudo actualizar stock en ML ({}): {e}", venta.ml_item_id),
-                },
+                Ok(token) => {
+                    // Si usa stock por ubicación (FULL/depósito), descontamos SOLO el
+                    // depósito; si no, el disponible del item.
+                    let res = match &venta.user_product_id {
+                        Some(upid) => client.update_deposito_stock(&token, upid, venta.nuevo_stock).await,
+                        None => client.update_stock(&token, &venta.ml_item_id, venta.nuevo_stock).await,
+                    };
+                    match res {
+                        Ok(()) => ml_actualizado = true,
+                        Err(e) => log::warn!("No se pudo actualizar stock en ML ({}): {e}", venta.ml_item_id),
+                    }
+                }
                 Err(e) => log::warn!("Token ML no disponible para {}: {e}", venta.ml_item_id),
             },
             Err(e) => log::warn!("Cuenta ML no encontrada para la venta: {e}"),

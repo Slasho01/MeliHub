@@ -34,6 +34,12 @@ pub fn start(pool: web::Data<DbPool>, client: web::Data<MlClient>, configurado: 
                     Ok(n) => log::info!("Cuenta {} sincronizada: {n} publicaciones", cuenta.ml_user_id),
                     Err(e) => log::warn!("Error sincronizando cuenta {}: {e}", cuenta.ml_user_id),
                 }
+                // Órdenes (ventas) — best-effort; requiere permiso de ventas en la app ML.
+                match crate::sync::sincronizar_ordenes(&pool, &client, cuenta).await {
+                    Ok(n) if n > 0 => log::info!("Cuenta {}: {n} órdenes sincronizadas", cuenta.ml_user_id),
+                    Ok(_) => {}
+                    Err(e) => log::warn!("Error sincronizando órdenes de {}: {e}", cuenta.ml_user_id),
+                }
             }
         }
     });

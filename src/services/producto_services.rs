@@ -1,11 +1,30 @@
 use crate::errors::{ApiError, ApiResult};
 use crate::ml::MlItem;
-use crate::models::{Producto, UpsertProducto};
+use crate::models::{MlCuenta, Producto, UpsertProducto};
 use crate::schema::{ml_cuentas, productos};
 use crate::services::common::now;
 use diesel::prelude::*;
 use serde::Deserialize;
 use uuid::Uuid;
+
+/// Stock que el vendedor realmente puede despachar: el de su **bodega (depósito)**.
+/// El de FULL (meli_facility) lo gestiona Mercado Libre y no cuenta.
+fn stock_vendible(it: &MlItem) -> i32 {
+    if let Some(d) = it.deposito_stock {
+        return d.clamp(0, i32::MAX as i64) as i32;
+    }
+    let full = it
+        .shipping
+        .get("logistic_type")
+        .and_then(|l| l.as_str())
+        .map(|t| t.eq_ignore_ascii_case("fulfillment"))
+        .unwrap_or(false);
+    if full {
+        0
+    } else {
+        it.available_quantity.unwrap_or(0).clamp(0, i32::MAX as i64) as i32
+    }
+}
 
 /// Convierte un ítem de Mercado Libre al registro local.
 fn a_registro(cuenta_id: Uuid, it: &MlItem) -> UpsertProducto {
@@ -15,7 +34,7 @@ fn a_registro(cuenta_id: Uuid, it: &MlItem) -> UpsertProducto {
         titulo: it.title.chars().take(500).collect(),
         precio: it.price.map(|p| p.round() as i64).unwrap_or(0),
         moneda: it.currency_id.clone().unwrap_or_else(|| "CLP".into()),
-        stock: it.available_quantity.unwrap_or(0) as i32,
+        stock: stock_vendible(it),
         estado: it.status.clone().unwrap_or_else(|| "active".into()),
         permalink: it.permalink.clone(),
         thumbnail: it.thumbnail.clone(),

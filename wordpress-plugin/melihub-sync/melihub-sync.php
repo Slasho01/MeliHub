@@ -29,7 +29,7 @@ function melihub_api($method, $path, $body = null) {
     $args = [
         'method'  => $method,
         'timeout' => 20,
-        'headers' => ['X-API-Key' => $o['key'], 'Accept' => 'application/json'],
+        'headers' => ['X-API-Key' => $o['key'], 'Accept' => 'application/json', 'ngrok-skip-browser-warning' => '1'],
     ];
     if ($body !== null) {
         $args['headers']['Content-Type'] = 'application/json';
@@ -66,12 +66,44 @@ function melihub_sync_productos() {
         $product->set_stock_quantity((int) $it['stock']);
         $product->set_stock_status($it['stock'] > 0 ? 'instock' : 'outofstock');
         $product->set_status($it['estado'] === 'active' ? 'publish' : 'draft');
+        if (!empty($it['descripcion'])) {
+            $product->set_description($it['descripcion']);
+        }
+        // Ficha técnica -> atributos de producto (pestaña "Información adicional")
+        if (!empty($it['especificaciones']) && is_array($it['especificaciones'])) {
+            $attrs = [];
+            foreach ($it['especificaciones'] as $i => $spec) {
+                if (empty($spec['nombre']) || empty($spec['valor'])) continue;
+                $a = new WC_Product_Attribute();
+                $a->set_id(0); // atributo personalizado (no taxonomía)
+                $a->set_name($spec['nombre']);
+                $a->set_options([$spec['valor']]);
+                $a->set_position($i);
+                $a->set_visible(true);
+                $a->set_variation(false);
+                $attrs[] = $a;
+            }
+            if ($attrs) $product->set_attributes($attrs);
+        }
+        // Categoría -> término product_cat (se crea si no existe)
+        if (!empty($it['categoria'])) {
+            $term = get_term_by('name', $it['categoria'], 'product_cat');
+            if (!$term) {
+                $res = wp_insert_term($it['categoria'], 'product_cat');
+                $term_id = is_wp_error($res) ? 0 : (int) $res['term_id'];
+            } else {
+                $term_id = (int) $term->term_id;
+            }
+            if ($term_id) $product->set_category_ids([$term_id]);
+        }
         $product->update_meta_data(MELIHUB_META_ID, $it['id']);
         $id = $product->save();
 
-        // Imagen (solo la primera vez, para no re-descargar en cada sync)
-        if ($nuevo && !empty($it['thumbnail']) && !$product->get_image_id()) {
-            melihub_set_imagen($id, $it['thumbnail']);
+        // Imagen: (re)descarga si es nueva o si cambió la URL de origen (p. ej. mayor calidad)
+        $img_url = $it['thumbnail'] ?? '';
+        if ($img_url && get_post_meta($id, '_melihub_img_src', true) !== $img_url) {
+            melihub_set_imagen($id, $img_url);
+            update_post_meta($id, '_melihub_img_src', $img_url);
         }
         $nuevo ? $creados++ : $actualizados++;
     }

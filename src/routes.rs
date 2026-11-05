@@ -1,4 +1,4 @@
-use crate::controller::{api_key_controller as keys, auth_controller as auth, health, ml_controller as ml, producto_controller as prod, pub_controller as pubc};
+use crate::controller::{api_key_controller as keys, auth_controller as auth, health, ml_controller as ml, producto_controller as prod, pub_controller as pubc, venta_controller as ventas};
 use actix_web::web::{self, delete, get, post, put, resource as r};
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
@@ -20,6 +20,10 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(r("/productos").route(get().to(prod::listar)))
             .service(r("/productos/{id}/inventario").route(put().to(prod::set_inventario)))
             .service(r("/config/ganancias").route(get().to(prod::get_config)).route(put().to(prod::set_config)))
+            // Ventas centralizadas (órdenes de ML) + dashboard con ganancia real
+            .service(r("/ventas/sincronizar").route(post().to(ventas::sincronizar)))
+            .service(r("/ventas/dashboard").route(get().to(ventas::dashboard)))
+            .service(r("/ventas").route(get().to(ventas::listar)))
             // API keys (gestión por el vendedor autenticado)
             .service(r("/api-keys").route(get().to(keys::listar)).route(post().to(keys::crear)))
             .service(r("/api-keys/{id}").route(delete().to(keys::revocar)))

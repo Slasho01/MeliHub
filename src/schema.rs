@@ -103,17 +103,41 @@ diesel::table! {
     }
 }
 
+diesel::table! {
+    ordenes_ml (id) {
+        id -> Uuid,
+        ml_cuenta_id -> Uuid,
+        ml_order_id -> Int8,
+        #[max_length = 40]
+        estado -> Varchar,
+        fecha -> Timestamp,
+        #[max_length = 8]
+        moneda -> Varchar,
+        #[max_length = 255]
+        comprador -> Nullable<Varchar>,
+        venta_total -> Int8,
+        comision_total -> Int8,
+        costo_total -> Int8,
+        ganancia -> Int8,
+        items -> Jsonb,
+        datos -> Jsonb,
+        created_at -> Timestamp,
+    }
+}
+
 diesel::joinable!(ml_cuentas -> vendedores (vendedor_id));
 diesel::joinable!(ml_oauth_estados -> vendedores (vendedor_id));
 diesel::joinable!(productos -> ml_cuentas (ml_cuenta_id));
 diesel::joinable!(config_ganancias -> vendedores (vendedor_id));
 diesel::joinable!(api_keys -> vendedores (vendedor_id));
+diesel::joinable!(ordenes_ml -> ml_cuentas (ml_cuenta_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
     api_keys,
     config_ganancias,
     ml_cuentas,
     ml_oauth_estados,
+    ordenes_ml,
     productos,
     vendedores,
 );
