@@ -145,6 +145,27 @@ diesel::table! {
         vigente_hasta -> Nullable<Timestamp>,
         created_at -> Timestamp,
         updated_at -> Timestamp,
+        #[max_length = 10]
+        ciclo -> Varchar,
+        #[max_length = 40]
+        cupon -> Nullable<Varchar>,
+    }
+}
+
+diesel::table! {
+    cupones (id) {
+        id -> Uuid,
+        #[max_length = 40]
+        codigo -> Varchar,
+        #[max_length = 12]
+        tipo -> Varchar,
+        valor -> Int8,
+        activo -> Bool,
+        vence -> Nullable<Timestamp>,
+        usos_max -> Nullable<Int4>,
+        usos -> Int4,
+        created_at -> Timestamp,
+        updated_at -> Timestamp,
     }
 }
 
@@ -212,6 +233,7 @@ diesel::joinable!(miembros -> vendedores (vendedor_id));
 diesel::allow_tables_to_appear_in_same_query!(
     api_keys,
     config_ganancias,
+    cupones,
     historial_producto,
     miembros,
     ml_cuentas,

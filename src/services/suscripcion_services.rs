@@ -19,7 +19,8 @@ pub fn email_de(conn: &mut PgConnection, vendedor_id: Uuid) -> ApiResult<String>
 }
 
 /// Registra una suscripción (pendiente) ligada a un preapproval de MP.
-pub fn registrar(conn: &mut PgConnection, vendedor_id: Uuid, plan: &str, monto: i64, preapproval_id: &str) -> ApiResult<Suscripcion> {
+#[allow(clippy::too_many_arguments)]
+pub fn registrar(conn: &mut PgConnection, vendedor_id: Uuid, plan: &str, monto: i64, preapproval_id: &str, ciclo: &str, cupon: Option<&str>) -> ApiResult<Suscripcion> {
     diesel::insert_into(suscripciones::table)
         .values(NewSuscripcion {
             vendedor_id,
@@ -28,6 +29,8 @@ pub fn registrar(conn: &mut PgConnection, vendedor_id: Uuid, plan: &str, monto: 
             proveedor: "mercadopago".to_string(),
             preapproval_id: Some(preapproval_id.to_string()),
             monto,
+            ciclo: ciclo.to_string(),
+            cupon: cupon.map(|c| c.to_string()),
         })
         .returning(Suscripcion::as_returning())
         .get_result(conn)
@@ -58,7 +61,10 @@ pub fn aplicar_estado(conn: &mut PgConnection, preapproval_id: &str, estado_mp: 
     let Some(sub) = sub else { return Ok(()) }; // preapproval desconocido: ignorar
 
     let (estado, plan_vendedor, vigente): (String, String, Option<NaiveDateTime>) = match estado_mp {
-        "authorized" => ("authorized".into(), sub.plan.clone(), Some(Utc::now().naive_utc() + Duration::days(31))),
+        "authorized" => {
+            let dias = if sub.ciclo == "anual" { 366 } else { 31 };
+            ("authorized".into(), sub.plan.clone(), Some(Utc::now().naive_utc() + Duration::days(dias)))
+        }
         "cancelled" => ("cancelled".into(), "free".into(), None),
         "paused" => ("paused".into(), sub.plan.clone(), sub.vigente_hasta),
         _ => (sub.estado.clone(), sub.plan.clone(), sub.vigente_hasta), // pending u otros: sin cambios de plan

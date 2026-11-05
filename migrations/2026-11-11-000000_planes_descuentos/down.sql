@@ -1,0 +1,3 @@
+DROP TABLE IF EXISTS cupones;
+ALTER TABLE suscripciones DROP COLUMN IF EXISTS cupon;
+ALTER TABLE suscripciones DROP COLUMN IF EXISTS ciclo;

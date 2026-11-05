@@ -3,15 +3,20 @@ use crate::config::Config;
 use crate::db::{self, DbPool};
 use crate::errors::{ApiError, ApiResult};
 use crate::mp::MercadoPago;
-use crate::services::suscripcion_services as subs;
+use crate::services::{cupon_services, suscripcion_services as subs};
 use actix_web::{web, HttpRequest, HttpResponse};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::collections::HashMap;
+use uuid::Uuid;
 
 #[derive(Deserialize)]
 pub struct SuscribirBody {
     pub plan: String,
+    #[serde(default)]
+    pub ciclo: Option<String>,
+    #[serde(default)]
+    pub cupon: Option<String>,
 }
 
 /// Inicia la suscripción a un plan: crea el preapproval en MP y devuelve la URL de checkout.
@@ -26,21 +31,44 @@ pub async fn suscribir(
     if !mp.configurado() {
         return Err(ApiError::bad_request("Los pagos no están configurados (falta MP_ACCESS_TOKEN)."));
     }
-    let plan = crate::planes::plan(&body.into_inner().plan);
-    if plan.id == "free" || plan.precio_mensual <= 0 {
+    let SuscribirBody { plan: plan_in, ciclo, cupon } = body.into_inner();
+    let plan = crate::planes::plan(&plan_in);
+    if plan.id == "free" {
         return Err(ApiError::bad_request("Ese plan no requiere pago."));
     }
+    let ciclo = crate::planes::ciclo_valido(ciclo.as_deref().unwrap_or("mensual"));
+    let base = crate::planes::precio_de(plan, ciclo);
+    if base <= 0 {
+        return Err(ApiError::bad_request("Ese plan no tiene precio para ese ciclo."));
+    }
+
+    // Cupón de descuento (opcional): valida y aplica sobre el precio base.
+    let codigo = cupon.as_deref().map(str::trim).filter(|s| !s.is_empty()).map(|s| s.to_string());
+    let (monto, cupon_id, cupon_norm): (i64, Option<Uuid>, Option<String>) = if let Some(code) = codigo {
+        let c = db::run(&pool, move |conn| cupon_services::validar(conn, &code)).await?;
+        (cupon_services::aplicar(base, &c), Some(c.id), Some(c.codigo))
+    } else {
+        (base, None, None)
+    };
+    if monto <= 0 {
+        return Err(ApiError::bad_request("El descuento deja el precio en 0; usa el plan Free."));
+    }
+
     let vid = user.id;
     let email = db::run(&pool, move |conn| subs::email_de(conn, vid)).await?;
     let back = format!("{}/plan", cfg.app_url);
     let notif = format!("{}/api/suscripcion/webhook", cfg.app_url);
-    let ext = format!("{}:{}", vid, plan.id);
-    let reason = format!("MeliHub - Plan {}", plan.nombre);
-    let pre = mp.crear_preapproval(&reason, plan.precio_mensual, "CLP", &email, &back, &notif, &ext).await?;
+    let ext = format!("{}:{}:{}", vid, plan.id, ciclo);
+    let reason = format!("MeliHub - Plan {} ({})", plan.nombre, ciclo);
+    let (frequency, ftype) = if ciclo == "anual" { (12, "months") } else { (1, "months") };
+    let pre = mp.crear_preapproval(&reason, monto, "CLP", &email, &back, &notif, &ext, frequency, ftype).await?;
 
-    let (pid, monto, plan_id) = (pre.id.clone(), plan.precio_mensual, plan.id.to_string());
-    db::run(&pool, move |conn| subs::registrar(conn, vid, &plan_id, monto, &pid)).await?;
-    Ok(HttpResponse::Ok().json(json!({ "init_point": pre.init_point })))
+    let (pid, plan_id, ciclo_s, cupon_s) = (pre.id.clone(), plan.id.to_string(), ciclo.to_string(), cupon_norm.clone());
+    db::run(&pool, move |conn| subs::registrar(conn, vid, &plan_id, monto, &pid, &ciclo_s, cupon_s.as_deref())).await?;
+    if let Some(cid) = cupon_id {
+        let _ = db::run(&pool, move |conn| cupon_services::consumir(conn, cid)).await;
+    }
+    Ok(HttpResponse::Ok().json(json!({ "init_point": pre.init_point, "monto": monto })))
 }
 
 /// Estado de la suscripción del vendedor.

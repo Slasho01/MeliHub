@@ -1,4 +1,4 @@
-use crate::controller::{admin_controller as adm, api_key_controller as keys, auth_controller as auth, equipo_controller as equipo, health, ml_controller as ml, producto_controller as prod, pub_controller as pubc, saas_controller as saas, suscripcion_controller as subs, venta_controller as ventas};
+use crate::controller::{admin_controller as adm, api_key_controller as keys, auth_controller as auth, cupon_controller as cupon, equipo_controller as equipo, health, ml_controller as ml, producto_controller as prod, pub_controller as pubc, saas_controller as saas, suscripcion_controller as subs, venta_controller as ventas};
 use actix_web::web::{self, delete, get, post, put, resource as r};
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
@@ -47,6 +47,10 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(r("/suscripcion/suscribir").route(post().to(subs::suscribir)))
             .service(r("/suscripcion/cancelar").route(post().to(subs::cancelar)))
             .service(r("/suscripcion/webhook").route(post().to(subs::webhook)))
+            // Cupones de descuento
+            .service(r("/cupon/validar").route(post().to(cupon::validar)))
+            .service(r("/admin/cupones").route(get().to(cupon::listar)).route(post().to(cupon::crear)))
+            .service(r("/admin/cupones/{id}").route(put().to(cupon::set_activo)).route(delete().to(cupon::eliminar)))
             // Súper-admin (solo el dueño de la plataforma)
             .service(r("/admin/vendedores").route(get().to(adm::vendedores)))
             .service(r("/admin/vendedores/{id}/plan").route(put().to(adm::set_plan)))

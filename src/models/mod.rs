@@ -1,4 +1,4 @@
-use crate::schema::{historial_producto, miembros, ml_cuentas, notificaciones, ordenes_ml, productos, suscripciones, vendedores};
+use crate::schema::{cupones, historial_producto, miembros, ml_cuentas, notificaciones, ordenes_ml, productos, suscripciones, vendedores};
 use chrono::NaiveDateTime;
 use diesel::prelude::*;
 use serde::Serialize;
@@ -294,6 +294,8 @@ pub struct Suscripcion {
     pub vigente_hasta: Option<NaiveDateTime>,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
+    pub ciclo: String,
+    pub cupon: Option<String>,
 }
 
 #[derive(Insertable, Debug)]
@@ -305,4 +307,33 @@ pub struct NewSuscripcion {
     pub proveedor: String,
     pub preapproval_id: Option<String>,
     pub monto: i64,
+    pub ciclo: String,
+    pub cupon: Option<String>,
+}
+
+// ----------------------------- Cupón de descuento -----------------------------
+
+#[derive(Queryable, Selectable, Identifiable, Serialize, Debug, Clone)]
+#[diesel(table_name = cupones, check_for_backend(diesel::pg::Pg))]
+pub struct Cupon {
+    pub id: Uuid,
+    pub codigo: String,
+    pub tipo: String,
+    pub valor: i64,
+    pub activo: bool,
+    pub vence: Option<NaiveDateTime>,
+    pub usos_max: Option<i32>,
+    pub usos: i32,
+    pub created_at: NaiveDateTime,
+    pub updated_at: NaiveDateTime,
+}
+
+#[derive(Insertable)]
+#[diesel(table_name = cupones)]
+pub struct NewCupon {
+    pub codigo: String,
+    pub tipo: String,
+    pub valor: i64,
+    pub vence: Option<NaiveDateTime>,
+    pub usos_max: Option<i32>,
 }

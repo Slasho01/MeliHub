@@ -37,6 +37,7 @@ impl MercadoPago {
     }
 
     /// Crea una suscripción mensual y devuelve el `init_point` (URL de checkout).
+    #[allow(clippy::too_many_arguments)]
     pub async fn crear_preapproval(
         &self,
         reason: &str,
@@ -46,12 +47,14 @@ impl MercadoPago {
         back_url: &str,
         notification_url: &str,
         external_reference: &str,
+        frequency: i64,
+        frequency_type: &str,
     ) -> ApiResult<Preapproval> {
         let body = serde_json::json!({
             "reason": reason,
             "auto_recurring": {
-                "frequency": 1,
-                "frequency_type": "months",
+                "frequency": frequency,
+                "frequency_type": frequency_type,
                 "transaction_amount": monto,
                 "currency_id": moneda
             },
