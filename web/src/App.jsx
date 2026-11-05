@@ -11,6 +11,8 @@ import Notificaciones from './pages/Notificaciones'
 import Plan from './pages/Plan'
 import Perfil from './pages/Perfil'
 import Admin from './pages/Admin'
+import Reset from './pages/Reset'
+import Legal from './pages/Legal'
 
 export default function App() {
   const [auth, setAuth] = useState(() => !!getToken())
@@ -22,7 +24,13 @@ export default function App() {
     if (auth) get('/auth/me').then(setMe).catch(logout)
   }, [auth])
 
-  if (!auth) return <Login onAuth={() => setAuth(true)} />
+  if (!auth) return (
+    <Routes>
+      <Route path="/reset" element={<Reset />} />
+      <Route path="/legal" element={<Legal />} />
+      <Route path="*" element={<Login onAuth={() => setAuth(true)} />} />
+    </Routes>
+  )
 
   const cls = ({ isActive }) => (isActive ? 'on' : '')
   return (
@@ -58,6 +66,7 @@ export default function App() {
           <Route path="/plan" element={<Plan />} />
           <Route path="/perfil" element={<Perfil />} />
           <Route path="/admin" element={<Admin />} />
+          <Route path="/legal" element={<Legal />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>

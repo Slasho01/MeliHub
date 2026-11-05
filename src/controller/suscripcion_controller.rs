@@ -60,7 +60,14 @@ pub async fn cancelar(user: AuthVendedor, pool: web::Data<DbPool>, mp: web::Data
 }
 
 /// Webhook de Mercado Pago: al cambiar el estado de la suscripción, ajusta el plan.
-pub async fn webhook(req: HttpRequest, body: web::Bytes, pool: web::Data<DbPool>, mp: web::Data<MercadoPago>) -> HttpResponse {
+pub async fn webhook(
+    req: HttpRequest,
+    body: web::Bytes,
+    pool: web::Data<DbPool>,
+    mp: web::Data<MercadoPago>,
+    mailer: web::Data<crate::mailer::Mailer>,
+    cfg: web::Data<Config>,
+) -> HttpResponse {
     // El id del preapproval puede venir por query (?id= / ?data.id=) o en el body.
     let q: HashMap<String, String> = web::Query::<HashMap<String, String>>::from_query(req.query_string())
         .map(|x| x.into_inner())
@@ -83,7 +90,19 @@ pub async fn webhook(req: HttpRequest, body: web::Bytes, pool: web::Data<DbPool>
         if topic.is_empty() || topic.contains("preapproval") || topic.contains("subscription") {
             if let Ok(pre) = mp.get_preapproval(&id).await {
                 let estado = pre.status.unwrap_or_default();
-                let _ = db::run(&pool, move |conn| subs::aplicar_estado(conn, &id, &estado)).await;
+                let (id_c, estado_c) = (id.clone(), estado.clone());
+                let _ = db::run(&pool, move |conn| subs::aplicar_estado(conn, &id_c, &estado_c)).await;
+                // Correo de confirmación al activarse la suscripción.
+                if estado == "authorized" && mailer.configurado() {
+                    if let Ok(Some((email, plan))) = db::run(&pool, move |conn| subs::email_y_plan(conn, &id)).await {
+                        let html = format!(
+                            "<p>¡Tu suscripción al plan <b>{plan}</b> de MeliHub está activa!</p>\
+                             <p>Gracias por suscribirte. Puedes gestionarla desde <a href=\"{}/plan\">tu panel</a>.</p>",
+                            cfg.app_url
+                        );
+                        let _ = mailer.enviar(&email, "Suscripción activada · MeliHub", &html).await;
+                    }
+                }
             }
         }
     }

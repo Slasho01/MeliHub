@@ -36,3 +36,9 @@ services:
       # Usa primero el de PRUEBA (TEST-...) para validar sin cobros reales.
       - key: MP_ACCESS_TOKEN
         sync: false
+      # Envío de correos (recuperar contraseña, avisos). Resend por HTTP.
+      - key: RESEND_API_KEY
+        sync: false
+      # Remitente verificado en Resend (o "MeliHub <onboarding@resend.dev>" para probar):
+      - key: MAIL_FROM
+        sync: false

@@ -2,16 +2,24 @@ import { useState } from 'react'
 import { post, setToken } from '../api'
 
 export default function Login({ onAuth }) {
-  const [modo, setModo] = useState('login') // login | registro
+  const [modo, setModo] = useState('login') // login | registro | forgot
   const [form, setForm] = useState({ nombre: '', email: '', password: '' })
   const [error, setError] = useState(null)
+  const [msg, setMsg] = useState(null)
   const [busy, setBusy] = useState(false)
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value })
+  const ir = (m) => { setModo(m); setError(null); setMsg(null) }
 
   const submit = async (e) => {
     e.preventDefault()
-    setBusy(true); setError(null)
+    setBusy(true); setError(null); setMsg(null)
     try {
+      if (modo === 'forgot') {
+        const r = await post('/auth/forgot', { email: form.email })
+        setMsg(r.message || 'Si el correo está registrado, te enviamos un enlace.')
+        setBusy(false)
+        return
+      }
       const path = modo === 'login' ? '/auth/login' : '/auth/registro'
       const body = modo === 'login'
         ? { email: form.email, password: form.password }
@@ -21,6 +29,8 @@ export default function Login({ onAuth }) {
       onAuth()
     } catch (err) { setError(err.message) } finally { setBusy(false) }
   }
+
+  const titulo = { login: 'Entrar', registro: 'Crear cuenta', forgot: 'Enviar enlace' }[modo]
 
   return (
     <div className="auth-wrap">
@@ -34,15 +44,24 @@ export default function Login({ onAuth }) {
             <div><label>Nombre</label><input className="input" value={form.nombre} onChange={set('nombre')} required /></div>
           )}
           <div><label>Email</label><input className="input" type="email" value={form.email} onChange={set('email')} required /></div>
-          <div><label>Contraseña</label><input className="input" type="password" value={form.password} onChange={set('password')} required minLength={8} /></div>
+          {modo !== 'forgot' && (
+            <div><label>Contraseña</label><input className="input" type="password" value={form.password} onChange={set('password')} required minLength={8} /></div>
+          )}
           {error && <div className="alert alert-bad">{error}</div>}
-          <button className="btn btn-accent" disabled={busy}>{busy ? '…' : modo === 'login' ? 'Entrar' : 'Crear cuenta'}</button>
+          {msg && <div className="alert alert-ok">{msg}</div>}
+          <button className="btn btn-accent" disabled={busy}>{busy ? '…' : titulo}</button>
         </form>
-        <div className="center sm muted">
-          {modo === 'login'
-            ? <>¿No tienes cuenta? <button className="link-btn" onClick={() => { setModo('registro'); setError(null) }}>Regístrate</button></>
-            : <>¿Ya tienes cuenta? <button className="link-btn" onClick={() => { setModo('login'); setError(null) }}>Inicia sesión</button></>}
+        <div className="center sm muted stack" style={{ '--gap': '6px' }}>
+          {modo === 'login' && (
+            <>
+              <div>¿No tienes cuenta? <button className="link-btn" onClick={() => ir('registro')}>Regístrate</button></div>
+              <div><button className="link-btn" onClick={() => ir('forgot')}>¿Olvidaste tu contraseña?</button></div>
+            </>
+          )}
+          {modo === 'registro' && <div>¿Ya tienes cuenta? <button className="link-btn" onClick={() => ir('login')}>Inicia sesión</button></div>}
+          {modo === 'forgot' && <div><button className="link-btn" onClick={() => ir('login')}>← Volver</button></div>}
         </div>
+        <div className="center sm muted"><a className="link-btn" href="/legal">Términos y Privacidad</a></div>
       </div>
     </div>
   )

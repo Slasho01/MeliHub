@@ -12,6 +12,10 @@ pub struct Config {
     pub app_url: String,
     /// Access token de Mercado Pago (del dueño de MeliHub) para cobrar suscripciones.
     pub mp_access_token: String,
+    /// API key de Resend (envío de correos por HTTP; Render bloquea SMTP).
+    pub resend_api_key: String,
+    /// Remitente de los correos (ej. "MeliHub <no-reply@tudominio.cl>").
+    pub mail_from: String,
 }
 
 #[derive(Clone)]
@@ -60,6 +64,8 @@ impl Config {
             },
             app_url: var("APP_URL", "http://localhost:8090").trim_end_matches('/').to_string(),
             mp_access_token: var("MP_ACCESS_TOKEN", ""),
+            resend_api_key: var("RESEND_API_KEY", ""),
+            mail_from: var("MAIL_FROM", "MeliHub <onboarding@resend.dev>"),
         })
     }
 }

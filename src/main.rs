@@ -1,9 +1,11 @@
 mod auth;
 mod config;
+mod crypto;
 mod controller;
 mod db;
 mod errors;
 mod jobs;
+mod mailer;
 mod ml;
 mod models;
 mod mp;
@@ -49,6 +51,7 @@ async fn main() -> std::io::Result<()> {
     let ml_client = web::Data::new(ml::MlClient::new(config.ml.clone()));
     let login_limiter = web::Data::new(auth::LoginLimiter::new());
     let mp_client = web::Data::new(mp::MercadoPago::new(config.mp_access_token.clone()));
+    let mailer = web::Data::new(mailer::Mailer::new(config.resend_api_key.clone(), config.mail_from.clone()));
 
     jobs::start(pool_data.clone(), ml_client.clone(), config.ml.configurado());
 
@@ -68,6 +71,7 @@ async fn main() -> std::io::Result<()> {
             .app_data(ml_client.clone())
             .app_data(login_limiter.clone())
             .app_data(mp_client.clone())
+            .app_data(mailer.clone())
             .app_data(web::JsonConfig::default().limit(1 << 20).error_handler(|err, _| {
                 actix_web::error::Error::from(errors::ApiError::bad_request(format!("JSON inválido: {err}")))
             }))

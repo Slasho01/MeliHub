@@ -142,3 +142,25 @@ pub fn cambiar_password(conn: &mut PgConnection, id: Uuid, req: PasswordUpdate) 
         .execute(conn)?;
     Ok(())
 }
+
+/// Busca un vendedor por email (para recuperar contraseña). None si no existe.
+pub fn buscar_por_email(conn: &mut PgConnection, email: &str) -> ApiResult<Option<Vendedor>> {
+    let email = email.trim().to_lowercase();
+    vendedores::table
+        .filter(vendedores::email.eq(&email))
+        .select(Vendedor::as_select())
+        .first(conn)
+        .optional()
+        .map_err(ApiError::from)
+}
+
+/// Fija una nueva contraseña directamente (usado tras verificar el token de reseteo).
+pub fn set_password(conn: &mut PgConnection, id: Uuid, nueva: &str) -> ApiResult<()> {
+    validar_password(nueva)?;
+    let hash = bcrypt::hash(nueva, bcrypt::DEFAULT_COST)
+        .map_err(|e| ApiError::internal(format!("No se pudo cifrar la contraseña: {e}")))?;
+    diesel::update(vendedores::table.find(id))
+        .set((vendedores::password_hash.eq(hash), vendedores::updated_at.eq(crate::services::common::now())))
+        .execute(conn)?;
+    Ok(())
+}

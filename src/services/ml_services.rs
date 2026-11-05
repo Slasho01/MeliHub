@@ -42,6 +42,8 @@ pub fn upsert_cuenta(
     token_expira_at: NaiveDateTime,
     sitio: String,
 ) -> ApiResult<MlCuenta> {
+    let access_token = crate::crypto::cifrar(&access_token);
+    let refresh_token = crate::crypto::cifrar(&refresh_token);
     diesel::insert_into(ml_cuentas::table)
         .values(NewMlCuenta {
             vendedor_id,
@@ -118,8 +120,8 @@ pub fn actualizar_tokens(
 ) -> ApiResult<()> {
     diesel::update(ml_cuentas::table.find(cuenta_id))
         .set((
-            ml_cuentas::access_token.eq(access_token),
-            ml_cuentas::refresh_token.eq(refresh_token),
+            ml_cuentas::access_token.eq(crate::crypto::cifrar(access_token)),
+            ml_cuentas::refresh_token.eq(crate::crypto::cifrar(refresh_token)),
             ml_cuentas::token_expira_at.eq(token_expira_at),
             ml_cuentas::updated_at.eq(crate::services::common::now()),
         ))

@@ -21,6 +21,31 @@ pub fn crear_token(vendedor_id: Uuid, rol: &str, secret: &str) -> Result<String,
         .map_err(|e| ApiError::internal(format!("No se pudo emitir el token: {e}")))
 }
 
+#[derive(Serialize, Deserialize)]
+struct ResetClaims {
+    sub: String,
+    purpose: String, // "reset"
+    exp: usize,
+}
+
+/// Token para resetear contraseña (válido 1 hora).
+pub fn crear_reset_token(vendedor_id: Uuid, secret: &str) -> Result<String, ApiError> {
+    let exp = (chrono::Utc::now() + chrono::Duration::hours(1)).timestamp() as usize;
+    let claims = ResetClaims { sub: vendedor_id.to_string(), purpose: "reset".to_string(), exp };
+    encode(&Header::new(Algorithm::HS256), &claims, &EncodingKey::from_secret(secret.as_bytes()))
+        .map_err(|e| ApiError::internal(format!("No se pudo emitir el token: {e}")))
+}
+
+/// Verifica un token de reseteo y devuelve el vendedor id.
+pub fn verificar_reset_token(token: &str, secret: &str) -> Result<Uuid, ApiError> {
+    let data = decode::<ResetClaims>(token, &DecodingKey::from_secret(secret.as_bytes()), &Validation::new(Algorithm::HS256))
+        .map_err(|_| ApiError::unauthorized("Enlace inválido o expirado"))?;
+    if data.claims.purpose != "reset" {
+        return Err(ApiError::unauthorized("Token inválido"));
+    }
+    Uuid::parse_str(&data.claims.sub).map_err(|_| ApiError::unauthorized("Token inválido"))
+}
+
 /// Vendedor autenticado (extraído del header Authorization: Bearer).
 #[derive(Clone)]
 pub struct AuthVendedor {

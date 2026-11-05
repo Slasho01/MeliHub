@@ -13,11 +13,12 @@ use chrono::Duration;
 /// Devuelve un access_token válido, renovándolo (y persistiéndolo) si expira pronto.
 pub async fn access_token_valido(pool: &web::Data<DbPool>, client: &MlClient, cuenta: &MlCuenta) -> ApiResult<String> {
     if cuenta.token_expira_at > now() + Duration::seconds(60) {
-        return Ok(cuenta.access_token.clone());
+        return Ok(crate::crypto::descifrar(&cuenta.access_token));
     }
-    let tokens = client.refresh(&cuenta.refresh_token).await?;
+    let refresh_plano = crate::crypto::descifrar(&cuenta.refresh_token);
+    let tokens = client.refresh(&refresh_plano).await?;
     let expira = now() + Duration::seconds(tokens.expires_in.max(0));
-    let refresh = if tokens.refresh_token.is_empty() { cuenta.refresh_token.clone() } else { tokens.refresh_token.clone() };
+    let refresh = if tokens.refresh_token.is_empty() { refresh_plano } else { tokens.refresh_token.clone() };
     let access = tokens.access_token.clone();
     let cuenta_id = cuenta.id;
     let (a, r) = (access.clone(), refresh.clone());

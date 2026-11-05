@@ -1,10 +1,63 @@
-use crate::auth::{crear_token, AuthVendedor};
+use crate::auth::{crear_reset_token, crear_token, verificar_reset_token, AuthVendedor};
 use crate::config::Config;
 use crate::db::{self, DbPool};
 use crate::errors::ApiResult;
+use crate::mailer::Mailer;
 use crate::services::auth_services::{self as svc, LoginRequest, PasswordUpdate, PerfilUpdate, RegistroRequest};
 use actix_web::{web, HttpResponse};
+use serde::Deserialize;
 use serde_json::json;
+
+fn esc(s: &str) -> String {
+    s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
+}
+
+#[derive(Deserialize)]
+pub struct ForgotBody {
+    pub email: String,
+}
+
+/// Solicita recuperar contraseña: envía un correo con enlace (si el email existe).
+pub async fn forgot(
+    body: web::Json<ForgotBody>,
+    pool: web::Data<DbPool>,
+    cfg: web::Data<Config>,
+    mailer: web::Data<Mailer>,
+) -> ApiResult<HttpResponse> {
+    let email = body.into_inner().email;
+    let email2 = email.clone();
+    let found = db::run(&pool, move |conn| svc::buscar_por_email(conn, &email2)).await?;
+    if let Some(v) = found {
+        if let Ok(token) = crear_reset_token(v.id, &cfg.jwt_secret) {
+            let link = format!("{}/reset?token={}", cfg.app_url, token);
+            let html = format!(
+                "<p>Hola {},</p><p>Para restablecer tu contraseña de MeliHub, haz clic en el botón:</p>\
+                 <p><a href=\"{link}\" style=\"background:#111;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none\">Restablecer contraseña</a></p>\
+                 <p>El enlace vence en 1 hora. Si no lo pediste, ignora este correo.</p>",
+                esc(&v.nombre)
+            );
+            if let Err(e) = mailer.enviar(&v.email, "Restablecer contraseña · MeliHub", &html).await {
+                log::warn!("No se pudo enviar el correo de reseteo: {e}");
+            }
+        }
+    }
+    // Siempre 200 para no revelar si el correo existe (anti-enumeración).
+    Ok(HttpResponse::Ok().json(json!({ "ok": true, "message": "Si el correo está registrado, te enviamos un enlace." })))
+}
+
+#[derive(Deserialize)]
+pub struct ResetBody {
+    pub token: String,
+    pub nueva: String,
+}
+
+/// Restablece la contraseña usando el token del correo.
+pub async fn reset(body: web::Json<ResetBody>, pool: web::Data<DbPool>, cfg: web::Data<Config>) -> ApiResult<HttpResponse> {
+    let ResetBody { token, nueva } = body.into_inner();
+    let id = verificar_reset_token(&token, &cfg.jwt_secret)?;
+    db::run(&pool, move |conn| svc::set_password(conn, id, &nueva)).await?;
+    Ok(HttpResponse::Ok().json(json!({ "ok": true })))
+}
 
 pub async fn registrar(
     body: web::Json<RegistroRequest>,

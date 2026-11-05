@@ -91,3 +91,15 @@ pub fn cancelar_local(conn: &mut PgConnection, vendedor_id: Uuid) -> ApiResult<O
     diesel::update(vendedores::table.find(vendedor_id)).set(vendedores::plan.eq("free")).execute(conn)?;
     Ok(sub.preapproval_id)
 }
+
+/// Email del vendedor y plan de una suscripción (para el correo de confirmación).
+pub fn email_y_plan(conn: &mut PgConnection, preapproval_id: &str) -> ApiResult<Option<(String, String)>> {
+    let sub: Option<Suscripcion> = suscripciones::table
+        .filter(suscripciones::preapproval_id.eq(preapproval_id))
+        .select(Suscripcion::as_select())
+        .first(conn)
+        .optional()?;
+    let Some(sub) = sub else { return Ok(None) };
+    let email: String = vendedores::table.find(sub.vendedor_id).select(vendedores::email).first(conn)?;
+    Ok(Some((email, sub.plan)))
+}
