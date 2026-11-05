@@ -20,6 +20,8 @@ export default function Ganancias() {
         comision_ml_fija: Number(cfg.comision_ml_fija),
         comision_mp_pct: Number(cfg.comision_mp_pct),
         comision_mp_fija: Number(cfg.comision_mp_fija),
+        margen_objetivo: Number(cfg.margen_objetivo),
+        redondeo: Number(cfg.redondeo),
       })
       setCfg(c); setMsg('Configuración guardada. Las ganancias se recalculan con estas tasas.')
     } catch (e) { setError(e.message) } finally { setBusy(false) }
@@ -47,6 +49,14 @@ export default function Ganancias() {
           {num('comision_ml_fija', 'Cargo fijo ML (CLP)', '1')}
           {num('comision_mp_pct', 'Comisión Mercado Pago / JarStore (%)')}
           {num('comision_mp_fija', 'Cargo fijo MP (CLP)', '1')}
+        </div>
+        <div style={{ borderTop: '1px solid var(--line)', paddingTop: 12 }}>
+          <b>Reglas de precio (sugerencia)</b>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginTop: 8 }}>
+            {num('margen_objetivo', 'Margen objetivo (%)')}
+            {num('redondeo', 'Precio termina en (ej. 990; 0 = sin redondeo)', '1')}
+          </div>
+          <p className="muted sm" style={{ margin: '6px 0 0' }}>En Inventario, los productos con costo mostrarán un <b>precio JarStore sugerido</b> que alcanza este margen.</p>
         </div>
         <div><button className="btn btn-accent" onClick={guardar} disabled={busy}>{busy ? 'Guardando…' : 'Guardar'}</button></div>
       </div>

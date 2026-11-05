@@ -26,6 +26,7 @@ fn canal_default() -> String { "jarstore".into() }
 
 /// Crea una API key. Devuelve (registro, key_en_claro) — la clave solo se ve aquí.
 pub fn generar(conn: &mut PgConnection, vendedor_id: Uuid, req: NuevaKey) -> ApiResult<(ApiKey, String)> {
+    crate::services::saas_services::permitir_plataforma(conn, vendedor_id)?; // límite del plan
     let nombre = req.nombre.trim();
     if nombre.is_empty() || nombre.len() > 100 {
         return Err(ApiError::bad_request("Dale un nombre a la API key"));

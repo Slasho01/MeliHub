@@ -6,6 +6,7 @@ mod errors;
 mod jobs;
 mod ml;
 mod models;
+mod planes;
 mod routes;
 mod schema;
 mod services;
@@ -45,6 +46,7 @@ async fn main() -> std::io::Result<()> {
     let config_data = web::Data::new(config.clone());
     let pool_data = web::Data::new(pool);
     let ml_client = web::Data::new(ml::MlClient::new(config.ml.clone()));
+    let login_limiter = web::Data::new(auth::LoginLimiter::new());
 
     jobs::start(pool_data.clone(), ml_client.clone(), config.ml.configurado());
 
@@ -62,6 +64,7 @@ async fn main() -> std::io::Result<()> {
             .app_data(config_data.clone())
             .app_data(pool_data.clone())
             .app_data(ml_client.clone())
+            .app_data(login_limiter.clone())
             .app_data(web::JsonConfig::default().limit(1 << 20).error_handler(|err, _| {
                 actix_web::error::Error::from(errors::ApiError::bad_request(format!("JSON inválido: {err}")))
             }))
@@ -70,6 +73,18 @@ async fn main() -> std::io::Result<()> {
             .wrap(NormalizePath::new(TrailingSlash::Trim))
             .wrap(Logger::new("%a \"%r\" %s %Dms"))
             .configure(routes::configure)
+            // Sirve el panel (web/dist) en todo lo que no sea /api. Las rutas del
+            // SPA (p. ej. /inventario) caen a index.html.
+            .service(
+                actix_files::Files::new("/", "./web/dist")
+                    .index_file("index.html")
+                    .default_handler(actix_web::dev::fn_service(|req: actix_web::dev::ServiceRequest| async {
+                        let (http_req, _payload) = req.into_parts();
+                        let file = actix_files::NamedFile::open_async("./web/dist/index.html").await?;
+                        let res = file.into_response(&http_req);
+                        Ok(actix_web::dev::ServiceResponse::new(http_req, res))
+                    })),
+            )
     })
     .bind(addr)?
     .run()

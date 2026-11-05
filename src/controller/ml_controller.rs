@@ -73,6 +73,7 @@ pub async fn callback(
     let refresh = tokens.refresh_token.clone();
     let nickname = info.nickname.clone();
     let cuenta = db::run(&pool, move |conn| {
+        crate::services::saas_services::permitir_cuenta_nueva(conn, vendedor_id, ml_user_id)?; // límite del plan
         svc::upsert_cuenta(conn, vendedor_id, ml_user_id, nickname, access, refresh, expira, sitio)
     })
     .await?;

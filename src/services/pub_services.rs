@@ -234,6 +234,7 @@ pub fn reportar_venta(conn: &mut PgConnection, key: &ApiKey, producto_id: Uuid, 
         diesel::update(productos::table.find(producto_id))
             .set((productos::stock.eq(nuevo), productos::sincronizado_at.eq(now())))
             .execute(conn)?;
+        crate::services::producto_services::registrar_cambio(conn, producto_id, "stock", Some(p.stock.to_string()), nuevo.to_string(), "venta");
         let user_product_id = p
             .datos
             .get("user_product_id")

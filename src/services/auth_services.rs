@@ -83,3 +83,61 @@ pub fn get(conn: &mut PgConnection, id: Uuid) -> ApiResult<Vendedor> {
         .optional()?
         .or_not_found("Vendedor")
 }
+
+#[derive(Deserialize)]
+pub struct PerfilUpdate {
+    pub nombre: Option<String>,
+    pub email: Option<String>,
+}
+
+/// Actualiza nombre y/o email del vendedor autenticado.
+pub fn actualizar_perfil(conn: &mut PgConnection, id: Uuid, req: PerfilUpdate) -> ApiResult<Vendedor> {
+    let v = get(conn, id)?;
+    let nombre = match req.nombre {
+        Some(n) => {
+            let n = n.trim().to_string();
+            if n.is_empty() || n.len() > 255 {
+                return Err(ApiError::bad_request("El nombre es obligatorio"));
+            }
+            n
+        }
+        None => v.nombre,
+    };
+    let email = match req.email {
+        Some(e) => normalizar_email(&e)?,
+        None => v.email,
+    };
+    diesel::update(vendedores::table.find(id))
+        .set((
+            vendedores::nombre.eq(&nombre),
+            vendedores::email.eq(&email),
+            vendedores::updated_at.eq(crate::services::common::now()),
+        ))
+        .returning(Vendedor::as_returning())
+        .get_result(conn)
+        .map_err(|e| match ApiError::from(e) {
+            ApiError::Conflict(_) => ApiError::conflict("Ya existe una cuenta con ese email"),
+            other => other,
+        })
+}
+
+#[derive(Deserialize)]
+pub struct PasswordUpdate {
+    pub actual: String,
+    pub nueva: String,
+}
+
+/// Cambia la contraseña verificando la actual.
+pub fn cambiar_password(conn: &mut PgConnection, id: Uuid, req: PasswordUpdate) -> ApiResult<()> {
+    let v = get(conn, id)?;
+    if !bcrypt::verify(&req.actual, &v.password_hash).unwrap_or(false) {
+        return Err(ApiError::unauthorized("La contraseña actual no es correcta"));
+    }
+    validar_password(&req.nueva)?;
+    let hash = bcrypt::hash(&req.nueva, bcrypt::DEFAULT_COST)
+        .map_err(|e| ApiError::internal(format!("No se pudo cifrar la contraseña: {e}")))?;
+    diesel::update(vendedores::table.find(id))
+        .set((vendedores::password_hash.eq(hash), vendedores::updated_at.eq(crate::services::common::now())))
+        .execute(conn)?;
+    Ok(())
+}

@@ -23,6 +23,8 @@ pub fn config(conn: &mut PgConnection, vendedor_id: Uuid) -> ApiResult<ConfigGan
         comision_mp_pct: 3.5,
         comision_mp_fija: 0,
         updated_at: now(),
+        margen_objetivo: 30.0,
+        redondeo: 0,
     };
     diesel::insert_into(config_ganancias::table)
         .values(&def)
@@ -39,6 +41,8 @@ pub struct ConfigUpdate {
     pub comision_ml_fija: Option<i64>,
     pub comision_mp_pct: Option<f64>,
     pub comision_mp_fija: Option<i64>,
+    pub margen_objetivo: Option<f64>,
+    pub redondeo: Option<i64>,
 }
 
 pub fn set_config(conn: &mut PgConnection, vendedor_id: Uuid, u: ConfigUpdate) -> ApiResult<ConfigGanancias> {
@@ -49,6 +53,8 @@ pub fn set_config(conn: &mut PgConnection, vendedor_id: Uuid, u: ConfigUpdate) -
     if let Some(v) = u.comision_ml_fija { c.comision_ml_fija = v.max(0); }
     if let Some(v) = u.comision_mp_pct { c.comision_mp_pct = v.clamp(0.0, 100.0); }
     if let Some(v) = u.comision_mp_fija { c.comision_mp_fija = v.max(0); }
+    if let Some(v) = u.margen_objetivo { c.margen_objetivo = v.clamp(0.0, 95.0); }
+    if let Some(v) = u.redondeo { c.redondeo = v.clamp(0, 999); }
     c.updated_at = now();
     diesel::update(config_ganancias::table.find(vendedor_id)).set(&c).execute(conn)?;
     Ok(c)
@@ -124,6 +130,38 @@ pub struct ProductoInventario {
     pub ml: Option<Ganancia>,
     /// Ganancia en JarStore (usa `precio_jarstore`).
     pub jarstore: Option<Ganancia>,
+    /// Precio JarStore sugerido para alcanzar el margen objetivo (si hay costo).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub precio_sugerido: Option<i64>,
+}
+
+/// Precio (canal JarStore) que alcanza el margen objetivo para un costo dado.
+fn sugerir_precio(costo: i64, cfg: &ConfigGanancias) -> Option<i64> {
+    let div = if cfg.precios_con_iva { 1.0 + cfg.iva_pct / 100.0 } else { 1.0 };
+    let m = cfg.margen_objetivo / 100.0;
+    let denom = 1.0 / div - cfg.comision_mp_pct / 100.0 - m;
+    if denom <= 0.0 {
+        return None; // margen inalcanzable con esas comisiones/IVA
+    }
+    let precio = (costo as f64 + cfg.comision_mp_fija as f64) / denom;
+    if !precio.is_finite() || precio <= 0.0 {
+        return None;
+    }
+    Some(redondear(precio.ceil() as i64, cfg.redondeo))
+}
+
+/// Redondeo psicológico: el menor número ≥ `precio` que termina en `redondeo` (ej. 990).
+fn redondear(precio: i64, redondeo: i64) -> i64 {
+    if redondeo <= 0 {
+        return precio;
+    }
+    let m = 1000;
+    let base = (precio / m) * m + redondeo;
+    if base >= precio {
+        base
+    } else {
+        base + m
+    }
 }
 
 /// Lista los productos con la ganancia calculada por canal.
@@ -136,7 +174,8 @@ pub fn listar(conn: &mut PgConnection, vendedor_id: Uuid, es_admin: bool, filtro
             let costo = p.costo.unwrap_or(0);
             let ml = if p.precio > 0 { Some(calcular(p.precio, costo, cfg.comision_ml_pct, cfg.comision_ml_fija, &cfg)) } else { None };
             let jarstore = p.precio_jarstore.filter(|v| *v > 0).map(|pj| calcular(pj, costo, cfg.comision_mp_pct, cfg.comision_mp_fija, &cfg));
-            ProductoInventario { producto: p, ml, jarstore }
+            let precio_sugerido = if costo > 0 { sugerir_precio(costo, &cfg) } else { None };
+            ProductoInventario { producto: p, ml, jarstore, precio_sugerido }
         })
         .collect())
 }

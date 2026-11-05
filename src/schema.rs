@@ -13,6 +13,8 @@ diesel::table! {
         activo -> Bool,
         created_at -> Timestamp,
         updated_at -> Timestamp,
+        #[max_length = 20]
+        plan -> Varchar,
     }
 }
 
@@ -100,6 +102,8 @@ diesel::table! {
         comision_mp_pct -> Float8,
         comision_mp_fija -> Int8,
         updated_at -> Timestamp,
+        margen_objetivo -> Float8,
+        redondeo -> Int8,
     }
 }
 
@@ -125,18 +129,50 @@ diesel::table! {
     }
 }
 
+diesel::table! {
+    notificaciones (id) {
+        id -> Uuid,
+        vendedor_id -> Uuid,
+        #[max_length = 30]
+        tipo -> Varchar,
+        #[max_length = 255]
+        titulo -> Varchar,
+        cuerpo -> Nullable<Text>,
+        leida -> Bool,
+        created_at -> Timestamp,
+    }
+}
+
+diesel::table! {
+    historial_producto (id) {
+        id -> Uuid,
+        producto_id -> Uuid,
+        #[max_length = 20]
+        campo -> Varchar,
+        anterior -> Nullable<Text>,
+        nuevo -> Nullable<Text>,
+        #[max_length = 20]
+        fuente -> Varchar,
+        created_at -> Timestamp,
+    }
+}
+
 diesel::joinable!(ml_cuentas -> vendedores (vendedor_id));
 diesel::joinable!(ml_oauth_estados -> vendedores (vendedor_id));
 diesel::joinable!(productos -> ml_cuentas (ml_cuenta_id));
 diesel::joinable!(config_ganancias -> vendedores (vendedor_id));
 diesel::joinable!(api_keys -> vendedores (vendedor_id));
 diesel::joinable!(ordenes_ml -> ml_cuentas (ml_cuenta_id));
+diesel::joinable!(historial_producto -> productos (producto_id));
+diesel::joinable!(notificaciones -> vendedores (vendedor_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
     api_keys,
     config_ganancias,
+    historial_producto,
     ml_cuentas,
     ml_oauth_estados,
+    notificaciones,
     ordenes_ml,
     productos,
     vendedores,

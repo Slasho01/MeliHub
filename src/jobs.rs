@@ -32,7 +32,15 @@ pub fn start(pool: web::Data<DbPool>, client: web::Data<MlClient>, configurado: 
             for cuenta in &cuentas {
                 match crate::sync::sincronizar_cuenta(&pool, &client, cuenta).await {
                     Ok(n) => log::info!("Cuenta {} sincronizada: {n} publicaciones", cuenta.ml_user_id),
-                    Err(e) => log::warn!("Error sincronizando cuenta {}: {e}", cuenta.ml_user_id),
+                    Err(e) => {
+                        log::warn!("Error sincronizando cuenta {}: {e}", cuenta.ml_user_id);
+                        let (vid, msg) = (cuenta.vendedor_id, e.to_string());
+                        let _ = db::run(&pool, move |conn| {
+                            crate::services::saas_services::notificar(conn, vid, "sync_error", "Error de sincronización con Mercado Libre", Some(msg));
+                            Ok::<_, crate::errors::ApiError>(())
+                        })
+                        .await;
+                    }
                 }
                 // Órdenes (ventas) — best-effort; requiere permiso de ventas en la app ML.
                 match crate::sync::sincronizar_ordenes(&pool, &client, cuenta).await {

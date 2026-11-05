@@ -2,8 +2,8 @@
 /**
  * Plugin Name: MeliHub Sync
  * Description: Sincroniza productos de MeliHub (Mercado Libre) a WooCommerce y reporta las ventas para mantener el stock en dos vías.
- * Version: 0.1.0
- * Author: MeliHub
+ * Version: 0.1.1
+ * Author: Jarstore
  * Requires Plugins: woocommerce
  */
 

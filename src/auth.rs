@@ -65,3 +65,67 @@ fn extraer(req: &HttpRequest) -> Result<AuthVendedor, ApiError> {
     let id = Uuid::parse_str(&data.claims.sub).map_err(|_| ApiError::unauthorized("Token inválido"))?;
     Ok(AuthVendedor { id, rol: data.claims.rol })
 }
+
+// ----------------------------- Rate limiting de login -----------------------------
+
+use std::collections::HashMap;
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
+
+struct Intentos {
+    count: u32,
+    desde: Instant,
+}
+
+/// Limita los intentos de login por IP (ventana deslizante). En memoria.
+pub struct LoginLimiter {
+    inner: Mutex<HashMap<String, Intentos>>,
+    max: u32,
+    ventana: Duration,
+}
+
+impl Default for LoginLimiter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl LoginLimiter {
+    pub fn new() -> Self {
+        Self {
+            inner: Mutex::new(HashMap::new()),
+            max: 10,                              // 10 intentos fallidos
+            ventana: Duration::from_secs(300),    // por cada 5 minutos
+        }
+    }
+
+    /// `false` si la IP está bloqueada por exceso de intentos.
+    pub fn permitido(&self, key: &str) -> bool {
+        let m = self.inner.lock().unwrap();
+        match m.get(key) {
+            Some(i) if i.desde.elapsed() < self.ventana && i.count >= self.max => false,
+            _ => true,
+        }
+    }
+
+    /// Registra un intento fallido (reinicia el contador si la ventana venció).
+    pub fn fallo(&self, key: &str) {
+        let mut m = self.inner.lock().unwrap();
+        // Limpieza oportunista de entradas viejas para no crecer sin límite.
+        if m.len() > 10_000 {
+            let v = self.ventana;
+            m.retain(|_, i| i.desde.elapsed() < v);
+        }
+        let e = m.entry(key.to_string()).or_insert(Intentos { count: 0, desde: Instant::now() });
+        if e.desde.elapsed() >= self.ventana {
+            e.count = 0;
+            e.desde = Instant::now();
+        }
+        e.count += 1;
+    }
+
+    /// Limpia el contador tras un login exitoso.
+    pub fn exito(&self, key: &str) {
+        self.inner.lock().unwrap().remove(key);
+    }
+}

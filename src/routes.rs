@@ -1,4 +1,4 @@
-use crate::controller::{api_key_controller as keys, auth_controller as auth, health, ml_controller as ml, producto_controller as prod, pub_controller as pubc, venta_controller as ventas};
+use crate::controller::{api_key_controller as keys, auth_controller as auth, health, ml_controller as ml, producto_controller as prod, pub_controller as pubc, saas_controller as saas, venta_controller as ventas};
 use actix_web::web::{self, delete, get, post, put, resource as r};
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
@@ -9,6 +9,8 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(r("/auth/registro").route(post().to(auth::registrar)))
             .service(r("/auth/login").route(post().to(auth::login)))
             .service(r("/auth/me").route(get().to(auth::me)))
+            .service(r("/auth/perfil").route(put().to(auth::actualizar_perfil)))
+            .service(r("/auth/password").route(put().to(auth::cambiar_password)))
             // Mercado Libre: OAuth y cuentas
             .service(r("/ml/conectar").route(post().to(ml::conectar)))
             .service(r("/ml/callback").route(get().to(ml::callback)))
@@ -18,12 +20,21 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(r("/ml/cuentas/{id}/sincronizar").route(post().to(ml::sincronizar)))
             // Catálogo unificado + gestor de inventario
             .service(r("/productos").route(get().to(prod::listar)))
+            .service(r("/productos/inventario-masivo").route(post().to(prod::inventario_masivo)))
+            .service(r("/productos/alertas").route(get().to(prod::alertas)))
             .service(r("/productos/{id}/inventario").route(put().to(prod::set_inventario)))
+            .service(r("/productos/{id}/ml/estado").route(post().to(prod::set_estado_ml)))
+            .service(r("/productos/{id}/ml/precio").route(put().to(prod::set_precio_ml)))
+            .service(r("/productos/{id}/historial").route(get().to(prod::historial)))
             .service(r("/config/ganancias").route(get().to(prod::get_config)).route(put().to(prod::set_config)))
             // Ventas centralizadas (órdenes de ML) + dashboard con ganancia real
             .service(r("/ventas/sincronizar").route(post().to(ventas::sincronizar)))
             .service(r("/ventas/dashboard").route(get().to(ventas::dashboard)))
             .service(r("/ventas").route(get().to(ventas::listar)))
+            // SaaS: plan/suscripción + notificaciones
+            .service(r("/mi-plan").route(get().to(saas::mi_plan)))
+            .service(r("/notificaciones").route(get().to(saas::notificaciones)))
+            .service(r("/notificaciones/leer").route(post().to(saas::marcar_leidas)))
             // API keys (gestión por el vendedor autenticado)
             .service(r("/api-keys").route(get().to(keys::listar)).route(post().to(keys::crear)))
             .service(r("/api-keys/{id}").route(delete().to(keys::revocar)))

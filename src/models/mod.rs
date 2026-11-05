@@ -1,4 +1,4 @@
-use crate::schema::{ml_cuentas, ordenes_ml, productos, vendedores};
+use crate::schema::{historial_producto, ml_cuentas, notificaciones, ordenes_ml, productos, vendedores};
 use chrono::NaiveDateTime;
 use diesel::prelude::*;
 use serde::Serialize;
@@ -18,6 +18,7 @@ pub struct Vendedor {
     pub activo: bool,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
+    pub plan: String,
 }
 
 #[derive(Insertable)]
@@ -122,6 +123,10 @@ pub struct ConfigGanancias {
     pub comision_mp_fija: i64,
     #[serde(skip)]
     pub updated_at: NaiveDateTime,
+    /// Margen objetivo (%) para sugerir precio.
+    pub margen_objetivo: f64,
+    /// Redondeo psicológico: terminación del precio (ej. 990). 0 = sin redondeo.
+    pub redondeo: i64,
 }
 
 // ----------------------------- API Key -----------------------------
@@ -191,4 +196,51 @@ pub struct NewOrdenMl {
     pub ganancia: i64,
     pub items: serde_json::Value,
     pub datos: serde_json::Value,
+}
+
+// ----------------------------- Historial de producto -----------------------------
+
+#[derive(Queryable, Selectable, Identifiable, Serialize, Debug, Clone)]
+#[diesel(table_name = historial_producto, check_for_backend(diesel::pg::Pg))]
+pub struct HistorialProducto {
+    pub id: Uuid,
+    pub producto_id: Uuid,
+    pub campo: String,
+    pub anterior: Option<String>,
+    pub nuevo: Option<String>,
+    pub fuente: String,
+    pub created_at: NaiveDateTime,
+}
+
+#[derive(Insertable, Debug)]
+#[diesel(table_name = historial_producto)]
+pub struct NewHistorialProducto {
+    pub producto_id: Uuid,
+    pub campo: String,
+    pub anterior: Option<String>,
+    pub nuevo: Option<String>,
+    pub fuente: String,
+}
+
+// ----------------------------- Notificación -----------------------------
+
+#[derive(Queryable, Selectable, Identifiable, Serialize, Debug, Clone)]
+#[diesel(table_name = notificaciones, check_for_backend(diesel::pg::Pg))]
+pub struct Notificacion {
+    pub id: Uuid,
+    pub vendedor_id: Uuid,
+    pub tipo: String,
+    pub titulo: String,
+    pub cuerpo: Option<String>,
+    pub leida: bool,
+    pub created_at: NaiveDateTime,
+}
+
+#[derive(Insertable, Debug)]
+#[diesel(table_name = notificaciones)]
+pub struct NewNotificacion {
+    pub vendedor_id: Uuid,
+    pub tipo: String,
+    pub titulo: String,
+    pub cuerpo: Option<String>,
 }

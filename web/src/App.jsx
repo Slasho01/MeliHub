@@ -7,6 +7,9 @@ import Inventario from './pages/Inventario'
 import Ganancias from './pages/Ganancias'
 import ApiKeys from './pages/ApiKeys'
 import Ventas from './pages/Ventas'
+import Notificaciones from './pages/Notificaciones'
+import Plan from './pages/Plan'
+import Perfil from './pages/Perfil'
 
 export default function App() {
   const [auth, setAuth] = useState(() => !!getToken())
@@ -31,6 +34,9 @@ export default function App() {
           <NavLink to="/ganancias" className={cls}>Ganancias</NavLink>
           <NavLink to="/ventas" className={cls}>Ventas</NavLink>
           <NavLink to="/api-keys" className={cls}>API keys</NavLink>
+          <NavLink to="/notificaciones" className={cls}>Notificaciones</NavLink>
+          <NavLink to="/plan" className={cls}>Plan</NavLink>
+          <NavLink to="/perfil" className={cls}>Mi cuenta</NavLink>
         </nav>
         <div className="spacer" />
         {me && <span className="muted sm">{me.nombre}{me.rol === 'admin' ? ' · admin' : ''}</span>}
@@ -43,6 +49,9 @@ export default function App() {
           <Route path="/ganancias" element={<Ganancias />} />
           <Route path="/ventas" element={<Ventas />} />
           <Route path="/api-keys" element={<ApiKeys />} />
+          <Route path="/notificaciones" element={<Notificaciones />} />
+          <Route path="/plan" element={<Plan />} />
+          <Route path="/perfil" element={<Perfil />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>

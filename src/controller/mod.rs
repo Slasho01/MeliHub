@@ -3,6 +3,7 @@ pub mod auth_controller;
 pub mod ml_controller;
 pub mod producto_controller;
 pub mod pub_controller;
+pub mod saas_controller;
 pub mod venta_controller;
 
 use actix_web::HttpResponse;

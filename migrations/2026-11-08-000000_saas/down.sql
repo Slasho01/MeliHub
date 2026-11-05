@@ -1,0 +1,2 @@
+DROP TABLE IF EXISTS notificaciones;
+ALTER TABLE vendedores DROP COLUMN IF EXISTS plan;
