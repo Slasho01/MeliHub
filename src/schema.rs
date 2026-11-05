@@ -176,6 +176,28 @@ diesel::table! {
     }
 }
 
+diesel::table! {
+    miembros (id) {
+        id -> Uuid,
+        vendedor_id -> Uuid,
+        #[max_length = 255]
+        nombre -> Varchar,
+        #[max_length = 255]
+        email -> Varchar,
+        #[max_length = 255]
+        password_hash -> Nullable<Varchar>,
+        #[max_length = 20]
+        rol -> Varchar,
+        #[max_length = 20]
+        estado -> Varchar,
+        #[max_length = 255]
+        invite_token -> Nullable<Varchar>,
+        invite_expira -> Nullable<Timestamp>,
+        created_at -> Timestamp,
+        updated_at -> Timestamp,
+    }
+}
+
 diesel::joinable!(ml_cuentas -> vendedores (vendedor_id));
 diesel::joinable!(ml_oauth_estados -> vendedores (vendedor_id));
 diesel::joinable!(productos -> ml_cuentas (ml_cuenta_id));
@@ -185,11 +207,13 @@ diesel::joinable!(ordenes_ml -> ml_cuentas (ml_cuenta_id));
 diesel::joinable!(historial_producto -> productos (producto_id));
 diesel::joinable!(notificaciones -> vendedores (vendedor_id));
 diesel::joinable!(suscripciones -> vendedores (vendedor_id));
+diesel::joinable!(miembros -> vendedores (vendedor_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
     api_keys,
     config_ganancias,
     historial_producto,
+    miembros,
     ml_cuentas,
     ml_oauth_estados,
     notificaciones,

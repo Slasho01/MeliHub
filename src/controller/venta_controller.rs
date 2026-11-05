@@ -11,6 +11,7 @@ use uuid::Uuid;
 
 /// Trae las órdenes recientes de todas las cuentas ML del vendedor.
 pub async fn sincronizar(user: AuthVendedor, pool: web::Data<DbPool>, client: web::Data<MlClient>, cfg: web::Data<Config>) -> ApiResult<HttpResponse> {
+    user.exigir_edicion()?;
     if !cfg.ml.configurado() {
         return Err(ApiError::bad_request("Mercado Libre no está configurado."));
     }

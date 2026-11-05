@@ -1,4 +1,4 @@
-use crate::schema::{historial_producto, ml_cuentas, notificaciones, ordenes_ml, productos, suscripciones, vendedores};
+use crate::schema::{historial_producto, miembros, ml_cuentas, notificaciones, ordenes_ml, productos, suscripciones, vendedores};
 use chrono::NaiveDateTime;
 use diesel::prelude::*;
 use serde::Serialize;
@@ -29,6 +29,39 @@ pub struct NewVendedor {
     pub nombre: String,
     pub rol: String,
     pub plan: String,
+}
+
+// ----------------------------- Miembro (equipo) -----------------------------
+
+#[derive(Queryable, Selectable, Identifiable, Serialize, Debug, Clone)]
+#[diesel(table_name = miembros, check_for_backend(diesel::pg::Pg))]
+pub struct Miembro {
+    pub id: Uuid,
+    pub vendedor_id: Uuid,
+    pub nombre: String,
+    pub email: String,
+    #[serde(skip_serializing)]
+    pub password_hash: Option<String>,
+    pub rol: String,
+    pub estado: String,
+    #[serde(skip_serializing)]
+    pub invite_token: Option<String>,
+    #[serde(skip_serializing)]
+    pub invite_expira: Option<NaiveDateTime>,
+    pub created_at: NaiveDateTime,
+    pub updated_at: NaiveDateTime,
+}
+
+#[derive(Insertable)]
+#[diesel(table_name = miembros)]
+pub struct NewMiembro {
+    pub vendedor_id: Uuid,
+    pub nombre: String,
+    pub email: String,
+    pub rol: String,
+    pub estado: String,
+    pub invite_token: Option<String>,
+    pub invite_expira: Option<NaiveDateTime>,
 }
 
 // ----------------------------- Cuenta ML -----------------------------

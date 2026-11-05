@@ -13,6 +13,8 @@ import Perfil from './pages/Perfil'
 import Admin from './pages/Admin'
 import Reset from './pages/Reset'
 import Legal from './pages/Legal'
+import Equipo from './pages/Equipo'
+import Aceptar from './pages/Aceptar'
 
 export default function App() {
   const [auth, setAuth] = useState(() => !!getToken())
@@ -27,6 +29,7 @@ export default function App() {
   if (!auth) return (
     <Routes>
       <Route path="/reset" element={<Reset />} />
+      <Route path="/aceptar" element={<Aceptar />} />
       <Route path="/legal" element={<Legal />} />
       <Route path="*" element={<Login onAuth={() => setAuth(true)} />} />
     </Routes>
@@ -42,31 +45,34 @@ export default function App() {
           <NavLink to="/inventario" className={cls}>Inventario</NavLink>
           <NavLink to="/ganancias" className={cls}>Ganancias</NavLink>
           <NavLink to="/ventas" className={cls}>Ventas</NavLink>
-          <NavLink to="/api-keys" className={cls}>API keys</NavLink>
+          {me?.es_owner && <NavLink to="/api-keys" className={cls}>API keys</NavLink>}
+          {me?.es_owner && <NavLink to="/equipo" className={cls}>Equipo</NavLink>}
           <NavLink to="/notificaciones" className={cls}>Notificaciones</NavLink>
-          <NavLink to="/plan" className={cls}>Plan</NavLink>
+          {me?.es_owner && <NavLink to="/plan" className={cls}>Plan</NavLink>}
           <NavLink to="/perfil" className={cls}>Mi cuenta</NavLink>
-          {me?.rol === 'admin' && <NavLink to="/admin" className={cls}>Admin</NavLink>}
+          {me?.es_admin && <NavLink to="/admin" className={cls}>Admin</NavLink>}
         </nav>
         <div className="spacer" />
-        {me && (me.plan !== 'business'
+        {me?.es_owner && (me.plan !== 'business'
           ? <NavLink to="/plan" className="btn btn-sm btn-accent" style={{ marginRight: 10 }}>⭐ Mejorar plan</NavLink>
           : <NavLink to="/plan" className="muted sm" style={{ marginRight: 10, textDecoration: 'none' }}>Plan Business ✓</NavLink>)}
-        {me && <span className="muted sm">{me.nombre}{me.rol === 'admin' ? ' · admin' : ''}</span>}
+        {me && <span className="muted sm">{me.nombre}{me.es_admin ? ' · admin' : me.es_miembro ? ` · ${me.rol_equipo}` : ''}</span>}
         <button className="btn btn-sm" onClick={logout}>Salir</button>
       </header>
       <main className="container">
         <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/inventario" element={<Inventario />} />
-          <Route path="/ganancias" element={<Ganancias />} />
+          <Route path="/" element={<Dashboard me={me} />} />
+          <Route path="/inventario" element={<Inventario me={me} />} />
+          <Route path="/ganancias" element={<Ganancias me={me} />} />
           <Route path="/ventas" element={<Ventas />} />
-          <Route path="/api-keys" element={<ApiKeys />} />
+          <Route path="/api-keys" element={me && !me.es_owner ? <Navigate to="/" replace /> : <ApiKeys />} />
+          <Route path="/equipo" element={me && !me.es_owner ? <Navigate to="/" replace /> : <Equipo />} />
           <Route path="/notificaciones" element={<Notificaciones />} />
-          <Route path="/plan" element={<Plan />} />
+          <Route path="/plan" element={me && !me.es_owner ? <Navigate to="/" replace /> : <Plan />} />
           <Route path="/perfil" element={<Perfil />} />
-          <Route path="/admin" element={<Admin />} />
+          <Route path="/admin" element={me && !me.es_admin ? <Navigate to="/" replace /> : <Admin />} />
           <Route path="/legal" element={<Legal />} />
+          <Route path="/aceptar" element={<Aceptar />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>

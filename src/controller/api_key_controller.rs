@@ -8,6 +8,7 @@ use uuid::Uuid;
 
 /// Crea una API key. Devuelve la clave en claro UNA sola vez.
 pub async fn crear(user: AuthVendedor, body: web::Json<NuevaKey>, pool: web::Data<DbPool>) -> ApiResult<HttpResponse> {
+    user.exigir_owner()?;
     let vid = user.id;
     let b = body.into_inner();
     let (registro, clave) = db::run(&pool, move |conn| svc::generar(conn, vid, b)).await?;
@@ -20,6 +21,7 @@ pub async fn listar(user: AuthVendedor, pool: web::Data<DbPool>) -> ApiResult<Ht
 }
 
 pub async fn revocar(path: web::Path<Uuid>, user: AuthVendedor, pool: web::Data<DbPool>) -> ApiResult<HttpResponse> {
+    user.exigir_owner()?;
     let (id, vid, admin) = (path.into_inner(), user.id, user.es_admin());
     db::run(&pool, move |conn| svc::revocar(conn, id, vid, admin)).await?;
     Ok(HttpResponse::NoContent().finish())

@@ -27,6 +27,7 @@ pub async fn conectar(
     client: web::Data<MlClient>,
     cfg: web::Data<Config>,
 ) -> ApiResult<HttpResponse> {
+    user.exigir_owner()?;
     exigir_ml(&cfg)?;
     let vid = user.id;
     let estado = db::run(&pool, move |conn| svc::crear_estado(conn, vid)).await?;
@@ -97,6 +98,7 @@ pub async fn desconectar(
     user: AuthVendedor,
     pool: web::Data<DbPool>,
 ) -> ApiResult<HttpResponse> {
+    user.exigir_owner()?;
     let (cid, vid, admin) = (path.into_inner(), user.id, user.es_admin());
     db::run(&pool, move |conn| svc::desconectar(conn, cid, vid, admin)).await?;
     Ok(HttpResponse::NoContent().finish())
@@ -110,6 +112,7 @@ pub async fn sincronizar(
     client: web::Data<MlClient>,
     cfg: web::Data<Config>,
 ) -> ApiResult<HttpResponse> {
+    user.exigir_edicion()?;
     exigir_ml(&cfg)?;
     let (cid, vid, admin) = (path.into_inner(), user.id, user.es_admin());
     let cuenta = db::run(&pool, move |conn| svc::get_cuenta(conn, cid, vid, admin)).await?;

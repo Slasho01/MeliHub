@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { del, get, post } from '../api'
 
-export default function Dashboard() {
+export default function Dashboard({ me }) {
+  const owner = me?.es_owner
+  const puedeEditar = me?.es_owner || me?.rol_equipo === 'operador'
   const [cuentas, setCuentas] = useState(null)
   const [error, setError] = useState(null)
   const [msg, setMsg] = useState(null)
@@ -39,7 +41,7 @@ export default function Dashboard() {
         <div><h1>Cuentas de Mercado Libre</h1><p className="muted sm" style={{ margin: 0 }}>Conecta una o varias cuentas para centralizar sus publicaciones.</p></div>
         <div className="row">
           <button className="btn btn-sm" onClick={cargar}>Actualizar</button>
-          <button className="btn btn-accent btn-sm" onClick={conectar}>+ Conectar cuenta</button>
+          {owner && <button className="btn btn-accent btn-sm" onClick={conectar}>+ Conectar cuenta</button>}
         </div>
       </div>
       {msg && <div className="alert alert-ok">{msg}</div>}
@@ -57,8 +59,8 @@ export default function Dashboard() {
                   <td><span className="badge">{c.sitio}</span></td>
                   <td className="muted sm">{c.ultima_sync_at ? new Date(c.ultima_sync_at + 'Z').toLocaleString('es-CL') : 'Nunca'}</td>
                   <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                    <button className="btn btn-sm" disabled={busy === c.id} onClick={() => sincronizar(c)}>{busy === c.id ? 'Sincronizando…' : 'Sincronizar'}</button>{' '}
-                    <button className="btn btn-sm btn-danger" onClick={() => desconectar(c)}>Desconectar</button>
+                    {puedeEditar && <button className="btn btn-sm" disabled={busy === c.id} onClick={() => sincronizar(c)}>{busy === c.id ? 'Sincronizando…' : 'Sincronizar'}</button>}{' '}
+                    {owner && <button className="btn btn-sm btn-danger" onClick={() => desconectar(c)}>Desconectar</button>}
                   </td>
                 </tr>
               ))}

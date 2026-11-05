@@ -1,6 +1,7 @@
 pub mod admin_controller;
 pub mod api_key_controller;
 pub mod auth_controller;
+pub mod equipo_controller;
 pub mod ml_controller;
 pub mod producto_controller;
 pub mod pub_controller;

@@ -65,7 +65,7 @@ pub async fn registrar(
     cfg: web::Data<Config>,
 ) -> ApiResult<HttpResponse> {
     let v = db::run(&pool, move |conn| svc::registrar(conn, body.into_inner())).await?;
-    let token = crear_token(v.id, &v.rol, &cfg.jwt_secret)?;
+    let token = crear_token(v.id, &v.rol, v.id, "owner", &cfg.jwt_secret)?;
     Ok(HttpResponse::Created().json(json!({ "token": token, "vendedor": v })))
 }
 
@@ -83,10 +83,10 @@ pub async fn login(
             .json(json!({ "error": "Demasiados intentos. Espera unos minutos e intenta de nuevo." })));
     }
     match db::run(&pool, move |conn| svc::login(conn, body.into_inner())).await {
-        Ok(v) => {
+        Ok(s) => {
             limiter.exito(&ip);
-            let token = crear_token(v.id, &v.rol, &cfg.jwt_secret)?;
-            Ok(HttpResponse::Ok().json(json!({ "token": token, "vendedor": v })))
+            let token = crear_token(s.org_id, &s.rol, s.actor_id, &s.rol_equipo, &cfg.jwt_secret)?;
+            Ok(HttpResponse::Ok().json(json!({ "token": token, "me": s })))
         }
         Err(e) => {
             limiter.fallo(&ip);
@@ -96,20 +96,30 @@ pub async fn login(
 }
 
 pub async fn me(user: AuthVendedor, pool: web::Data<DbPool>) -> ApiResult<HttpResponse> {
-    let v = db::run(&pool, move |conn| svc::get(conn, user.id)).await?;
-    Ok(HttpResponse::Ok().json(v))
+    let (org, actor) = (user.id, user.actor_id);
+    let ident = db::run(&pool, move |conn| svc::identidad(conn, org, actor)).await?;
+    Ok(HttpResponse::Ok().json(json!({
+        "nombre": ident.nombre,
+        "email": ident.email,
+        "plan": ident.plan,
+        "rol": user.rol,
+        "rol_equipo": user.rol_equipo,
+        "es_admin": user.es_admin(),
+        "es_owner": user.es_owner(),
+        "es_miembro": user.es_miembro(),
+    })))
 }
 
 /// Actualiza el perfil (nombre/email) del vendedor autenticado.
 pub async fn actualizar_perfil(user: AuthVendedor, body: web::Json<PerfilUpdate>, pool: web::Data<DbPool>) -> ApiResult<HttpResponse> {
-    let vid = user.id;
-    let v = db::run(&pool, move |conn| svc::actualizar_perfil(conn, vid, body.into_inner())).await?;
+    let (org, actor) = (user.id, user.actor_id);
+    let v = db::run(&pool, move |conn| svc::actualizar_perfil(conn, org, actor, body.into_inner())).await?;
     Ok(HttpResponse::Ok().json(v))
 }
 
 /// Cambia la contraseña del vendedor autenticado.
 pub async fn cambiar_password(user: AuthVendedor, body: web::Json<PasswordUpdate>, pool: web::Data<DbPool>) -> ApiResult<HttpResponse> {
-    let vid = user.id;
-    db::run(&pool, move |conn| svc::cambiar_password(conn, vid, body.into_inner())).await?;
+    let (org, actor) = (user.id, user.actor_id);
+    db::run(&pool, move |conn| svc::cambiar_password(conn, org, actor, body.into_inner())).await?;
     Ok(HttpResponse::Ok().json(json!({ "ok": true })))
 }

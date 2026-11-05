@@ -1,4 +1,4 @@
-use crate::controller::{admin_controller as adm, api_key_controller as keys, auth_controller as auth, health, ml_controller as ml, producto_controller as prod, pub_controller as pubc, saas_controller as saas, suscripcion_controller as subs, venta_controller as ventas};
+use crate::controller::{admin_controller as adm, api_key_controller as keys, auth_controller as auth, equipo_controller as equipo, health, ml_controller as ml, producto_controller as prod, pub_controller as pubc, saas_controller as saas, suscripcion_controller as subs, venta_controller as ventas};
 use actix_web::web::{self, delete, get, post, put, resource as r};
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
@@ -13,6 +13,11 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(r("/auth/me").route(get().to(auth::me)))
             .service(r("/auth/perfil").route(put().to(auth::actualizar_perfil)))
             .service(r("/auth/password").route(put().to(auth::cambiar_password)))
+            // Equipo (miembros de la organización)
+            .service(r("/equipo/aceptar").route(post().to(equipo::aceptar))) // público (invitado)
+            .service(r("/equipo").route(get().to(equipo::listar)).route(post().to(equipo::invitar)))
+            .service(r("/equipo/{id}").route(put().to(equipo::cambiar_rol)).route(delete().to(equipo::eliminar)))
+            .service(r("/equipo/{id}/reinvitar").route(post().to(equipo::reinvitar)))
             // Mercado Libre: OAuth y cuentas
             .service(r("/ml/conectar").route(post().to(ml::conectar)))
             .service(r("/ml/callback").route(get().to(ml::callback)))

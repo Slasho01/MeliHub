@@ -32,6 +32,7 @@ pub async fn set_estado_ml(
     client: web::Data<MlClient>,
     cfg: web::Data<Config>,
 ) -> ApiResult<HttpResponse> {
+    user.exigir_edicion()?;
     exigir_ml(&cfg)?;
     let estado = body.into_inner().estado;
     if estado != "active" && estado != "paused" {
@@ -59,6 +60,7 @@ pub async fn set_precio_ml(
     client: web::Data<MlClient>,
     cfg: web::Data<Config>,
 ) -> ApiResult<HttpResponse> {
+    user.exigir_edicion()?;
     exigir_ml(&cfg)?;
     let precio = body.into_inner().precio;
     if precio <= 0 {
@@ -105,6 +107,7 @@ pub async fn alertas(user: AuthVendedor, q: web::Query<AlertaQuery>, pool: web::
 
 /// Edición masiva de costo y/o precio JarStore.
 pub async fn inventario_masivo(user: AuthVendedor, body: web::Json<InvMasivo>, pool: web::Data<DbPool>) -> ApiResult<HttpResponse> {
+    user.exigir_edicion()?;
     let (vid, admin) = (user.id, user.es_admin());
     let InvMasivo { ids, costo, precio_jarstore } = body.into_inner();
     let n = db::run(&pool, move |conn| prod::set_inventario_masivo(conn, vid, admin, &ids, costo, precio_jarstore)).await?;
@@ -130,6 +133,7 @@ pub async fn set_inventario(
     body: web::Json<InventarioUpdate>,
     pool: web::Data<DbPool>,
 ) -> ApiResult<HttpResponse> {
+    user.exigir_edicion()?;
     let (pid, vid, admin) = (path.into_inner(), user.id, user.es_admin());
     let b = body.into_inner();
     let p = db::run(&pool, move |conn| inv::set_inventario(conn, pid, vid, admin, b)).await?;
@@ -147,6 +151,7 @@ pub async fn set_config(
     body: web::Json<ConfigUpdate>,
     pool: web::Data<DbPool>,
 ) -> ApiResult<HttpResponse> {
+    user.exigir_owner()?;
     let vid = user.id;
     let b = body.into_inner();
     let c = db::run(&pool, move |conn| inv::set_config(conn, vid, b)).await?;

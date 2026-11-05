@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { get, put } from '../api'
 
-export default function Ganancias() {
+export default function Ganancias({ me }) {
+  const soloLectura = me && !me.es_owner
   const [cfg, setCfg] = useState(null)
   const [error, setError] = useState(null)
   const [msg, setMsg] = useState(null)
@@ -58,7 +59,7 @@ export default function Ganancias() {
           </div>
           <p className="muted sm" style={{ margin: '6px 0 0' }}>En Inventario, los productos con costo mostrarán un <b>precio JarStore sugerido</b> que alcanza este margen.</p>
         </div>
-        <div><button className="btn btn-accent" onClick={guardar} disabled={busy}>{busy ? 'Guardando…' : 'Guardar'}</button></div>
+        {soloLectura ? <div className="alert">👁️ Solo el dueño puede cambiar la configuración de ganancias.</div> : <div><button className="btn btn-accent" onClick={guardar} disabled={busy}>{busy ? 'Guardando…' : 'Guardar'}</button></div>}
       </div>
       <p className="muted sm">Fórmula por canal: <b>Ganancia = Precio neto − Costo − Comisión</b>. El costo se trata como neto (sin IVA). Son estimaciones; ajusta las tasas a tu caso real.</p>
     </div>

@@ -22,6 +22,7 @@ pub async fn suscribir(
     mp: web::Data<MercadoPago>,
     cfg: web::Data<Config>,
 ) -> ApiResult<HttpResponse> {
+    user.exigir_owner()?;
     if !mp.configurado() {
         return Err(ApiError::bad_request("Los pagos no están configurados (falta MP_ACCESS_TOKEN)."));
     }
@@ -51,6 +52,7 @@ pub async fn estado(user: AuthVendedor, pool: web::Data<DbPool>) -> ApiResult<Ht
 
 /// Cancela la suscripción (en MeliHub y en Mercado Pago).
 pub async fn cancelar(user: AuthVendedor, pool: web::Data<DbPool>, mp: web::Data<MercadoPago>) -> ApiResult<HttpResponse> {
+    user.exigir_owner()?;
     let vid = user.id;
     let pid = db::run(&pool, move |conn| subs::cancelar_local(conn, vid)).await?;
     if let Some(pid) = pid {

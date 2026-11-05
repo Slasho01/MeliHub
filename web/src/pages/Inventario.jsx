@@ -15,7 +15,8 @@ function GanCell({ g }) {
   )
 }
 
-export default function Inventario() {
+export default function Inventario({ me }) {
+  const soloLectura = me?.rol_equipo === 'lectura'
   const [items, setItems] = useState(null)
   const [cuentas, setCuentas] = useState([])
   const [error, setError] = useState(null)
@@ -122,6 +123,7 @@ export default function Inventario() {
       </div>
       {error && <div className="alert alert-bad">{error}</div>}
       {msg && <div className="alert alert-ok">{msg}</div>}
+      {soloLectura && <div className="alert">👁️ Modo solo lectura: puedes consultar, pero no modificar.</div>}
 
       {alertas.length > 0 && (
         <div className="card" style={{ borderColor: 'var(--warn)' }}>
@@ -157,7 +159,7 @@ export default function Inventario() {
         ) : (
           <table style={{ minWidth: 1000 }}>
             <thead><tr>
-              <th><input type="checkbox" checked={allSel} onChange={toggleAll} /></th>
+              <th><input type="checkbox" checked={allSel} onChange={toggleAll} disabled={soloLectura} /></th>
               <th>Publicación</th><th>Precio ML</th><th>Costo</th><th>Precio JarStore</th>
               <th>Ganancia ML</th><th>Ganancia JarStore</th><th>Stock</th><th>Estado</th>
             </tr></thead>
@@ -169,7 +171,7 @@ export default function Inventario() {
                 return (
                   <Fragment key={p.id}>
                   <tr style={sel.has(p.id) ? { background: 'color-mix(in srgb, var(--accent) 10%, transparent)' } : undefined}>
-                    <td><input type="checkbox" checked={sel.has(p.id)} onChange={() => toggleSel(p.id)} /></td>
+                    <td><input type="checkbox" checked={sel.has(p.id)} onChange={() => toggleSel(p.id)} disabled={soloLectura} /></td>
                     <td style={{ maxWidth: 220 }}>
                       <div className="row" style={{ gap: 8, alignItems: 'center' }}>
                         {p.thumbnail && <img src={p.thumbnail} alt="" width="36" height="36" style={{ borderRadius: 6, objectFit: 'cover' }} />}
@@ -178,19 +180,19 @@ export default function Inventario() {
                     </td>
                     <td>
                       <div className="row" style={{ gap: 4 }}>
-                        <input className="input" style={{ width: 92 }} type="number" min="0" value={mlVal}
+                        <input className="input" style={{ width: 92 }} type="number" min="0" value={mlVal} disabled={soloLectura}
                           onChange={(e) => setPrecioMl({ ...precioMl, [p.id]: e.target.value })} />
-                        {cambiado && <button className="btn btn-sm btn-accent" title="Empujar a Mercado Libre" onClick={() => pushPrecio(p)}>↑ML</button>}
+                        {cambiado && !soloLectura && <button className="btn btn-sm btn-accent" title="Empujar a Mercado Libre" onClick={() => pushPrecio(p)}>↑ML</button>}
                       </div>
                     </td>
-                    <td><input className="input" style={{ width: 92 }} type="number" min="0" placeholder="—"
+                    <td><input className="input" style={{ width: 92 }} type="number" min="0" placeholder="—" disabled={soloLectura}
                       value={val(p, 'costo')} onChange={(e) => onChange(p, 'costo', e.target.value)} onBlur={() => guardar(p)} /></td>
                     <td>
-                      <input className="input" style={{ width: 100 }} type="number" min="0" placeholder="—"
+                      <input className="input" style={{ width: 100 }} type="number" min="0" placeholder="—" disabled={soloLectura}
                         value={val(p, 'precio_jarstore')} onChange={(e) => onChange(p, 'precio_jarstore', e.target.value)} onBlur={() => guardar(p)} />
                       {p.precio_sugerido != null && (
                         <div className="muted sm" style={{ marginTop: 2, whiteSpace: 'nowrap' }}>
-                          sug. {money(p.precio_sugerido)} <button className="link-btn" onClick={() => usarSugerido(p)}>usar</button>
+                          sug. {money(p.precio_sugerido)} {!soloLectura && <button className="link-btn" onClick={() => usarSugerido(p)}>usar</button>}
                         </div>
                       )}
                     </td>
@@ -201,7 +203,7 @@ export default function Inventario() {
                       <div className="stack" style={{ gap: 4 }}>
                         <span className="badge" style={{ color: activo ? 'var(--ok)' : 'var(--muted)' }}>{activo ? 'Activa' : p.estado === 'paused' ? 'Pausada' : p.estado}</span>
                         <div className="row" style={{ gap: 4 }}>
-                          <button className="btn btn-sm" onClick={() => toggleEstado(p)}>{activo ? 'Pausar' : 'Reactivar'}</button>
+                          {!soloLectura && <button className="btn btn-sm" onClick={() => toggleEstado(p)}>{activo ? 'Pausar' : 'Reactivar'}</button>}
                           <button className="btn btn-sm" title="Historial" onClick={() => verHistorial(p)}>📈</button>
                         </div>
                       </div>
