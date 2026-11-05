@@ -1,3 +1,4 @@
+pub mod admin_services;
 pub mod api_key_services;
 pub mod auth_services;
 pub mod common;

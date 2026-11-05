@@ -10,6 +10,7 @@ import Ventas from './pages/Ventas'
 import Notificaciones from './pages/Notificaciones'
 import Plan from './pages/Plan'
 import Perfil from './pages/Perfil'
+import Admin from './pages/Admin'
 
 export default function App() {
   const [auth, setAuth] = useState(() => !!getToken())
@@ -37,6 +38,7 @@ export default function App() {
           <NavLink to="/notificaciones" className={cls}>Notificaciones</NavLink>
           <NavLink to="/plan" className={cls}>Plan</NavLink>
           <NavLink to="/perfil" className={cls}>Mi cuenta</NavLink>
+          {me?.rol === 'admin' && <NavLink to="/admin" className={cls}>Admin</NavLink>}
         </nav>
         <div className="spacer" />
         {me && (me.plan !== 'business'
@@ -55,6 +57,7 @@ export default function App() {
           <Route path="/notificaciones" element={<Notificaciones />} />
           <Route path="/plan" element={<Plan />} />
           <Route path="/perfil" element={<Perfil />} />
+          <Route path="/admin" element={<Admin />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>

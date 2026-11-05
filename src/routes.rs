@@ -1,4 +1,4 @@
-use crate::controller::{api_key_controller as keys, auth_controller as auth, health, ml_controller as ml, producto_controller as prod, pub_controller as pubc, saas_controller as saas, suscripcion_controller as subs, venta_controller as ventas};
+use crate::controller::{admin_controller as adm, api_key_controller as keys, auth_controller as auth, health, ml_controller as ml, producto_controller as prod, pub_controller as pubc, saas_controller as saas, suscripcion_controller as subs, venta_controller as ventas};
 use actix_web::web::{self, delete, get, post, put, resource as r};
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
@@ -40,6 +40,11 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(r("/suscripcion/suscribir").route(post().to(subs::suscribir)))
             .service(r("/suscripcion/cancelar").route(post().to(subs::cancelar)))
             .service(r("/suscripcion/webhook").route(post().to(subs::webhook)))
+            // Súper-admin (solo el dueño de la plataforma)
+            .service(r("/admin/vendedores").route(get().to(adm::vendedores)))
+            .service(r("/admin/vendedores/{id}/plan").route(put().to(adm::set_plan)))
+            .service(r("/admin/vendedores/{id}/estado").route(put().to(adm::set_estado)))
+            .service(r("/admin/metricas").route(get().to(adm::metricas)))
             // API keys (gestión por el vendedor autenticado)
             .service(r("/api-keys").route(get().to(keys::listar)).route(post().to(keys::crear)))
             .service(r("/api-keys/{id}").route(delete().to(keys::revocar)))

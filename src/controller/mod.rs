@@ -1,3 +1,4 @@
+pub mod admin_controller;
 pub mod api_key_controller;
 pub mod auth_controller;
 pub mod ml_controller;
