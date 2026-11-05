@@ -1,7 +1,9 @@
 target
-web
+web/node_modules
+web/dist
 .git
 .env
 .env.*
 *.md
 wordpress-plugin
+scripts
