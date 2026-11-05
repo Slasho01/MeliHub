@@ -18,11 +18,10 @@ pub fn hash(key: &str) -> String {
 #[derive(Deserialize)]
 pub struct NuevaKey {
     pub nombre: String,
-    #[serde(default = "canal_default")]
+    #[serde(default)]
     pub canal: String,
     pub ml_cuenta_id: Option<Uuid>,
 }
-fn canal_default() -> String { "jarstore".into() }
 
 /// Crea una API key. Devuelve (registro, key_en_claro) — la clave solo se ve aquí.
 pub fn generar(conn: &mut PgConnection, vendedor_id: Uuid, req: NuevaKey) -> ApiResult<(ApiKey, String)> {
@@ -31,10 +30,14 @@ pub fn generar(conn: &mut PgConnection, vendedor_id: Uuid, req: NuevaKey) -> Api
     if nombre.is_empty() || nombre.len() > 100 {
         return Err(ApiError::bad_request("Dale un nombre a la API key"));
     }
-    let canal = match req.canal.trim() {
-        "mercadolibre" => "mercadolibre",
-        _ => "jarstore",
-    };
+    // El canal es un nombre libre que elige el vendedor (su propia plataforma).
+    // Sirve el "precio propio" (precio_jarstore); solo el canal literal
+    // "mercadolibre" sirve el precio de ML (ver pub_services::precio_canal).
+    let canal = req.canal.trim();
+    if canal.len() > 60 {
+        return Err(ApiError::bad_request("El nombre del canal es demasiado largo (máx. 60)"));
+    }
+    let canal = if canal.is_empty() { "mi-tienda" } else { canal };
     let key: String = {
         let mut rng = rand::thread_rng();
         let hex: String = (0..40).map(|_| format!("{:x}", rng.gen_range(0..16))).collect();

@@ -153,6 +153,32 @@ diesel::table! {
 }
 
 diesel::table! {
+    facturacion (vendedor_id) {
+        vendedor_id -> Uuid,
+        #[max_length = 10]
+        tipo_documento -> Varchar,
+        #[max_length = 20]
+        rut -> Varchar,
+        #[max_length = 160]
+        razon_social -> Varchar,
+        #[max_length = 120]
+        giro -> Nullable<Varchar>,
+        #[max_length = 200]
+        direccion -> Varchar,
+        #[max_length = 80]
+        comuna -> Varchar,
+        #[max_length = 80]
+        ciudad -> Nullable<Varchar>,
+        #[max_length = 40]
+        telefono -> Nullable<Varchar>,
+        #[max_length = 40]
+        pais -> Varchar,
+        created_at -> Timestamp,
+        updated_at -> Timestamp,
+    }
+}
+
+diesel::table! {
     cupones (id) {
         id -> Uuid,
         #[max_length = 40]
@@ -234,6 +260,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     api_keys,
     config_ganancias,
     cupones,
+    facturacion,
     historial_producto,
     miembros,
     ml_cuentas,

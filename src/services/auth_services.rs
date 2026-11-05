@@ -34,6 +34,14 @@ pub fn validar_password(p: &str) -> ApiResult<()> {
     if p.len() < 8 {
         return Err(ApiError::bad_request("La contraseña debe tener al menos 8 caracteres"));
     }
+    if p.len() > 128 {
+        return Err(ApiError::bad_request("La contraseña es demasiado larga (máx. 128)"));
+    }
+    let tiene_letra = p.chars().any(|c| c.is_alphabetic());
+    let tiene_numero = p.chars().any(|c| c.is_ascii_digit());
+    if !tiene_letra || !tiene_numero {
+        return Err(ApiError::bad_request("La contraseña debe incluir al menos una letra y un número"));
+    }
     Ok(())
 }
 

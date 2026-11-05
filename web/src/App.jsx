@@ -15,6 +15,8 @@ import Reset from './pages/Reset'
 import Legal from './pages/Legal'
 import Equipo from './pages/Equipo'
 import Aceptar from './pages/Aceptar'
+import Facturacion from './pages/Facturacion'
+import Suscripcion from './pages/Suscripcion'
 
 export default function App() {
   const [auth, setAuth] = useState(() => !!getToken())
@@ -49,6 +51,8 @@ export default function App() {
           {me?.es_owner && <NavLink to="/equipo" className={cls}>Equipo</NavLink>}
           <NavLink to="/notificaciones" className={cls}>Notificaciones</NavLink>
           {me?.es_owner && <NavLink to="/plan" className={cls}>Plan</NavLink>}
+          {me?.es_owner && <NavLink to="/suscripcion" className={cls}>Suscripción</NavLink>}
+          {me?.es_owner && <NavLink to="/facturacion" className={cls}>Facturación</NavLink>}
           <NavLink to="/perfil" className={cls}>Mi cuenta</NavLink>
           {me?.es_admin && <NavLink to="/admin" className={cls}>Admin</NavLink>}
         </nav>
@@ -69,6 +73,8 @@ export default function App() {
           <Route path="/equipo" element={me && !me.es_owner ? <Navigate to="/" replace /> : <Equipo />} />
           <Route path="/notificaciones" element={<Notificaciones />} />
           <Route path="/plan" element={me && !me.es_owner ? <Navigate to="/" replace /> : <Plan />} />
+          <Route path="/suscripcion" element={me && !me.es_owner ? <Navigate to="/" replace /> : <Suscripcion />} />
+          <Route path="/facturacion" element={me && !me.es_owner ? <Navigate to="/" replace /> : <Facturacion />} />
           <Route path="/perfil" element={<Perfil />} />
           <Route path="/admin" element={me && !me.es_admin ? <Navigate to="/" replace /> : <Admin />} />
           <Route path="/legal" element={<Legal />} />

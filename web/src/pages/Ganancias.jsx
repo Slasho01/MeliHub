@@ -48,7 +48,7 @@ export default function Ganancias({ me }) {
           <div />
           {num('comision_ml_pct', 'Comisión Mercado Libre (%)')}
           {num('comision_ml_fija', 'Cargo fijo ML (CLP)', '1')}
-          {num('comision_mp_pct', 'Comisión Mercado Pago / JarStore (%)')}
+          {num('comision_mp_pct', 'Comisión Mercado Pago / mi canal (%)')}
           {num('comision_mp_fija', 'Cargo fijo MP (CLP)', '1')}
         </div>
         <div style={{ borderTop: '1px solid var(--line)', paddingTop: 12 }}>
@@ -57,7 +57,7 @@ export default function Ganancias({ me }) {
             {num('margen_objetivo', 'Margen objetivo (%)')}
             {num('redondeo', 'Precio termina en (ej. 990; 0 = sin redondeo)', '1')}
           </div>
-          <p className="muted sm" style={{ margin: '6px 0 0' }}>En Inventario, los productos con costo mostrarán un <b>precio JarStore sugerido</b> que alcanza este margen.</p>
+          <p className="muted sm" style={{ margin: '6px 0 0' }}>En Inventario, los productos con costo mostrarán un <b>precio propio sugerido</b> que alcanza este margen.</p>
         </div>
         {soloLectura ? <div className="alert">👁️ Solo el dueño puede cambiar la configuración de ganancias.</div> : <div><button className="btn btn-accent" onClick={guardar} disabled={busy}>{busy ? 'Guardando…' : 'Guardar'}</button></div>}
       </div>

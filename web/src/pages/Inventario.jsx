@@ -103,7 +103,7 @@ export default function Inventario({ me }) {
     const body = { ids }
     if (bulk.costo !== '') body.costo = Number(bulk.costo)
     if (bulk.precio_jarstore !== '') body.precio_jarstore = Number(bulk.precio_jarstore)
-    if (!('costo' in body) && !('precio_jarstore' in body)) { setError('Indica costo y/o precio JarStore a aplicar'); return }
+    if (!('costo' in body) && !('precio_jarstore' in body)) { setError('Indica costo y/o tu precio a aplicar'); return }
     setError(null); setMsg(null)
     try { const r = await post('/productos/inventario-masivo', body); setMsg(`${r.afectados} producto(s) actualizados.`); setBulk({ costo: '', precio_jarstore: '' }); cargar() }
     catch (err) { setError(err.message) }
@@ -112,7 +112,7 @@ export default function Inventario({ me }) {
   return (
     <div className="stack">
       <div className="row between">
-        <div><h1>Inventario</h1><p className="muted sm" style={{ margin: 0 }}>Costo/precio JarStore, y control de la publicación en Mercado Libre.</p></div>
+        <div><h1>Inventario</h1><p className="muted sm" style={{ margin: 0 }}>Costo/precio propio, y control de la publicación en Mercado Libre.</p></div>
         <div className="row">
           <input className="input" style={{ width: 200 }} placeholder="Buscar…" value={q} onChange={(e) => setQ(e.target.value)} />
           <select className="input" value={cuenta} onChange={(e) => setCuenta(e.target.value)}>
@@ -146,7 +146,7 @@ export default function Inventario({ me }) {
           <b>{sel.size} seleccionado(s)</b>
           <label className="stack" style={{ gap: 2 }}><span className="sm muted">Costo</span>
             <input className="input" style={{ width: 110 }} type="number" min="0" value={bulk.costo} onChange={(e) => setBulk({ ...bulk, costo: e.target.value })} /></label>
-          <label className="stack" style={{ gap: 2 }}><span className="sm muted">Precio JarStore</span>
+          <label className="stack" style={{ gap: 2 }}><span className="sm muted">Mi precio</span>
             <input className="input" style={{ width: 120 }} type="number" min="0" value={bulk.precio_jarstore} onChange={(e) => setBulk({ ...bulk, precio_jarstore: e.target.value })} /></label>
           <button className="btn btn-accent" onClick={aplicarMasivo}>Aplicar a seleccionados</button>
           <button className="btn btn-sm" onClick={() => setSel(new Set())}>Limpiar</button>
@@ -160,8 +160,8 @@ export default function Inventario({ me }) {
           <table style={{ minWidth: 1000 }}>
             <thead><tr>
               <th><input type="checkbox" checked={allSel} onChange={toggleAll} disabled={soloLectura} /></th>
-              <th>Publicación</th><th>Precio ML</th><th>Costo</th><th>Precio JarStore</th>
-              <th>Ganancia ML</th><th>Ganancia JarStore</th><th>Stock</th><th>Estado</th>
+              <th>Publicación</th><th>Precio ML</th><th>Costo</th><th>Mi precio</th>
+              <th>Ganancia ML</th><th>Ganancia (mi precio)</th><th>Stock</th><th>Estado</th>
             </tr></thead>
             <tbody>
               {items.map((p) => {

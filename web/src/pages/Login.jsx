@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { post, setToken } from '../api'
+import PasswordMeter from '../components/PasswordMeter'
 
 export default function Login({ onAuth }) {
   const [modo, setModo] = useState('login') // login | registro | forgot
@@ -45,7 +46,8 @@ export default function Login({ onAuth }) {
           )}
           <div><label>Email</label><input className="input" type="email" value={form.email} onChange={set('email')} required /></div>
           {modo !== 'forgot' && (
-            <div><label>Contraseña</label><input className="input" type="password" value={form.password} onChange={set('password')} required minLength={8} /></div>
+            <div><label>Contraseña</label><input className="input" type="password" value={form.password} onChange={set('password')} required minLength={8} />
+              {modo === 'registro' && <PasswordMeter value={form.password} />}</div>
           )}
           {error && <div className="alert alert-bad">{error}</div>}
           {msg && <div className="alert alert-ok">{msg}</div>}

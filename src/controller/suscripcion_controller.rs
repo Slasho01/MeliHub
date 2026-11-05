@@ -3,7 +3,7 @@ use crate::config::Config;
 use crate::db::{self, DbPool};
 use crate::errors::{ApiError, ApiResult};
 use crate::mp::MercadoPago;
-use crate::services::{cupon_services, suscripcion_services as subs};
+use crate::services::{cupon_services, facturacion_services, suscripcion_services as subs};
 use actix_web::{web, HttpRequest, HttpResponse};
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -40,6 +40,12 @@ pub async fn suscribir(
     let base = crate::planes::precio_de(plan, ciclo);
     if base <= 0 {
         return Err(ApiError::bad_request("Ese plan no tiene precio para ese ciclo."));
+    }
+
+    // Antes de cobrar, exige datos de facturación completos.
+    let org = user.id;
+    if !db::run(&pool, move |conn| facturacion_services::completo(conn, org)).await? {
+        return Err(ApiError::bad_request("Completa tus datos de facturación en «Mi cuenta» antes de suscribirte."));
     }
 
     // Cupón de descuento (opcional): valida y aplica sobre el precio base.

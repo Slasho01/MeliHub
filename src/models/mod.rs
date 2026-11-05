@@ -1,4 +1,4 @@
-use crate::schema::{cupones, historial_producto, miembros, ml_cuentas, notificaciones, ordenes_ml, productos, suscripciones, vendedores};
+use crate::schema::{cupones, facturacion, historial_producto, miembros, ml_cuentas, notificaciones, ordenes_ml, productos, suscripciones, vendedores};
 use chrono::NaiveDateTime;
 use diesel::prelude::*;
 use serde::Serialize;
@@ -326,6 +326,40 @@ pub struct Cupon {
     pub usos: i32,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
+}
+
+// ----------------------------- Facturación -----------------------------
+
+#[derive(Queryable, Selectable, Serialize, Debug, Clone)]
+#[diesel(table_name = facturacion, primary_key(vendedor_id), check_for_backend(diesel::pg::Pg))]
+pub struct Facturacion {
+    pub vendedor_id: Uuid,
+    pub tipo_documento: String,
+    pub rut: String,
+    pub razon_social: String,
+    pub giro: Option<String>,
+    pub direccion: String,
+    pub comuna: String,
+    pub ciudad: Option<String>,
+    pub telefono: Option<String>,
+    pub pais: String,
+    pub created_at: NaiveDateTime,
+    pub updated_at: NaiveDateTime,
+}
+
+#[derive(Insertable)]
+#[diesel(table_name = facturacion)]
+pub struct NewFacturacion {
+    pub vendedor_id: Uuid,
+    pub tipo_documento: String,
+    pub rut: String,
+    pub razon_social: String,
+    pub giro: Option<String>,
+    pub direccion: String,
+    pub comuna: String,
+    pub ciudad: Option<String>,
+    pub telefono: Option<String>,
+    pub pais: String,
 }
 
 #[derive(Insertable)]

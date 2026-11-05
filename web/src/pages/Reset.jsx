@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { post } from '../api'
+import PasswordMeter from '../components/PasswordMeter'
 
 export default function Reset() {
   const token = new URLSearchParams(window.location.search).get('token') || ''
@@ -31,7 +32,8 @@ export default function Reset() {
           <form className="stack" onSubmit={submit}>
             <p className="muted sm" style={{ margin: 0 }}>Elige tu nueva contraseña.</p>
             <div><label>Nueva contraseña (mín. 8)</label>
-              <input className="input" type="password" autoComplete="new-password" value={nueva} onChange={(e) => setNueva(e.target.value)} required minLength={8} /></div>
+              <input className="input" type="password" autoComplete="new-password" value={nueva} onChange={(e) => setNueva(e.target.value)} required minLength={8} />
+              <PasswordMeter value={nueva} /></div>
             {error && <div className="alert alert-bad">{error}</div>}
             <button className="btn btn-accent" disabled={busy}>{busy ? '…' : 'Cambiar contraseña'}</button>
           </form>

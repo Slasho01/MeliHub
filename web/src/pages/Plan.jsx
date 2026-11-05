@@ -23,17 +23,21 @@ function Barra({ label, used, max }) {
 
 export default function Plan() {
   const [data, setData] = useState(null)
-  const [sub, setSub] = useState(null)
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState('')
   const [ciclo, setCiclo] = useState('mensual')
   const [cupInput, setCupInput] = useState('')
   const [cupon, setCupon] = useState(null) // { codigo, tipo, valor, descripcion }
   const [cupError, setCupError] = useState(null)
+  const [factFalta, setFactFalta] = useState(false)
 
   const cargar = () => {
     get('/mi-plan').then(setData).catch((e) => setError(e.message))
-    get('/suscripcion').then((r) => setSub(r.suscripcion)).catch(() => {})
+    get('/facturacion').then((r) => {
+      const f = r.facturacion
+      const ok = f && f.rut && f.razon_social && f.direccion && f.comuna && (f.tipo_documento !== 'factura' || f.giro)
+      setFactFalta(!ok)
+    }).catch(() => {})
   }
   useEffect(() => { cargar() }, [])
 
@@ -65,29 +69,17 @@ export default function Plan() {
     } catch (e) { setError(e.message) } finally { setBusy('') }
   }
 
-  const cancelar = async () => {
-    if (!window.confirm('¿Cancelar tu suscripción? Volverás al plan Free.')) return
-    setBusy('cancelar'); setError(null)
-    try { await post('/suscripcion/cancelar', {}); cargar() } catch (e) { setError(e.message) } finally { setBusy('') }
-  }
-
   if (error && !data) return <div className="alert alert-bad">{error}</div>
   if (!data) return <div className="empty">Cargando…</div>
   const { plan, uso, planes } = data
-  const activa = sub && sub.estado === 'authorized'
   const sufijo = ciclo === 'anual' ? '/año' : '/mes'
 
   return (
     <div className="stack">
       <div><h1>Plan y suscripción</h1><p className="muted sm" style={{ margin: 0 }}>Tu plan actual, cuánto usas y cómo mejorarlo.</p></div>
       {error && <div className="alert alert-bad">{error}</div>}
-      {sub && (
-        <div className="muted sm">
-          Suscripción: <b>{sub.estado}</b>
-          {sub.ciclo ? ` · ${sub.ciclo}` : ''}
-          {sub.vigente_hasta ? ` · vigente hasta ${new Date(sub.vigente_hasta + 'Z').toLocaleDateString('es-CL')}` : ''}
-          {activa && <> · <button className="link-btn" disabled={busy === 'cancelar'} onClick={cancelar}>cancelar</button></>}
-        </div>
+      {factFalta && (
+        <div className="alert">📄 Para suscribirte a un plan de pago, primero completa tus <a href="/facturacion">datos de facturación</a>.</div>
       )}
 
       <div className="card stack">

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { post } from '../api'
+import PasswordMeter from '../components/PasswordMeter'
 
 export default function Aceptar() {
   const token = new URLSearchParams(window.location.search).get('token') || ''
@@ -31,7 +32,8 @@ export default function Aceptar() {
           <form className="stack" onSubmit={submit}>
             <p className="muted sm" style={{ margin: 0 }}>Te invitaron a MeliHub. Crea tu contraseña para entrar.</p>
             <div><label>Contraseña (mín. 8)</label>
-              <input className="input" type="password" autoComplete="new-password" value={pass} onChange={(e) => setPass(e.target.value)} required minLength={8} /></div>
+              <input className="input" type="password" autoComplete="new-password" value={pass} onChange={(e) => setPass(e.target.value)} required minLength={8} />
+              <PasswordMeter value={pass} /></div>
             {error && <div className="alert alert-bad">{error}</div>}
             <button className="btn btn-accent" disabled={busy}>{busy ? '…' : 'Aceptar invitación'}</button>
           </form>

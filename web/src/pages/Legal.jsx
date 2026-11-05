@@ -7,7 +7,7 @@ function Terminos() {
     <div className="stack" style={{ lineHeight: 1.7 }}>
       <h2>Términos y Condiciones</h2>
       <p className="muted sm">Última actualización: {ACTUALIZADO}</p>
-      <p><b>1. El servicio.</b> MeliHub es una herramienta que centraliza las publicaciones de Mercado Libre de una o más cuentas, administra inventario, precios y ganancias, y las distribuye a plataformas de terceros (JarStore, WordPress) mediante API-keys. El uso del servicio implica la aceptación de estos términos.</p>
+      <p><b>1. El servicio.</b> MeliHub es una herramienta que centraliza las publicaciones de Mercado Libre de una o más cuentas, administra inventario, precios y ganancias, y las distribuye a plataformas de terceros (tu propia web, WordPress, etc.) mediante API-keys. El uso del servicio implica la aceptación de estos términos.</p>
       <p><b>2. Cuenta.</b> Eres responsable de la veracidad de tus datos, de la seguridad de tu contraseña y de toda actividad en tu cuenta. Debes tener autorización para conectar las cuentas de Mercado Libre que vincules.</p>
       <p><b>3. Uso aceptable.</b> No puedes usar MeliHub para fines ilícitos, para vulnerar los términos de Mercado Libre, Mercado Pago u otras plataformas, ni para acceder a datos que no te pertenecen.</p>
       <p><b>4. Integraciones de terceros.</b> MeliHub se conecta a Mercado Libre, Mercado Pago y otros servicios. El funcionamiento de esas integraciones depende de dichas plataformas; no garantizamos su disponibilidad ni nos hacemos responsables de cambios en sus APIs o políticas.</p>
