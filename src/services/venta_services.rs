@@ -273,12 +273,18 @@ pub fn ordenes_periodo(conn: &mut PgConnection, vendedor_id: Uuid, dias: i64) ->
 
 // ----------------------------- Envíos / etiquetas -----------------------------
 
-// Estados en los que ya NO hay que imprimir etiqueta ni refrescar (ya se envió / cerró).
-const ESTADOS_TERMINALES: [&str; 4] = ["shipped", "delivered", "not_delivered", "cancelled"];
+// Substatus de `ready_to_ship` donde el envío sigue en manos del vendedor (hay que imprimir/entregar).
+const SUBSTATUS_PENDIENTE: [&str; 6] = ["ready_to_print", "printed", "in_packing_list", "invoice_pending", "picking_up", "ready_to_dropoff"];
 
-/// ¿El envío sigue pendiente de despacho? (null = aún sin clasificar → sí).
-pub fn es_pendiente(estado: Option<&str>) -> bool {
-    !estado.map(|e| ESTADOS_TERMINALES.contains(&e)).unwrap_or(false)
+/// ¿El envío sigue pendiente de despacho? Usa status + substatus porque ML mantiene
+/// `ready_to_ship` aunque el paquete ya esté en camino (substatus `in_hub`, etc.).
+pub fn es_pendiente(estado: Option<&str>, substatus: Option<&str>) -> bool {
+    match estado {
+        None => true, // aún sin clasificar → mostrar
+        Some("pending") | Some("handling") => true,
+        Some("ready_to_ship") => substatus.map(|s| SUBSTATUS_PENDIENTE.contains(&s)).unwrap_or(true),
+        _ => false, // shipped / delivered / not_delivered / cancelled / en camino…
+    }
 }
 
 #[derive(Serialize)]
@@ -292,6 +298,7 @@ pub struct EnvioRow {
     pub envio_id: i64,
     pub productos: String,
     pub envio_estado: Option<String>,
+    pub envio_substatus: Option<String>,
     pub logistic_type: Option<String>,
 }
 
@@ -326,7 +333,7 @@ pub fn envios(conn: &mut PgConnection, vendedor_id: Uuid, ini: NaiveDateTime, fi
         .load(conn)?;
     Ok(rows
         .into_iter()
-        .filter(|(o, _)| !solo_pendientes || es_pendiente(o.envio_estado.as_deref()))
+        .filter(|(o, _)| !solo_pendientes || es_pendiente(o.envio_estado.as_deref(), o.envio_substatus.as_deref()))
         .map(|(o, nick)| EnvioRow {
             id: o.id,
             ml_order_id: o.ml_order_id,
@@ -337,6 +344,7 @@ pub fn envios(conn: &mut PgConnection, vendedor_id: Uuid, ini: NaiveDateTime, fi
             envio_id: o.envio_id.unwrap_or(0),
             productos: resumen_items(&o.items),
             envio_estado: o.envio_estado,
+            envio_substatus: o.envio_substatus,
             logistic_type: o.logistic_type,
         })
         .collect())
@@ -356,14 +364,14 @@ pub fn envios_por_cuenta(conn: &mut PgConnection, vendedor_id: Uuid, ini: NaiveD
     if let Some(cid) = cuenta_id {
         q = q.filter(ordenes_ml::ml_cuenta_id.eq(cid));
     }
-    let pairs: Vec<(MlCuenta, Option<i64>, Option<String>)> = q
-        .select((MlCuenta::as_select(), ordenes_ml::envio_id, ordenes_ml::envio_estado))
+    let pairs: Vec<(MlCuenta, Option<i64>, Option<String>, Option<String>)> = q
+        .select((MlCuenta::as_select(), ordenes_ml::envio_id, ordenes_ml::envio_estado, ordenes_ml::envio_substatus))
         .load(conn)?;
     let mut map: std::collections::HashMap<Uuid, (MlCuenta, Vec<i64>)> = std::collections::HashMap::new();
-    for (cuenta, envio, est) in pairs {
-        // Solo etiquetas de envíos aún pendientes (no los ya enviados/entregados).
+    for (cuenta, envio, est, sub) in pairs {
+        // Solo etiquetas de envíos aún pendientes (no los que ya van en camino).
         if let Some(e) = envio {
-            if es_pendiente(est.as_deref()) {
+            if es_pendiente(est.as_deref(), sub.as_deref()) {
                 map.entry(cuenta.id).or_insert_with(|| (cuenta.clone(), Vec::new())).1.push(e);
             }
         }
@@ -387,21 +395,26 @@ pub fn para_enriquecer(conn: &mut PgConnection, vendedor_id: Uuid, ini: NaiveDat
     if let Some(cid) = cuenta_id {
         q = q.filter(ordenes_ml::ml_cuenta_id.eq(cid));
     }
-    let rows: Vec<(Uuid, MlCuenta, Option<i64>, Option<String>, Option<String>)> = q
-        .select((ordenes_ml::id, MlCuenta::as_select(), ordenes_ml::envio_id, ordenes_ml::logistic_type, ordenes_ml::envio_estado))
+    let rows: Vec<(Uuid, MlCuenta, Option<i64>, Option<String>, Option<String>, Option<String>)> = q
+        .select((ordenes_ml::id, MlCuenta::as_select(), ordenes_ml::envio_id, ordenes_ml::logistic_type, ordenes_ml::envio_estado, ordenes_ml::envio_substatus))
         .load(conn)?;
-    Ok(rows.into_iter().filter_map(|(id, cuenta, envio, lt, est)| {
+    Ok(rows.into_iter().filter_map(|(id, cuenta, envio, lt, est, sub)| {
         let envio = envio?;
         // Clasificar (sin tipo logístico) o refrescar mientras siga pendiente.
-        let necesita = lt.is_none() || es_pendiente(est.as_deref());
+        let necesita = lt.is_none() || es_pendiente(est.as_deref(), sub.as_deref());
         necesita.then_some((id, cuenta, envio))
     }).collect())
 }
 
 /// Guarda el tipo logístico y el estado de envío de una orden.
-pub fn set_envio_info(conn: &mut PgConnection, orden_id: Uuid, logistic_type: &str, estado: &str) -> ApiResult<()> {
+pub fn set_envio_info(conn: &mut PgConnection, orden_id: Uuid, logistic_type: &str, estado: &str, substatus: &str) -> ApiResult<()> {
+    let sub: Option<&str> = if substatus.is_empty() { None } else { Some(substatus) };
     diesel::update(ordenes_ml::table.find(orden_id))
-        .set((ordenes_ml::logistic_type.eq(logistic_type), ordenes_ml::envio_estado.eq(estado)))
+        .set((
+            ordenes_ml::logistic_type.eq(logistic_type),
+            ordenes_ml::envio_estado.eq(estado),
+            ordenes_ml::envio_substatus.eq(sub),
+        ))
         .execute(conn)?;
     Ok(())
 }

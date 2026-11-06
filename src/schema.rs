@@ -150,6 +150,8 @@ diesel::table! {
         logistic_type -> Nullable<Varchar>,
         #[max_length = 30]
         envio_estado -> Nullable<Varchar>,
+        #[max_length = 40]
+        envio_substatus -> Nullable<Varchar>,
     }
 }
 

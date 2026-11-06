@@ -250,6 +250,7 @@ pub struct OrdenMl {
     pub envio_id: Option<i64>,
     pub logistic_type: Option<String>,
     pub envio_estado: Option<String>,
+    pub envio_substatus: Option<String>,
 }
 
 #[derive(Insertable, AsChangeset, Debug)]

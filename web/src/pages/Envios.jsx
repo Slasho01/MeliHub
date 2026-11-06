@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { get, descargarArchivo } from '../api'
 
 const ESTADO = {
-  ready_to_ship: ['Listo para enviar', 'tag-ok'],
   pending: ['Preparando', 'tag'],
   handling: ['Preparando', 'tag'],
   shipped: ['Enviado', 'tag'],
@@ -10,10 +9,25 @@ const ESTADO = {
   not_delivered: ['No entregado', 'tag'],
   cancelled: ['Cancelado', 'tag'],
 }
-const TERMINALES = ['shipped', 'delivered', 'not_delivered', 'cancelled']
-const pendiente = (s) => !TERMINALES.includes(s)
-const estadoBadge = (s) => {
-  const [t, c] = ESTADO[s] || [s || '—', 'tag']
+// Substatus de ready_to_ship donde el envío sigue con el vendedor (hay que imprimir/entregar).
+const SUB_PENDIENTE = ['ready_to_print', 'printed', 'in_packing_list', 'invoice_pending', 'picking_up', 'ready_to_dropoff']
+
+const pendiente = (estado, sub) => {
+  if (!estado) return true
+  if (estado === 'pending' || estado === 'handling') return true
+  if (estado === 'ready_to_ship') return sub ? SUB_PENDIENTE.includes(sub) : true
+  return false
+}
+const estadoBadge = (estado, sub) => {
+  let t, c
+  if (estado === 'ready_to_ship') {
+    if (sub === 'ready_to_print') [t, c] = ['Por imprimir', 'tag-ok']
+    else if (sub === 'printed') [t, c] = ['Impreso, por entregar', 'tag-ok']
+    else if (!sub || SUB_PENDIENTE.includes(sub)) [t, c] = ['Listo para enviar', 'tag-ok']
+    else [t, c] = ['En camino', 'tag']
+  } else {
+    [t, c] = ESTADO[estado] || [estado || '—', 'tag']
+  }
   return <span className={`tag ${c}`}>{t}</span>
 }
 
@@ -56,7 +70,7 @@ export default function Envios() {
     catch (e) { setError(e.message) }
   }
 
-  const pendientesCount = rows?.filter((o) => pendiente(o.envio_estado)).length || 0
+  const pendientesCount = rows?.filter((o) => pendiente(o.envio_estado, o.envio_substatus)).length || 0
 
   return (
     <div className="stack">
@@ -92,14 +106,14 @@ export default function Envios() {
             <thead><tr><th>Hora</th><th>Cuenta</th><th>Comprador</th><th>Productos</th><th>Estado</th><th></th></tr></thead>
             <tbody>
               {rows.map((o) => (
-                <tr key={o.id} style={pendiente(o.envio_estado) ? undefined : { opacity: 0.6 }}>
+                <tr key={o.id} style={pendiente(o.envio_estado, o.envio_substatus) ? undefined : { opacity: 0.6 }}>
                   <td className="muted sm" style={{ whiteSpace: 'nowrap' }}>{new Date(o.fecha + 'Z').toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}</td>
                   <td><b>{o.cuenta}</b></td>
                   <td className="muted sm">{o.comprador || '—'}</td>
                   <td className="sm" style={{ maxWidth: 320 }}>{o.productos}</td>
-                  <td>{estadoBadge(o.envio_estado)}</td>
+                  <td>{estadoBadge(o.envio_estado, o.envio_substatus)}</td>
                   <td style={{ textAlign: 'right' }}>
-                    {pendiente(o.envio_estado)
+                    {pendiente(o.envio_estado, o.envio_substatus)
                       ? <button className="btn btn-sm" onClick={() => descargarUna(o)}>Etiqueta</button>
                       : <span className="muted sm">—</span>}
                   </td>
