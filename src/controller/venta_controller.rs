@@ -93,6 +93,7 @@ pub async fn listar(user: AuthVendedor, q: web::Query<ListQuery>, pool: web::Dat
 #[derive(Deserialize)]
 pub struct DiaQuery {
     pub dia: Option<String>,
+    pub cuenta: Option<Uuid>,
 }
 
 /// Rango de fechas: si `dia` es una fecha válida → ese día; si no → últimos `default_dias`.
@@ -139,51 +140,57 @@ fn zip_pdfs(files: &[(String, Vec<u8>)]) -> ApiResult<Vec<u8>> {
 #[derive(Deserialize)]
 pub struct EnviosQuery {
     pub dia: Option<String>,
-    pub refresh: Option<u8>,
+    pub incluir_enviados: Option<u8>,
+    pub cuenta: Option<Uuid>,
 }
 
-/// Lista las ventas con envío imprimible (sin FULL) con su estado. Consulta a ML el
-/// tipo logístico y estado de los envíos que lo necesiten (clasifica FULL y refresca).
-pub async fn envios(user: AuthVendedor, q: web::Query<EnviosQuery>, pool: web::Data<DbPool>, client: web::Data<MlClient>, cfg: web::Data<Config>) -> ApiResult<HttpResponse> {
-    let vid = user.id;
-    let EnviosQuery { dia, refresh } = q.into_inner();
-    let (ini, fin) = rango(dia.as_deref(), 15);
-
-    if cfg.ml.configurado() {
-        let todos = refresh == Some(1);
-        let pendientes = db::run(&pool, move |conn| venta::para_enriquecer(conn, vid, ini, fin, todos)).await?;
-        let mut tokens: std::collections::HashMap<Uuid, Option<String>> = std::collections::HashMap::new();
-        let mut updates: Vec<(Uuid, String, String)> = Vec::new();
-        for (orden_id, cuenta, envio) in pendientes.into_iter().take(80) {
-            let token = match tokens.get(&cuenta.id) {
-                Some(t) => t.clone(),
-                None => {
-                    let t = crate::sync::access_token_valido(&pool, &client, &cuenta).await.ok();
-                    tokens.insert(cuenta.id, t.clone());
-                    t
-                }
-            };
-            let Some(token) = token else { continue };
-            if let Some(sh) = client.get_shipment(&token, envio).await {
-                let lt = sh.get("logistic_type").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                let st = sh.get("status").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                if !lt.is_empty() {
-                    updates.push((orden_id, lt, st));
-                }
+/// Consulta a ML el tipo logístico y estado de los envíos que lo necesiten (clasifica
+/// FULL y refresca los pendientes) y lo guarda. Best-effort, con tope y caché de token.
+async fn enriquecer(pool: &web::Data<DbPool>, client: &web::Data<MlClient>, cfg: &web::Data<Config>, vid: Uuid, ini: chrono::NaiveDateTime, fin: chrono::NaiveDateTime, cuenta: Option<Uuid>) -> ApiResult<()> {
+    if !cfg.ml.configurado() {
+        return Ok(());
+    }
+    let pendientes = db::run(pool, move |conn| venta::para_enriquecer(conn, vid, ini, fin, cuenta)).await?;
+    let mut tokens: std::collections::HashMap<Uuid, Option<String>> = std::collections::HashMap::new();
+    let mut updates: Vec<(Uuid, String, String)> = Vec::new();
+    for (orden_id, cuenta, envio) in pendientes.into_iter().take(80) {
+        let token = match tokens.get(&cuenta.id) {
+            Some(t) => t.clone(),
+            None => {
+                let t = crate::sync::access_token_valido(pool, client, &cuenta).await.ok();
+                tokens.insert(cuenta.id, t.clone());
+                t
+            }
+        };
+        let Some(token) = token else { continue };
+        if let Some(sh) = client.get_shipment(&token, envio).await {
+            let lt = sh.get("logistic_type").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let st = sh.get("status").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            if !lt.is_empty() {
+                updates.push((orden_id, lt, st));
             }
         }
-        if !updates.is_empty() {
-            db::run(&pool, move |conn| {
-                for (id, lt, st) in &updates {
-                    let _ = venta::set_envio_info(conn, *id, lt, st);
-                }
-                Ok::<(), ApiError>(())
-            })
-            .await?;
-        }
     }
+    if !updates.is_empty() {
+        db::run(pool, move |conn| {
+            for (id, lt, st) in &updates {
+                let _ = venta::set_envio_info(conn, *id, lt, st);
+            }
+            Ok::<(), ApiError>(())
+        })
+        .await?;
+    }
+    Ok(())
+}
 
-    let rows = db::run(&pool, move |conn| venta::envios(conn, vid, ini, fin)).await?;
+/// Lista las ventas con envío pendiente (sin FULL ni ya enviados) y su estado.
+pub async fn envios(user: AuthVendedor, q: web::Query<EnviosQuery>, pool: web::Data<DbPool>, client: web::Data<MlClient>, cfg: web::Data<Config>) -> ApiResult<HttpResponse> {
+    let vid = user.id;
+    let EnviosQuery { dia, incluir_enviados, cuenta } = q.into_inner();
+    let (ini, fin) = rango(dia.as_deref(), 15);
+    enriquecer(&pool, &client, &cfg, vid, ini, fin, cuenta).await?;
+    let solo_pendientes = incluir_enviados != Some(1);
+    let rows = db::run(&pool, move |conn| venta::envios(conn, vid, ini, fin, solo_pendientes, cuenta)).await?;
     Ok(HttpResponse::Ok().json(rows))
 }
 
@@ -205,9 +212,10 @@ pub async fn etiquetas(user: AuthVendedor, q: web::Query<DiaQuery>, pool: web::D
         return Err(ApiError::bad_request("Mercado Libre no está configurado."));
     }
     let vid = user.id;
-    let dia = q.into_inner().dia;
+    let DiaQuery { dia, cuenta } = q.into_inner();
     let (ini, fin) = rango(dia.as_deref(), 15);
-    let grupos = db::run(&pool, move |conn| venta::envios_por_cuenta(conn, vid, ini, fin)).await?;
+    enriquecer(&pool, &client, &cfg, vid, ini, fin, cuenta).await?;
+    let grupos = db::run(&pool, move |conn| venta::envios_por_cuenta(conn, vid, ini, fin, cuenta)).await?;
     if grupos.is_empty() {
         return Err(ApiError::bad_request("No hay ventas con envío imprimible en ese día."));
     }

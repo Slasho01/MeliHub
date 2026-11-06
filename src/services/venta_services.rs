@@ -273,7 +273,13 @@ pub fn ordenes_periodo(conn: &mut PgConnection, vendedor_id: Uuid, dias: i64) ->
 
 // ----------------------------- Envíos / etiquetas -----------------------------
 
-const ESTADOS_TERMINALES: [&str; 3] = ["delivered", "not_delivered", "cancelled"];
+// Estados en los que ya NO hay que imprimir etiqueta ni refrescar (ya se envió / cerró).
+const ESTADOS_TERMINALES: [&str; 4] = ["shipped", "delivered", "not_delivered", "cancelled"];
+
+/// ¿El envío sigue pendiente de despacho? (null = aún sin clasificar → sí).
+pub fn es_pendiente(estado: Option<&str>) -> bool {
+    !estado.map(|e| ESTADOS_TERMINALES.contains(&e)).unwrap_or(false)
+}
 
 #[derive(Serialize)]
 pub struct EnvioRow {
@@ -300,9 +306,9 @@ fn resumen_items(items: &Value) -> String {
         .unwrap_or_default()
 }
 
-/// Lista de envíos (sin FULL) con estado, para mostrar en el panel.
-pub fn envios(conn: &mut PgConnection, vendedor_id: Uuid, ini: NaiveDateTime, fin: NaiveDateTime) -> ApiResult<Vec<EnvioRow>> {
-    let rows: Vec<(OrdenMl, Option<String>)> = ordenes_ml::table
+/// Lista de envíos (sin FULL) con estado. `solo_pendientes` deja fuera los ya enviados/entregados.
+pub fn envios(conn: &mut PgConnection, vendedor_id: Uuid, ini: NaiveDateTime, fin: NaiveDateTime, solo_pendientes: bool, cuenta_id: Option<Uuid>) -> ApiResult<Vec<EnvioRow>> {
+    let mut q = ordenes_ml::table
         .inner_join(ml_cuentas::table)
         .filter(ml_cuentas::vendedor_id.eq(vendedor_id))
         .filter(ordenes_ml::envio_id.is_not_null())
@@ -310,26 +316,35 @@ pub fn envios(conn: &mut PgConnection, vendedor_id: Uuid, ini: NaiveDateTime, fi
         .filter(ordenes_ml::fecha.ge(ini))
         .filter(ordenes_ml::fecha.lt(fin))
         .filter(ordenes_ml::logistic_type.ne("fulfillment").or(ordenes_ml::logistic_type.is_null()))
+        .into_boxed();
+    if let Some(cid) = cuenta_id {
+        q = q.filter(ordenes_ml::ml_cuenta_id.eq(cid));
+    }
+    let rows: Vec<(OrdenMl, Option<String>)> = q
         .order(ordenes_ml::fecha.desc())
         .select((OrdenMl::as_select(), ml_cuentas::nickname.nullable()))
         .load(conn)?;
-    Ok(rows.into_iter().map(|(o, nick)| EnvioRow {
-        id: o.id,
-        ml_order_id: o.ml_order_id,
-        cuenta: nick.unwrap_or_else(|| "Cuenta".to_string()),
-        comprador: o.comprador,
-        fecha: o.fecha,
-        estado: o.estado,
-        envio_id: o.envio_id.unwrap_or(0),
-        productos: resumen_items(&o.items),
-        envio_estado: o.envio_estado,
-        logistic_type: o.logistic_type,
-    }).collect())
+    Ok(rows
+        .into_iter()
+        .filter(|(o, _)| !solo_pendientes || es_pendiente(o.envio_estado.as_deref()))
+        .map(|(o, nick)| EnvioRow {
+            id: o.id,
+            ml_order_id: o.ml_order_id,
+            cuenta: nick.unwrap_or_else(|| "Cuenta".to_string()),
+            comprador: o.comprador,
+            fecha: o.fecha,
+            estado: o.estado,
+            envio_id: o.envio_id.unwrap_or(0),
+            productos: resumen_items(&o.items),
+            envio_estado: o.envio_estado,
+            logistic_type: o.logistic_type,
+        })
+        .collect())
 }
 
 /// Agrupa por cuenta los envíos imprimibles del rango (para descargar etiquetas con cada token).
-pub fn envios_por_cuenta(conn: &mut PgConnection, vendedor_id: Uuid, ini: NaiveDateTime, fin: NaiveDateTime) -> ApiResult<Vec<(MlCuenta, Vec<i64>)>> {
-    let pairs: Vec<(MlCuenta, Option<i64>)> = ordenes_ml::table
+pub fn envios_por_cuenta(conn: &mut PgConnection, vendedor_id: Uuid, ini: NaiveDateTime, fin: NaiveDateTime, cuenta_id: Option<Uuid>) -> ApiResult<Vec<(MlCuenta, Vec<i64>)>> {
+    let mut q = ordenes_ml::table
         .inner_join(ml_cuentas::table)
         .filter(ml_cuentas::vendedor_id.eq(vendedor_id))
         .filter(ordenes_ml::envio_id.is_not_null())
@@ -337,12 +352,20 @@ pub fn envios_por_cuenta(conn: &mut PgConnection, vendedor_id: Uuid, ini: NaiveD
         .filter(ordenes_ml::fecha.ge(ini))
         .filter(ordenes_ml::fecha.lt(fin))
         .filter(ordenes_ml::logistic_type.ne("fulfillment").or(ordenes_ml::logistic_type.is_null()))
-        .select((MlCuenta::as_select(), ordenes_ml::envio_id))
+        .into_boxed();
+    if let Some(cid) = cuenta_id {
+        q = q.filter(ordenes_ml::ml_cuenta_id.eq(cid));
+    }
+    let pairs: Vec<(MlCuenta, Option<i64>, Option<String>)> = q
+        .select((MlCuenta::as_select(), ordenes_ml::envio_id, ordenes_ml::envio_estado))
         .load(conn)?;
     let mut map: std::collections::HashMap<Uuid, (MlCuenta, Vec<i64>)> = std::collections::HashMap::new();
-    for (cuenta, envio) in pairs {
+    for (cuenta, envio, est) in pairs {
+        // Solo etiquetas de envíos aún pendientes (no los ya enviados/entregados).
         if let Some(e) = envio {
-            map.entry(cuenta.id).or_insert_with(|| (cuenta.clone(), Vec::new())).1.push(e);
+            if es_pendiente(est.as_deref()) {
+                map.entry(cuenta.id).or_insert_with(|| (cuenta.clone(), Vec::new())).1.push(e);
+            }
         }
     }
     Ok(map.into_values().collect())
@@ -350,20 +373,27 @@ pub fn envios_por_cuenta(conn: &mut PgConnection, vendedor_id: Uuid, ini: NaiveD
 
 /// Órdenes del rango que necesitan consultar su envío a ML. `todos=false` solo las sin
 /// clasificar (logistic_type nulo); `todos=true` también las de estado no terminal (refresco).
-pub fn para_enriquecer(conn: &mut PgConnection, vendedor_id: Uuid, ini: NaiveDateTime, fin: NaiveDateTime, todos: bool) -> ApiResult<Vec<(Uuid, MlCuenta, i64)>> {
-    let rows: Vec<(Uuid, MlCuenta, Option<i64>, Option<String>, Option<String>)> = ordenes_ml::table
+pub fn para_enriquecer(conn: &mut PgConnection, vendedor_id: Uuid, ini: NaiveDateTime, fin: NaiveDateTime, cuenta_id: Option<Uuid>) -> ApiResult<Vec<(Uuid, MlCuenta, i64)>> {
+    let mut q = ordenes_ml::table
         .inner_join(ml_cuentas::table)
         .filter(ml_cuentas::vendedor_id.eq(vendedor_id))
         .filter(ordenes_ml::envio_id.is_not_null())
         .filter(ordenes_ml::estado.ne("cancelled"))
         .filter(ordenes_ml::fecha.ge(ini))
         .filter(ordenes_ml::fecha.lt(fin))
+        // No re-consultar las FULL ya clasificadas (solo clasifica las sin tipo).
+        .filter(ordenes_ml::logistic_type.ne("fulfillment").or(ordenes_ml::logistic_type.is_null()))
+        .into_boxed();
+    if let Some(cid) = cuenta_id {
+        q = q.filter(ordenes_ml::ml_cuenta_id.eq(cid));
+    }
+    let rows: Vec<(Uuid, MlCuenta, Option<i64>, Option<String>, Option<String>)> = q
         .select((ordenes_ml::id, MlCuenta::as_select(), ordenes_ml::envio_id, ordenes_ml::logistic_type, ordenes_ml::envio_estado))
         .load(conn)?;
     Ok(rows.into_iter().filter_map(|(id, cuenta, envio, lt, est)| {
         let envio = envio?;
-        let necesita = lt.is_none()
-            || (todos && !est.as_deref().map(|e| ESTADOS_TERMINALES.contains(&e)).unwrap_or(false));
+        // Clasificar (sin tipo logístico) o refrescar mientras siga pendiente.
+        let necesita = lt.is_none() || es_pendiente(est.as_deref());
         necesita.then_some((id, cuenta, envio))
     }).collect())
 }
