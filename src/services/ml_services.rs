@@ -70,10 +70,15 @@ pub fn upsert_cuenta(
         .map_err(ApiError::from)
 }
 
-pub fn listar_cuentas(conn: &mut PgConnection, vendedor_id: Uuid, es_admin: bool) -> ApiResult<Vec<MlCuenta>> {
-    let q = ml_cuentas::table.select(MlCuenta::as_select()).order(ml_cuentas::created_at.desc()).into_boxed();
-    let q = if es_admin { q } else { q.filter(ml_cuentas::vendedor_id.eq(vendedor_id)) };
-    Ok(q.load(conn)?)
+pub fn listar_cuentas(conn: &mut PgConnection, vendedor_id: Uuid, _es_admin: bool) -> ApiResult<Vec<MlCuenta>> {
+    // Siempre por vendedor: la pestaña "Cuentas" es personal. La vista global del
+    // súper-admin vive en el panel de Admin, no aquí (evita ver cuentas de otros).
+    ml_cuentas::table
+        .filter(ml_cuentas::vendedor_id.eq(vendedor_id))
+        .select(MlCuenta::as_select())
+        .order(ml_cuentas::created_at.desc())
+        .load(conn)
+        .map_err(ApiError::from)
 }
 
 /// Obtiene una cuenta verificando que pertenezca al vendedor (o admin).

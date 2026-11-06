@@ -110,7 +110,19 @@ pub fn permitir_cuenta_nueva(conn: &mut PgConnection, vendedor_id: Uuid, ml_user
         .count()
         .get_result(conn)?;
     if existe > 0 {
-        return Ok(()); // reconexión
+        return Ok(()); // reconexión de la misma cuenta por el mismo dueño
+    }
+    // Una cuenta de ML pertenece a UN solo usuario de MeliHub: si ya está en otro,
+    // hay que desconectarla allí primero (evita que aparezca en dos lados).
+    let en_otro: i64 = ml_cuentas::table
+        .filter(ml_cuentas::ml_user_id.eq(ml_user_id))
+        .filter(ml_cuentas::vendedor_id.ne(vendedor_id))
+        .count()
+        .get_result(conn)?;
+    if en_otro > 0 {
+        return Err(ApiError::conflict(
+            "Esta cuenta de Mercado Libre ya está conectada en otro usuario de MeliHub. Desconéctala allí antes de conectarla aquí.",
+        ));
     }
     let p = plan_de(conn, vendedor_id)?;
     let cuentas: i64 = ml_cuentas::table.filter(ml_cuentas::vendedor_id.eq(vendedor_id)).count().get_result(conn)?;
