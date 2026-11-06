@@ -95,12 +95,18 @@ pub struct DiaQuery {
     pub dia: Option<String>,
 }
 
-fn rango_dia(dia: Option<&str>) -> (chrono::NaiveDateTime, chrono::NaiveDateTime) {
-    let d = dia
-        .and_then(|s| chrono::NaiveDate::parse_from_str(s.trim(), "%Y-%m-%d").ok())
-        .unwrap_or_else(|| chrono::Utc::now().naive_utc().date());
-    let ini = d.and_hms_opt(0, 0, 0).unwrap();
-    (ini, ini + chrono::Duration::days(1))
+/// Rango de fechas: si `dia` es una fecha válida → ese día; si no → últimos `default_dias`.
+fn rango(dia: Option<&str>, default_dias: i64) -> (chrono::NaiveDateTime, chrono::NaiveDateTime) {
+    match dia.and_then(|s| chrono::NaiveDate::parse_from_str(s.trim(), "%Y-%m-%d").ok()) {
+        Some(d) => {
+            let ini = d.and_hms_opt(0, 0, 0).unwrap();
+            (ini, ini + chrono::Duration::days(1))
+        }
+        None => {
+            let ahora = chrono::Utc::now().naive_utc();
+            (ahora - chrono::Duration::days(default_dias), ahora + chrono::Duration::days(1))
+        }
+    }
 }
 
 fn slug_archivo(s: &str) -> String {
@@ -133,7 +139,7 @@ fn zip_pdfs(files: &[(String, Vec<u8>)]) -> ApiResult<Vec<u8>> {
 /// Lista las ventas con envío imprimible de un día (todas las cuentas).
 pub async fn envios(user: AuthVendedor, q: web::Query<DiaQuery>, pool: web::Data<DbPool>) -> ApiResult<HttpResponse> {
     let vid = user.id;
-    let (ini, fin) = rango_dia(q.into_inner().dia.as_deref());
+    let (ini, fin) = rango(q.into_inner().dia.as_deref(), 15);
     let rows = db::run(&pool, move |conn| venta::envios(conn, vid, ini, fin)).await?;
     Ok(HttpResponse::Ok().json(rows))
 }
@@ -157,7 +163,7 @@ pub async fn etiquetas(user: AuthVendedor, q: web::Query<DiaQuery>, pool: web::D
     }
     let vid = user.id;
     let dia = q.into_inner().dia;
-    let (ini, fin) = rango_dia(dia.as_deref());
+    let (ini, fin) = rango(dia.as_deref(), 15);
     let grupos = db::run(&pool, move |conn| venta::envios_por_cuenta(conn, vid, ini, fin)).await?;
     if grupos.is_empty() {
         return Err(ApiError::bad_request("No hay ventas con envío imprimible en ese día."));
@@ -178,7 +184,7 @@ pub async fn etiquetas(user: AuthVendedor, q: web::Query<DiaQuery>, pool: web::D
     if pdfs.is_empty() {
         return Err(ApiError::bad_request("No se pudo generar ninguna etiqueta (¿envíos FULL, o falta el permiso de envíos en tu app de ML?)."));
     }
-    let fecha = dia.unwrap_or_else(|| chrono::Utc::now().naive_utc().date().to_string());
+    let fecha = dia.unwrap_or_else(|| "recientes".to_string());
     if pdfs.len() == 1 {
         let (_, pdf) = pdfs.into_iter().next().unwrap();
         return Ok(pdf_resp(&format!("etiquetas-{fecha}.pdf"), pdf));
