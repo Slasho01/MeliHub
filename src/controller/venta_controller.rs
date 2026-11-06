@@ -140,7 +140,7 @@ fn zip_pdfs(files: &[(String, Vec<u8>)]) -> ApiResult<Vec<u8>> {
 #[derive(Deserialize)]
 pub struct EnviosQuery {
     pub dia: Option<String>,
-    pub incluir_enviados: Option<u8>,
+    pub incluir_entregados: Option<u8>,
     pub cuenta: Option<Uuid>,
 }
 
@@ -187,11 +187,11 @@ async fn enriquecer(pool: &web::Data<DbPool>, client: &web::Data<MlClient>, cfg:
 /// Lista las ventas con envío pendiente (sin FULL ni ya enviados) y su estado.
 pub async fn envios(user: AuthVendedor, q: web::Query<EnviosQuery>, pool: web::Data<DbPool>, client: web::Data<MlClient>, cfg: web::Data<Config>) -> ApiResult<HttpResponse> {
     let vid = user.id;
-    let EnviosQuery { dia, incluir_enviados, cuenta } = q.into_inner();
+    let EnviosQuery { dia, incluir_entregados, cuenta } = q.into_inner();
     let (ini, fin) = rango(dia.as_deref(), 15);
     enriquecer(&pool, &client, &cfg, vid, ini, fin, cuenta).await?;
-    let solo_pendientes = incluir_enviados != Some(1);
-    let rows = db::run(&pool, move |conn| venta::envios(conn, vid, ini, fin, solo_pendientes, cuenta)).await?;
+    let incluir_cerrados = incluir_entregados == Some(1);
+    let rows = db::run(&pool, move |conn| venta::envios(conn, vid, ini, fin, incluir_cerrados, cuenta)).await?;
     Ok(HttpResponse::Ok().json(rows))
 }
 

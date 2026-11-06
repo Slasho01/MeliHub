@@ -1,33 +1,21 @@
 import { useEffect, useState } from 'react'
 import { get, descargarArchivo } from '../api'
 
-const ESTADO = {
-  pending: ['Preparando', 'tag'],
-  handling: ['Preparando', 'tag'],
-  shipped: ['Enviado', 'tag'],
-  delivered: ['Entregado', 'tag-ok'],
-  not_delivered: ['No entregado', 'tag'],
-  cancelled: ['Cancelado', 'tag'],
-}
-// Substatus de ready_to_ship donde el envío sigue con el vendedor (hay que imprimir/entregar).
-const SUB_PENDIENTE = ['ready_to_print', 'printed', 'in_packing_list', 'invoice_pending', 'picking_up', 'ready_to_dropoff']
+const TERMINAL = { shipped: ['Enviado', 'tag'], delivered: ['Entregado', 'tag-ok'], not_delivered: ['No entregado', 'tag'], cancelled: ['Cancelado', 'tag'] }
+// Substatus que indican que ya salió / va en camino (se ocultan de pendientes).
+const EN_CAMINO = ['in_hub', 'at_the_place', 'in_route', 'out_for_delivery', 'picked_up', 'in_transit', 'arrived', 'dropped_off', 'returning_to_sender', 'receiver_absent', 'waiting_for_withdrawal', 'delivered', 'shipped']
 
 const pendiente = (estado, sub) => {
-  if (!estado) return true
-  if (estado === 'pending' || estado === 'handling') return true
-  if (estado === 'ready_to_ship') return sub ? SUB_PENDIENTE.includes(sub) : true
-  return false
+  if (TERMINAL[estado]) return false
+  return !EN_CAMINO.includes(sub)
 }
 const estadoBadge = (estado, sub) => {
   let t, c
-  if (estado === 'ready_to_ship') {
-    if (sub === 'ready_to_print') [t, c] = ['Por imprimir', 'tag-ok']
-    else if (sub === 'printed') [t, c] = ['Impreso, por entregar', 'tag-ok']
-    else if (!sub || SUB_PENDIENTE.includes(sub)) [t, c] = ['Listo para enviar', 'tag-ok']
-    else [t, c] = ['En camino', 'tag']
-  } else {
-    [t, c] = ESTADO[estado] || [estado || '—', 'tag']
-  }
+  if (TERMINAL[estado]) [t, c] = TERMINAL[estado]
+  else if (EN_CAMINO.includes(sub)) [t, c] = ['En camino', 'tag']
+  else if (sub === 'ready_to_print') [t, c] = ['Por imprimir', 'tag-ok']
+  else if (sub === 'printed') [t, c] = ['Impreso, por entregar', 'tag-ok']
+  else [t, c] = ['Listo para enviar', 'tag-ok']
   return <span className={`tag ${c}`}>{t}</span>
 }
 
@@ -48,7 +36,7 @@ export default function Envios() {
     const p = new URLSearchParams()
     if (dia) p.set('dia', dia)
     if (cuenta) p.set('cuenta', cuenta)
-    if (incluir) p.set('incluir_enviados', '1')
+    if (incluir) p.set('incluir_entregados', '1')
     const qs = p.toString()
     return get(`/ventas/envios${qs ? `?${qs}` : ''}`).then(setRows).catch((e) => setError(e.message))
   }
@@ -95,12 +83,12 @@ export default function Envios() {
       {msg && <div className="alert alert-ok">{msg}</div>}
       <div className="row between sm muted" style={{ marginTop: -4, flexWrap: 'wrap', gap: 8 }}>
         <span>{dia ? `Mostrando el ${dia}.` : 'Mostrando los últimos 15 días.'} Las ventas FULL no aparecen (las despacha Mercado Libre).</span>
-        <label className="row" style={{ gap: 6 }}><input type="checkbox" checked={incluir} onChange={(e) => setIncluir(e.target.checked)} /> Ver también los ya enviados</label>
+        <label className="row" style={{ gap: 6 }}><input type="checkbox" checked={incluir} onChange={(e) => setIncluir(e.target.checked)} /> Ver también los entregados</label>
       </div>
 
       <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
         {!rows ? <div className="empty">Cargando…</div> : rows.length === 0 ? (
-          <div className="empty">No hay envíos pendientes.<br /><span className="sm">Si acabas de vender, ve a <b>Ventas → Sincronizar ventas</b>. O activa «ver también los ya enviados».</span></div>
+          <div className="empty">No hay envíos activos.<br /><span className="sm">Si acabas de vender, ve a <b>Ventas → Sincronizar ventas</b>. O activa «ver también los entregados».</span></div>
         ) : (
           <table style={{ minWidth: 760 }}>
             <thead><tr><th>Hora</th><th>Cuenta</th><th>Comprador</th><th>Productos</th><th>Estado</th><th></th></tr></thead>

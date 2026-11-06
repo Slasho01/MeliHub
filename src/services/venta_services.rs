@@ -273,18 +273,27 @@ pub fn ordenes_periodo(conn: &mut PgConnection, vendedor_id: Uuid, dias: i64) ->
 
 // ----------------------------- Envíos / etiquetas -----------------------------
 
-// Substatus de `ready_to_ship` donde el envío sigue en manos del vendedor (hay que imprimir/entregar).
-const SUBSTATUS_PENDIENTE: [&str; 6] = ["ready_to_print", "printed", "in_packing_list", "invoice_pending", "picking_up", "ready_to_dropoff"];
+// Substatus que indican que el envío YA salió / está en camino (aunque ML mantenga
+// status=ready_to_ship). Lista NEGRA: todo lo demás se considera pendiente (más seguro
+// que una lista blanca, que escondía pendientes con substatus no previstos).
+const SUBSTATUS_EN_CAMINO: &[&str] = &[
+    "in_hub", "at_the_place", "in_route", "out_for_delivery", "picked_up", "in_transit",
+    "arrived", "dropped_off", "returning_to_sender", "receiver_absent", "waiting_for_withdrawal",
+    "delivered", "shipped",
+];
 
-/// ¿El envío sigue pendiente de despacho? Usa status + substatus porque ML mantiene
-/// `ready_to_ship` aunque el paquete ya esté en camino (substatus `in_hub`, etc.).
+/// ¿El envío sigue pendiente de despacho (hay que imprimir/entregar)? Oculta los ya
+/// enviados/entregados y los `ready_to_ship` cuyo substatus ya indica "en camino".
 pub fn es_pendiente(estado: Option<&str>, substatus: Option<&str>) -> bool {
     match estado {
-        None => true, // aún sin clasificar → mostrar
-        Some("pending") | Some("handling") => true,
-        Some("ready_to_ship") => substatus.map(|s| SUBSTATUS_PENDIENTE.contains(&s)).unwrap_or(true),
-        _ => false, // shipped / delivered / not_delivered / cancelled / en camino…
+        Some("shipped") | Some("delivered") | Some("not_delivered") | Some("cancelled") => false,
+        _ => !substatus.map(|s| SUBSTATUS_EN_CAMINO.contains(&s)).unwrap_or(false),
     }
+}
+
+/// ¿El envío ya está cerrado (entregado/cancelado)? Se ocultan de la lista por defecto.
+pub fn es_cerrado(estado: Option<&str>) -> bool {
+    matches!(estado, Some("delivered") | Some("not_delivered") | Some("cancelled"))
 }
 
 #[derive(Serialize)]
@@ -314,7 +323,7 @@ fn resumen_items(items: &Value) -> String {
 }
 
 /// Lista de envíos (sin FULL) con estado. `solo_pendientes` deja fuera los ya enviados/entregados.
-pub fn envios(conn: &mut PgConnection, vendedor_id: Uuid, ini: NaiveDateTime, fin: NaiveDateTime, solo_pendientes: bool, cuenta_id: Option<Uuid>) -> ApiResult<Vec<EnvioRow>> {
+pub fn envios(conn: &mut PgConnection, vendedor_id: Uuid, ini: NaiveDateTime, fin: NaiveDateTime, incluir_cerrados: bool, cuenta_id: Option<Uuid>) -> ApiResult<Vec<EnvioRow>> {
     let mut q = ordenes_ml::table
         .inner_join(ml_cuentas::table)
         .filter(ml_cuentas::vendedor_id.eq(vendedor_id))
@@ -333,7 +342,7 @@ pub fn envios(conn: &mut PgConnection, vendedor_id: Uuid, ini: NaiveDateTime, fi
         .load(conn)?;
     Ok(rows
         .into_iter()
-        .filter(|(o, _)| !solo_pendientes || es_pendiente(o.envio_estado.as_deref(), o.envio_substatus.as_deref()))
+        .filter(|(o, _)| incluir_cerrados || !es_cerrado(o.envio_estado.as_deref()))
         .map(|(o, nick)| EnvioRow {
             id: o.id,
             ml_order_id: o.ml_order_id,
