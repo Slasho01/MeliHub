@@ -43,19 +43,20 @@ export default function ApiKeys() {
         </div>
       )}
       <div className="card">
-        <form className="row" style={{ gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }} onSubmit={crear}>
-          <div style={{ flex: '2 1 180px' }}><label>Nombre</label><input className="input" placeholder="Mi tienda" value={nueva.nombre} onChange={(e) => setNueva({ ...nueva, nombre: e.target.value })} required /></div>
-          <div style={{ flex: '1 1 180px' }}><label>Canal / plataforma</label>
-            <input className="input" placeholder="Mi tienda, WordPress…" value={nueva.canal} onChange={(e) => setNueva({ ...nueva, canal: e.target.value })} />
-            <span className="sm muted">Nombre de tu plataforma. Sirve tu precio de venta.</span>
+        <form className="stack" onSubmit={crear}>
+          <div className="row" style={{ gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <div style={{ flex: '2 1 180px' }}><label>Nombre</label><input className="input" placeholder="Mi tienda" value={nueva.nombre} onChange={(e) => setNueva({ ...nueva, nombre: e.target.value })} required /></div>
+            <div style={{ flex: '1 1 180px' }}><label>Canal / plataforma</label>
+              <input className="input" placeholder="Mi tienda, WordPress…" value={nueva.canal} onChange={(e) => setNueva({ ...nueva, canal: e.target.value })} /></div>
+            <div style={{ flex: '1 1 170px' }}><label>Cuenta (opcional)</label>
+              <select className="input" value={nueva.ml_cuenta_id} onChange={(e) => setNueva({ ...nueva, ml_cuenta_id: e.target.value })}>
+                <option value="">Todas mis cuentas</option>
+                {cuentas.map((c) => <option key={c.id} value={c.id}>{c.nickname || `Usuario ${c.ml_user_id}`}</option>)}
+              </select>
+            </div>
+            <button className="btn btn-accent">Crear API key</button>
           </div>
-          <div style={{ flex: '1 1 170px' }}><label>Cuenta (opcional)</label>
-            <select className="input" value={nueva.ml_cuenta_id} onChange={(e) => setNueva({ ...nueva, ml_cuenta_id: e.target.value })}>
-              <option value="">Todas mis cuentas</option>
-              {cuentas.map((c) => <option key={c.id} value={c.id}>{c.nickname || `Usuario ${c.ml_user_id}`}</option>)}
-            </select>
-          </div>
-          <button className="btn btn-accent">Crear API key</button>
+          <span className="sm muted">El <b>canal</b> es el nombre de tu plataforma (ej. tu tienda, WordPress). Sirve tu precio de venta.</span>
         </form>
       </div>
       <div className="card" style={{ padding: 0 }}>
