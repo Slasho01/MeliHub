@@ -35,7 +35,11 @@ export default function Suscripcion() {
 
   return (
     <div className="stack" style={{ maxWidth: 520 }}>
-      <div><h1>Suscripción</h1><p className="muted sm" style={{ margin: 0 }}>Estado de tu plan de pago.</p></div>
+      <div className="row between" style={{ alignItems: 'flex-start' }}>
+        <div><h1>Suscripción</h1><p className="muted sm" style={{ margin: 0 }}>Estado de tu plan de pago.</p></div>
+        <button className="btn btn-sm" disabled={busy} onClick={cargar}>Actualizar estado</button>
+      </div>
+      <p className="muted sm" style={{ marginTop: -6 }}>Si acabas de pagar y aún aparece pendiente, pulsa «Actualizar estado».</p>
       {error && <div className="alert alert-bad">{error}</div>}
       {msg && <div className="alert alert-ok">{msg}</div>}
 

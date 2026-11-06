@@ -62,7 +62,7 @@ pub async fn suscribir(
 
     let vid = user.id;
     let email = db::run(&pool, move |conn| subs::email_de(conn, vid)).await?;
-    let back = format!("{}/plan", cfg.app_url);
+    let back = format!("{}/suscripcion", cfg.app_url);
     let notif = format!("{}/api/suscripcion/webhook", cfg.app_url);
     let ext = format!("{}:{}:{}", vid, plan.id, ciclo);
     let reason = format!("MeliHub - Plan {} ({})", plan.nombre, ciclo);
@@ -78,9 +78,25 @@ pub async fn suscribir(
 }
 
 /// Estado de la suscripción del vendedor.
-pub async fn estado(user: AuthVendedor, pool: web::Data<DbPool>) -> ApiResult<HttpResponse> {
+pub async fn estado(user: AuthVendedor, pool: web::Data<DbPool>, mp: web::Data<MercadoPago>) -> ApiResult<HttpResponse> {
     let vid = user.id;
-    let sub = db::run(&pool, move |conn| subs::actual(conn, vid)).await?;
+    let mut sub = db::run(&pool, move |conn| subs::actual(conn, vid)).await?;
+    // Autocuración: si hay una suscripción no finalizada con preapproval, consulta
+    // el estado real en Mercado Pago y aplícalo (por si el webhook no llegó/tardó).
+    if let Some(s) = &sub {
+        let pendiente = s.estado == "pending" || s.estado == "paused";
+        if pendiente && mp.configurado() {
+            if let Some(pid) = s.preapproval_id.clone() {
+                if let Ok(pre) = mp.get_preapproval(&pid).await {
+                    if let Some(estado_mp) = pre.status {
+                        let (pid2, est2) = (pid.clone(), estado_mp.clone());
+                        let _ = db::run(&pool, move |conn| subs::aplicar_estado(conn, &pid2, &est2)).await;
+                        sub = db::run(&pool, move |conn| subs::actual(conn, vid)).await?;
+                    }
+                }
+            }
+        }
+    }
     Ok(HttpResponse::Ok().json(json!({ "suscripcion": sub })))
 }
 
@@ -121,11 +137,15 @@ pub async fn webhook(
         .cloned()
         .or_else(|| body_json.pointer("/data/id").and_then(|v| v.as_str()).map(String::from));
 
+    log::info!("[MP webhook] topic={topic:?} id={id:?} query={q:?}");
     if let Some(id) = id {
         // Solo nos interesan las suscripciones (preapproval).
         if topic.is_empty() || topic.contains("preapproval") || topic.contains("subscription") {
-            if let Ok(pre) = mp.get_preapproval(&id).await {
+            match mp.get_preapproval(&id).await {
+                Err(e) => log::warn!("[MP webhook] no se pudo leer preapproval {id}: {e}"),
+                Ok(pre) => {
                 let estado = pre.status.unwrap_or_default();
+                log::info!("[MP webhook] preapproval {id} estado={estado}");
                 let (id_c, estado_c) = (id.clone(), estado.clone());
                 let _ = db::run(&pool, move |conn| subs::aplicar_estado(conn, &id_c, &estado_c)).await;
                 // Correo de confirmación al activarse la suscripción.
@@ -138,6 +158,7 @@ pub async fn webhook(
                         );
                         let _ = mailer.enviar(&email, "Suscripción activada · MeliHub", &html).await;
                     }
+                }
                 }
             }
         }
