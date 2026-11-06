@@ -1,18 +1,38 @@
 import { useEffect, useState } from 'react'
 import { get, descargarArchivo } from '../api'
 
+const ESTADO = {
+  ready_to_ship: ['Listo para enviar', 'tag-ok'],
+  pending: ['Preparando', 'tag'],
+  handling: ['Preparando', 'tag'],
+  shipped: ['Enviado', 'tag'],
+  delivered: ['Entregado', 'tag-ok'],
+  not_delivered: ['No entregado', 'tag'],
+  cancelled: ['Cancelado', 'tag'],
+}
+const estadoBadge = (s) => {
+  const [t, c] = ESTADO[s] || [s || '—', 'tag']
+  return <span className={`tag ${c}`}>{t}</span>
+}
+
 export default function Envios() {
   const [dia, setDia] = useState('') // vacío = últimos 15 días
   const [rows, setRows] = useState(null)
   const [error, setError] = useState(null)
   const [msg, setMsg] = useState(null)
   const [busy, setBusy] = useState(false)
+  const [refrescando, setRefrescando] = useState(false)
 
-  const cargar = () => {
+  const cargar = (refresh) => {
     setRows(null); setError(null)
-    get(`/ventas/envios${dia ? `?dia=${dia}` : ''}`).then(setRows).catch((e) => setError(e.message))
+    const params = new URLSearchParams()
+    if (dia) params.set('dia', dia)
+    if (refresh) params.set('refresh', '1')
+    const qs = params.toString()
+    return get(`/ventas/envios${qs ? `?${qs}` : ''}`).then(setRows).catch((e) => setError(e.message))
   }
-  useEffect(cargar, [dia]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { cargar() }, [dia]) // eslint-disable-line react-hooks/exhaustive-deps
+  const actualizarEstados = async () => { setRefrescando(true); await cargar(1); setRefrescando(false) }
 
   const qs = dia ? `?dia=${dia}` : ''
   const descargarDia = async () => {
@@ -34,6 +54,7 @@ export default function Envios() {
         <div className="row" style={{ gap: 8 }}>
           <input className="input" type="date" value={dia} onChange={(e) => setDia(e.target.value)} title="Filtra por día (vacío = últimos 15 días)" />
           {dia && <button className="btn btn-sm" onClick={() => setDia('')}>Ver recientes</button>}
+          <button className="btn btn-sm" disabled={refrescando} onClick={actualizarEstados} title="Consulta a Mercado Libre el estado actual de los envíos">{refrescando ? 'Actualizando…' : '↻ Estados'}</button>
           <button className="btn btn-accent" disabled={busy || !rows?.length} onClick={descargarDia}>
             {busy ? 'Preparando…' : '⬇ Descargar etiquetas'}
           </button>
@@ -57,7 +78,7 @@ export default function Envios() {
                   <td><b>{o.cuenta}</b></td>
                   <td className="muted sm">{o.comprador || '—'}</td>
                   <td className="sm" style={{ maxWidth: 320 }}>{o.productos}</td>
-                  <td><span className="badge">{o.estado}</span></td>
+                  <td>{estadoBadge(o.envio_estado)}</td>
                   <td style={{ textAlign: 'right' }}><button className="btn btn-sm" onClick={() => descargarUna(o)}>Etiqueta</button></td>
                 </tr>
               ))}

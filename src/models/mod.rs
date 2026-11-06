@@ -248,6 +248,8 @@ pub struct OrdenMl {
     pub datos: serde_json::Value,
     pub created_at: NaiveDateTime,
     pub envio_id: Option<i64>,
+    pub logistic_type: Option<String>,
+    pub envio_estado: Option<String>,
 }
 
 #[derive(Insertable, AsChangeset, Debug)]

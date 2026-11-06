@@ -237,6 +237,11 @@ impl MlClient {
         .await
     }
 
+    /// Detalle de un envío: `logistic_type` (fulfillment/self_service/…) y `status`.
+    pub async fn get_shipment(&self, access_token: &str, shipment_id: i64) -> Option<serde_json::Value> {
+        self.get(access_token, &format!("/shipments/{shipment_id}")).await.ok()
+    }
+
     /// Descarga en PDF las etiquetas de uno o varios envíos (Mercado Envíos Flex/Colecta).
     /// Falla si algún envío no tiene etiqueta imprimible (p. ej. FULL).
     pub async fn shipment_labels(&self, access_token: &str, shipment_ids: &[i64]) -> ApiResult<Vec<u8>> {

@@ -146,6 +146,10 @@ diesel::table! {
         datos -> Jsonb,
         created_at -> Timestamp,
         envio_id -> Nullable<Int8>,
+        #[max_length = 30]
+        logistic_type -> Nullable<Varchar>,
+        #[max_length = 30]
+        envio_estado -> Nullable<Varchar>,
     }
 }
 

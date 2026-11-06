@@ -136,10 +136,53 @@ fn zip_pdfs(files: &[(String, Vec<u8>)]) -> ApiResult<Vec<u8>> {
     Ok(cursor.into_inner())
 }
 
-/// Lista las ventas con envío imprimible de un día (todas las cuentas).
-pub async fn envios(user: AuthVendedor, q: web::Query<DiaQuery>, pool: web::Data<DbPool>) -> ApiResult<HttpResponse> {
+#[derive(Deserialize)]
+pub struct EnviosQuery {
+    pub dia: Option<String>,
+    pub refresh: Option<u8>,
+}
+
+/// Lista las ventas con envío imprimible (sin FULL) con su estado. Consulta a ML el
+/// tipo logístico y estado de los envíos que lo necesiten (clasifica FULL y refresca).
+pub async fn envios(user: AuthVendedor, q: web::Query<EnviosQuery>, pool: web::Data<DbPool>, client: web::Data<MlClient>, cfg: web::Data<Config>) -> ApiResult<HttpResponse> {
     let vid = user.id;
-    let (ini, fin) = rango(q.into_inner().dia.as_deref(), 15);
+    let EnviosQuery { dia, refresh } = q.into_inner();
+    let (ini, fin) = rango(dia.as_deref(), 15);
+
+    if cfg.ml.configurado() {
+        let todos = refresh == Some(1);
+        let pendientes = db::run(&pool, move |conn| venta::para_enriquecer(conn, vid, ini, fin, todos)).await?;
+        let mut tokens: std::collections::HashMap<Uuid, Option<String>> = std::collections::HashMap::new();
+        let mut updates: Vec<(Uuid, String, String)> = Vec::new();
+        for (orden_id, cuenta, envio) in pendientes.into_iter().take(80) {
+            let token = match tokens.get(&cuenta.id) {
+                Some(t) => t.clone(),
+                None => {
+                    let t = crate::sync::access_token_valido(&pool, &client, &cuenta).await.ok();
+                    tokens.insert(cuenta.id, t.clone());
+                    t
+                }
+            };
+            let Some(token) = token else { continue };
+            if let Some(sh) = client.get_shipment(&token, envio).await {
+                let lt = sh.get("logistic_type").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let st = sh.get("status").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                if !lt.is_empty() {
+                    updates.push((orden_id, lt, st));
+                }
+            }
+        }
+        if !updates.is_empty() {
+            db::run(&pool, move |conn| {
+                for (id, lt, st) in &updates {
+                    let _ = venta::set_envio_info(conn, *id, lt, st);
+                }
+                Ok::<(), ApiError>(())
+            })
+            .await?;
+        }
+    }
+
     let rows = db::run(&pool, move |conn| venta::envios(conn, vid, ini, fin)).await?;
     Ok(HttpResponse::Ok().json(rows))
 }
