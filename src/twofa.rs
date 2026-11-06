@@ -21,6 +21,13 @@ pub fn url(secret_b32: &str, cuenta: &str) -> ApiResult<String> {
     Ok(totp_de(secret_b32, cuenta)?.get_url())
 }
 
+/// QR en PNG base64 (para mostrar como <img src="data:image/png;base64,...">).
+pub fn qr(secret_b32: &str, cuenta: &str) -> ApiResult<String> {
+    totp_de(secret_b32, cuenta)?
+        .get_qr_base64()
+        .map_err(|e| ApiError::internal(format!("No se pudo generar el QR: {e}")))
+}
+
 /// Verifica un código de 6 dígitos contra el secreto.
 pub fn verificar(secret_b32: &str, codigo: &str) -> bool {
     match totp_de(secret_b32, "user") {

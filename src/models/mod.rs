@@ -77,6 +77,9 @@ pub struct Miembro {
     pub invite_expira: Option<NaiveDateTime>,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
+    #[serde(skip_serializing)]
+    pub twofa_secret: Option<String>,
+    pub twofa_enabled: bool,
 }
 
 #[derive(Insertable)]

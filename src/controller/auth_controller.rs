@@ -1,7 +1,7 @@
 use crate::auth::{crear_reset_token, crear_token, verificar_reset_token, AuthVendedor};
 use crate::config::Config;
 use crate::db::{self, DbPool};
-use crate::errors::{ApiError, ApiResult};
+use crate::errors::ApiResult;
 use crate::mailer::Mailer;
 use crate::services::auth_services::{self as svc, LoginRequest, PasswordUpdate, PerfilUpdate, RegistroRequest};
 use actix_web::{web, HttpResponse};
@@ -120,33 +120,24 @@ pub struct CodigoBody {
     pub codigo: String,
 }
 
-/// Genera el secreto 2FA (aún sin activar) y devuelve el QR/secreto para configurar.
+/// Genera el secreto 2FA (aún sin activar) y devuelve QR + secreto para configurar.
 pub async fn twofa_setup(user: AuthVendedor, pool: web::Data<DbPool>) -> ApiResult<HttpResponse> {
-    if user.es_miembro() {
-        return Err(ApiError::forbidden("El 2FA pertenece a la cuenta dueño"));
-    }
-    let vid = user.id;
-    let (secret, url) = db::run(&pool, move |conn| svc::twofa_setup(conn, vid)).await?;
-    Ok(HttpResponse::Ok().json(json!({ "secret": secret, "url": url })))
+    let (es_m, actor) = (user.es_miembro(), user.actor_id);
+    let (secret, url, qr) = db::run(&pool, move |conn| svc::twofa_setup(conn, es_m, actor)).await?;
+    Ok(HttpResponse::Ok().json(json!({ "secret": secret, "url": url, "qr": qr })))
 }
 
 /// Activa el 2FA tras verificar un código.
 pub async fn twofa_enable(user: AuthVendedor, body: web::Json<CodigoBody>, pool: web::Data<DbPool>) -> ApiResult<HttpResponse> {
-    if user.es_miembro() {
-        return Err(ApiError::forbidden("El 2FA pertenece a la cuenta dueño"));
-    }
-    let (vid, codigo) = (user.id, body.into_inner().codigo);
-    db::run(&pool, move |conn| svc::twofa_enable(conn, vid, &codigo)).await?;
+    let (es_m, actor, codigo) = (user.es_miembro(), user.actor_id, body.into_inner().codigo);
+    db::run(&pool, move |conn| svc::twofa_enable(conn, es_m, actor, &codigo)).await?;
     Ok(HttpResponse::Ok().json(json!({ "ok": true })))
 }
 
 /// Desactiva el 2FA.
 pub async fn twofa_disable(user: AuthVendedor, body: web::Json<CodigoBody>, pool: web::Data<DbPool>) -> ApiResult<HttpResponse> {
-    if user.es_miembro() {
-        return Err(ApiError::forbidden("El 2FA pertenece a la cuenta dueño"));
-    }
-    let (vid, codigo) = (user.id, body.into_inner().codigo);
-    db::run(&pool, move |conn| svc::twofa_disable(conn, vid, &codigo)).await?;
+    let (es_m, actor, codigo) = (user.es_miembro(), user.actor_id, body.into_inner().codigo);
+    db::run(&pool, move |conn| svc::twofa_disable(conn, es_m, actor, &codigo)).await?;
     Ok(HttpResponse::Ok().json(json!({ "ok": true })))
 }
 

@@ -101,6 +101,8 @@ pub async fn desconectar(
     user.exigir_owner()?;
     let (cid, vid, admin) = (path.into_inner(), user.id, user.es_admin());
     db::run(&pool, move |conn| svc::desconectar(conn, cid, vid, admin)).await?;
+    let actor = user.actor_id;
+    let _ = db::run(&pool, move |conn| crate::services::auditoria_services::log(conn, vid, actor, "ml_desconectar".into(), cid.to_string())).await;
     Ok(HttpResponse::NoContent().finish())
 }
 

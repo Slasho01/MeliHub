@@ -70,37 +70,37 @@ export default function Perfil() {
         <div><button className="btn btn-accent" onClick={cambiarPwd}>Cambiar contraseña</button></div>
       </div>
 
-      {!v.es_miembro && (
-        <div className="card stack">
-          <div className="row between" style={{ alignItems: 'center' }}>
-            <b>Verificación en dos pasos (2FA)</b>
-            {v.twofa_enabled ? <span className="tag tag-ok">activado</span> : <span className="tag">desactivado</span>}
-          </div>
-          {v.twofa_enabled ? (
-            <>
-              <p className="muted sm" style={{ margin: 0 }}>Al iniciar sesión te pediremos un código de tu app de autenticación.</p>
-              <div><button className="btn btn-danger btn-sm" onClick={tfDisable}>Desactivar 2FA</button></div>
-            </>
-          ) : tf ? (
-            <>
-              <p className="muted sm" style={{ margin: 0 }}>1) Agrega esta clave en Google Authenticator / Authy (o usa el enlace):</p>
-              <code style={{ background: 'var(--bg)', padding: '8px 10px', borderRadius: 8, wordBreak: 'break-all' }}>{tf.secret}</code>
-              <a className="link-btn sm" href={tf.url}>Abrir en la app de autenticación</a>
-              <label className="stack" style={{ gap: 2 }}><span className="sm muted">2) Ingresa el código de 6 dígitos</span>
-                <input className="input" inputMode="numeric" value={tfCode} onChange={(e) => setTfCode(e.target.value)} placeholder="000000" /></label>
-              <div className="row" style={{ gap: 8 }}>
-                <button className="btn btn-accent btn-sm" onClick={tfEnable}>Activar</button>
-                <button className="btn btn-sm" onClick={() => { setTf(null); setTfCode('') }}>Cancelar</button>
-              </div>
-            </>
-          ) : (
-            <>
-              <p className="muted sm" style={{ margin: 0 }}>Agrega una capa extra de seguridad con una app de autenticación.</p>
-              <div><button className="btn btn-accent btn-sm" onClick={tfSetup}>Activar 2FA</button></div>
-            </>
-          )}
+      <div className="card stack">
+        <div className="row between" style={{ alignItems: 'center' }}>
+          <b>Verificación en dos pasos (2FA)</b>
+          {v.twofa_enabled ? <span className="tag tag-ok">activado</span> : <span className="tag">desactivado</span>}
         </div>
-      )}
+        {v.twofa_enabled ? (
+          <>
+            <p className="muted sm" style={{ margin: 0 }}>Al iniciar sesión te pediremos un código de tu app de autenticación.</p>
+            <div><button className="btn btn-danger btn-sm" onClick={tfDisable}>Desactivar 2FA</button></div>
+          </>
+        ) : tf ? (
+          <>
+            <p className="muted sm" style={{ margin: 0 }}>1) Escanea el QR con Google Authenticator / Authy:</p>
+            {tf.qr && <img src={`data:image/png;base64,${tf.qr}`} alt="Código QR 2FA" width="180" height="180" style={{ borderRadius: 8, background: '#fff', padding: 6 }} />}
+            <details><summary className="sm muted" style={{ cursor: 'pointer' }}>¿No puedes escanear? Usa la clave manual</summary>
+              <code style={{ display: 'block', background: 'var(--bg)', padding: '8px 10px', borderRadius: 8, wordBreak: 'break-all', marginTop: 6 }}>{tf.secret}</code>
+            </details>
+            <label className="stack" style={{ gap: 2 }}><span className="sm muted">2) Ingresa el código de 6 dígitos</span>
+              <input className="input" inputMode="numeric" value={tfCode} onChange={(e) => setTfCode(e.target.value)} placeholder="000000" /></label>
+            <div className="row" style={{ gap: 8 }}>
+              <button className="btn btn-accent btn-sm" onClick={tfEnable}>Activar</button>
+              <button className="btn btn-sm" onClick={() => { setTf(null); setTfCode('') }}>Cancelar</button>
+            </div>
+          </>
+        ) : (
+          <>
+            <p className="muted sm" style={{ margin: 0 }}>Agrega una capa extra de seguridad con una app de autenticación.</p>
+            <div><button className="btn btn-accent btn-sm" onClick={tfSetup}>Activar 2FA</button></div>
+          </>
+        )}
+      </div>
     </div>
   )
 }

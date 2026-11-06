@@ -159,5 +159,7 @@ pub async fn set_config(
     let vid = user.id;
     let b = body.into_inner();
     let c = db::run(&pool, move |conn| inv::set_config(conn, vid, b)).await?;
+    let actor = user.actor_id;
+    let _ = db::run(&pool, move |conn| crate::services::auditoria_services::log(conn, vid, actor, "config_ganancias".into(), String::new())).await;
     Ok(HttpResponse::Ok().json(c))
 }

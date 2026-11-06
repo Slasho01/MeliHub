@@ -42,3 +42,6 @@ services:
       # Remitente verificado en Resend (o "MeliHub <onboarding@resend.dev>" para probar):
       - key: MAIL_FROM
         sync: false
+      # Monitoreo de errores (opcional):
+      - key: SENTRY_DSN
+        sync: false

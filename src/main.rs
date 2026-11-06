@@ -26,6 +26,14 @@ async fn main() -> std::io::Result<()> {
     dotenvy::dotenv().ok();
     env_logger::init_from_env(env_logger::Env::default().default_filter_or("info"));
 
+    // Monitoreo de errores (opcional): se activa si hay SENTRY_DSN.
+    let _sentry = std::env::var("SENTRY_DSN").ok().filter(|s| !s.trim().is_empty()).map(|dsn| {
+        sentry::init((dsn, sentry::ClientOptions { release: sentry::release_name!(), send_default_pii: false, ..Default::default() }))
+    });
+    if _sentry.is_some() {
+        log::info!("Sentry activado (monitoreo de errores)");
+    }
+
     let config = Config::from_env().unwrap_or_else(|e| {
         eprintln!("Error de configuración: {e}");
         std::process::exit(1);
@@ -76,6 +84,7 @@ async fn main() -> std::io::Result<()> {
             .app_data(web::JsonConfig::default().limit(1 << 20).error_handler(|err, _| {
                 actix_web::error::Error::from(errors::ApiError::bad_request(format!("JSON inválido: {err}")))
             }))
+            .wrap(sentry_actix::Sentry::new())
             .wrap(security_headers())
             .wrap(cors)
             .wrap(NormalizePath::new(TrailingSlash::Trim))

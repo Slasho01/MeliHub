@@ -260,6 +260,9 @@ diesel::table! {
         invite_expira -> Nullable<Timestamp>,
         created_at -> Timestamp,
         updated_at -> Timestamp,
+        #[max_length = 160]
+        twofa_secret -> Nullable<Varchar>,
+        twofa_enabled -> Bool,
     }
 }
 
