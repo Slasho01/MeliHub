@@ -280,8 +280,14 @@ pub fn buscar_por_email(conn: &mut PgConnection, email: &str) -> ApiResult<Optio
 }
 
 /// Fija una nueva contraseña directamente (usado tras verificar el token de reseteo).
-pub fn set_password(conn: &mut PgConnection, id: Uuid, nueva: &str) -> ApiResult<()> {
+pub fn set_password(conn: &mut PgConnection, id: Uuid, pwf: &str, nueva: &str) -> ApiResult<()> {
     validar_password(nueva)?;
+    // Uso único: la huella del enlace debe coincidir con el hash actual. Si ya se
+    // reseteó (u otro cambio de contraseña), la huella no coincide y se rechaza.
+    let actual: String = vendedores::table.find(id).select(vendedores::password_hash).first(conn)?;
+    if crate::auth::huella_pw(&actual) != pwf {
+        return Err(ApiError::unauthorized("El enlace ya fue utilizado o no es válido."));
+    }
     let hash = bcrypt::hash(nueva, bcrypt::DEFAULT_COST)
         .map_err(|e| ApiError::internal(format!("No se pudo cifrar la contraseña: {e}")))?;
     diesel::update(vendedores::table.find(id))

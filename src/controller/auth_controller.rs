@@ -28,7 +28,7 @@ pub async fn forgot(
     let email2 = email.clone();
     let found = db::run(&pool, move |conn| svc::buscar_por_email(conn, &email2)).await?;
     if let Some(v) = found {
-        if let Ok(token) = crear_reset_token(v.id, &cfg.jwt_secret) {
+        if let Ok(token) = crear_reset_token(v.id, &v.password_hash, &cfg.jwt_secret) {
             let link = format!("{}/reset?token={}", cfg.app_url, token);
             let html = format!(
                 "<p>Hola {},</p><p>Para restablecer tu contraseña de MeliHub, haz clic en el botón:</p>\
@@ -54,8 +54,8 @@ pub struct ResetBody {
 /// Restablece la contraseña usando el token del correo.
 pub async fn reset(body: web::Json<ResetBody>, pool: web::Data<DbPool>, cfg: web::Data<Config>) -> ApiResult<HttpResponse> {
     let ResetBody { token, nueva } = body.into_inner();
-    let id = verificar_reset_token(&token, &cfg.jwt_secret)?;
-    db::run(&pool, move |conn| svc::set_password(conn, id, &nueva)).await?;
+    let (id, pwf) = verificar_reset_token(&token, &cfg.jwt_secret)?;
+    db::run(&pool, move |conn| svc::set_password(conn, id, &pwf, &nueva)).await?;
     Ok(HttpResponse::Ok().json(json!({ "ok": true })))
 }
 

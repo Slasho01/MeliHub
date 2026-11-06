@@ -41,25 +41,40 @@ pub fn crear_token(org_id: Uuid, rol: &str, actor_id: Uuid, rol_equipo: &str, se
 struct ResetClaims {
     sub: String,
     purpose: String, // "reset"
+    #[serde(default)]
+    pwf: String, // huella del hash de la contraseña actual (uso único efectivo)
     exp: usize,
 }
 
+/// Huella del hash de la contraseña: liga el token al estado actual, para que al
+/// cambiar la contraseña el enlace quede inservible (uso único efectivo).
+pub fn huella_pw(password_hash: &str) -> String {
+    use sha2::{Digest, Sha256};
+    format!("{:x}", Sha256::digest(password_hash.as_bytes()))[..16].to_string()
+}
+
 /// Token para resetear contraseña (válido 1 hora).
-pub fn crear_reset_token(vendedor_id: Uuid, secret: &str) -> Result<String, ApiError> {
+pub fn crear_reset_token(vendedor_id: Uuid, password_hash: &str, secret: &str) -> Result<String, ApiError> {
     let exp = (chrono::Utc::now() + chrono::Duration::hours(1)).timestamp() as usize;
-    let claims = ResetClaims { sub: vendedor_id.to_string(), purpose: "reset".to_string(), exp };
+    let claims = ResetClaims {
+        sub: vendedor_id.to_string(),
+        purpose: "reset".to_string(),
+        pwf: huella_pw(password_hash),
+        exp,
+    };
     encode(&Header::new(Algorithm::HS256), &claims, &EncodingKey::from_secret(secret.as_bytes()))
         .map_err(|e| ApiError::internal(format!("No se pudo emitir el token: {e}")))
 }
 
 /// Verifica un token de reseteo y devuelve el vendedor id.
-pub fn verificar_reset_token(token: &str, secret: &str) -> Result<Uuid, ApiError> {
+pub fn verificar_reset_token(token: &str, secret: &str) -> Result<(Uuid, String), ApiError> {
     let data = decode::<ResetClaims>(token, &DecodingKey::from_secret(secret.as_bytes()), &Validation::new(Algorithm::HS256))
         .map_err(|_| ApiError::unauthorized("Enlace inválido o expirado"))?;
     if data.claims.purpose != "reset" {
         return Err(ApiError::unauthorized("Token inválido"));
     }
-    Uuid::parse_str(&data.claims.sub).map_err(|_| ApiError::unauthorized("Token inválido"))
+    let id = Uuid::parse_str(&data.claims.sub).map_err(|_| ApiError::unauthorized("Token inválido"))?;
+    Ok((id, data.claims.pwf))
 }
 
 /// Vendedor autenticado (extraído del header Authorization: Bearer).

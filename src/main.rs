@@ -109,8 +109,15 @@ async fn main() -> std::io::Result<()> {
 }
 
 fn security_headers() -> DefaultHeaders {
+    // CSP: scripts/estilos propios (estilos inline del panel permitidos), imágenes
+    // propias + data: (QR 2FA) + https (imágenes de Mercado Libre), nada de iframes.
+    const CSP: &str = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; \
+        img-src 'self' data: https:; font-src 'self' data:; connect-src 'self'; \
+        object-src 'none'; base-uri 'self'; frame-ancestors 'none'";
     DefaultHeaders::new()
         .add(("X-Content-Type-Options", "nosniff"))
         .add(("X-Frame-Options", "DENY"))
         .add(("Referrer-Policy", "strict-origin-when-cross-origin"))
+        .add(("Content-Security-Policy", CSP))
+        .add(("Strict-Transport-Security", "max-age=31536000; includeSubDomains"))
 }
