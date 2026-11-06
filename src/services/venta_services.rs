@@ -2,8 +2,8 @@
 //! **ganancia real** = venta − comisión real de ML (`sale_fee`) − costo (el que
 //! cargaste en Inventario). Expone el listado y un dashboard agregado.
 
-use crate::errors::ApiResult;
-use crate::models::{NewOrdenMl, OrdenMl, Producto};
+use crate::errors::{ApiError, ApiResult};
+use crate::models::{MlCuenta, NewOrdenMl, OrdenMl, Producto};
 use crate::schema::{ml_cuentas, ordenes_ml, productos};
 use chrono::{Duration, NaiveDate, NaiveDateTime, Utc};
 use diesel::prelude::*;
@@ -69,6 +69,7 @@ fn a_orden(conn: &mut PgConnection, cuenta_id: Uuid, o: &Value) -> ApiResult<New
         }
     }
     let ganancia = venta - comision - costo;
+    let envio_id = o.get("shipping").and_then(|s| s.get("id")).and_then(|v| v.as_i64()).filter(|&id| id > 0);
     Ok(NewOrdenMl {
         ml_cuenta_id: cuenta_id,
         ml_order_id,
@@ -82,6 +83,7 @@ fn a_orden(conn: &mut PgConnection, cuenta_id: Uuid, o: &Value) -> ApiResult<New
         ganancia,
         items: json!(items_out),
         datos: o.clone(),
+        envio_id,
     })
 }
 
@@ -267,4 +269,95 @@ pub fn ordenes_periodo(conn: &mut PgConnection, vendedor_id: Uuid, dias: i64) ->
         .select(OrdenMl::as_select())
         .load(conn)
         .map_err(crate::errors::ApiError::from)
+}
+
+// ----------------------------- Envíos / etiquetas -----------------------------
+
+#[derive(Serialize)]
+pub struct EnvioRow {
+    pub id: Uuid,
+    pub ml_order_id: i64,
+    pub cuenta: String,
+    pub comprador: Option<String>,
+    pub fecha: NaiveDateTime,
+    pub estado: String,
+    pub envio_id: i64,
+    pub productos: String,
+}
+
+fn resumen_items(items: &Value) -> String {
+    items
+        .as_array()
+        .map(|arr| {
+            arr.iter()
+                .map(|it| {
+                    let q = it.get("cantidad").and_then(|v| v.as_i64()).unwrap_or(1);
+                    let t = it.get("titulo").and_then(|v| v.as_str()).unwrap_or("");
+                    format!("{q}× {t}")
+                })
+                .collect::<Vec<_>>()
+                .join(", ")
+        })
+        .unwrap_or_default()
+}
+
+/// Órdenes con envío imprimible en el rango [ini, fin), de todas las cuentas del vendedor.
+pub fn envios(conn: &mut PgConnection, vendedor_id: Uuid, ini: NaiveDateTime, fin: NaiveDateTime) -> ApiResult<Vec<EnvioRow>> {
+    let rows: Vec<(OrdenMl, Option<String>)> = ordenes_ml::table
+        .inner_join(ml_cuentas::table)
+        .filter(ml_cuentas::vendedor_id.eq(vendedor_id))
+        .filter(ordenes_ml::envio_id.is_not_null())
+        .filter(ordenes_ml::estado.ne("cancelled"))
+        .filter(ordenes_ml::fecha.ge(ini))
+        .filter(ordenes_ml::fecha.lt(fin))
+        .order(ordenes_ml::fecha.desc())
+        .select((OrdenMl::as_select(), ml_cuentas::nickname.nullable()))
+        .load(conn)?;
+    Ok(rows
+        .into_iter()
+        .map(|(o, nick)| EnvioRow {
+            id: o.id,
+            ml_order_id: o.ml_order_id,
+            cuenta: nick.unwrap_or_else(|| "Cuenta".to_string()),
+            comprador: o.comprador,
+            fecha: o.fecha,
+            estado: o.estado,
+            envio_id: o.envio_id.unwrap_or(0),
+            productos: resumen_items(&o.items),
+        })
+        .collect())
+}
+
+/// Agrupa los envíos del rango por cuenta ML (para descargar las etiquetas con cada token).
+pub fn envios_por_cuenta(conn: &mut PgConnection, vendedor_id: Uuid, ini: NaiveDateTime, fin: NaiveDateTime) -> ApiResult<Vec<(MlCuenta, Vec<i64>)>> {
+    let pairs: Vec<(MlCuenta, Option<i64>)> = ordenes_ml::table
+        .inner_join(ml_cuentas::table)
+        .filter(ml_cuentas::vendedor_id.eq(vendedor_id))
+        .filter(ordenes_ml::envio_id.is_not_null())
+        .filter(ordenes_ml::estado.ne("cancelled"))
+        .filter(ordenes_ml::fecha.ge(ini))
+        .filter(ordenes_ml::fecha.lt(fin))
+        .select((MlCuenta::as_select(), ordenes_ml::envio_id))
+        .load(conn)?;
+    let mut map: std::collections::HashMap<Uuid, (MlCuenta, Vec<i64>)> = std::collections::HashMap::new();
+    for (cuenta, envio) in pairs {
+        if let Some(e) = envio {
+            map.entry(cuenta.id).or_insert_with(|| (cuenta.clone(), Vec::new())).1.push(e);
+        }
+    }
+    Ok(map.into_values().collect())
+}
+
+/// Cuenta + envio_id de una orden puntual (verifica que sea del vendedor).
+pub fn orden_para_etiqueta(conn: &mut PgConnection, vendedor_id: Uuid, orden_id: Uuid) -> ApiResult<(MlCuenta, i64)> {
+    let row: Option<(MlCuenta, Option<i64>)> = ordenes_ml::table
+        .inner_join(ml_cuentas::table)
+        .filter(ordenes_ml::id.eq(orden_id))
+        .filter(ml_cuentas::vendedor_id.eq(vendedor_id))
+        .select((MlCuenta::as_select(), ordenes_ml::envio_id))
+        .first(conn)
+        .optional()?;
+    let (cuenta, envio) = row.ok_or_else(|| ApiError::not_found("Orden"))?;
+    let envio = envio.ok_or_else(|| ApiError::bad_request("Esta venta no tiene etiqueta imprimible (¿es FULL?)"))?;
+    Ok((cuenta, envio))
 }

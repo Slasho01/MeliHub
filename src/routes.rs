@@ -42,6 +42,9 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(r("/ventas/sincronizar").route(post().to(ventas::sincronizar)))
             .service(r("/ventas/dashboard").route(get().to(ventas::dashboard)))
             .service(r("/ventas/export").route(get().to(ventas::exportar)))
+            .service(r("/ventas/envios").route(get().to(ventas::envios)))
+            .service(r("/ventas/etiquetas").route(get().to(ventas::etiquetas)))
+            .service(r("/ventas/{id}/etiqueta").route(get().to(ventas::etiqueta)))
             .service(r("/ventas").route(get().to(ventas::listar)))
             // SaaS: plan/suscripción + notificaciones
             .service(r("/mi-plan").route(get().to(saas::mi_plan)))

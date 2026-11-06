@@ -247,6 +247,7 @@ pub struct OrdenMl {
     #[serde(skip_serializing)]
     pub datos: serde_json::Value,
     pub created_at: NaiveDateTime,
+    pub envio_id: Option<i64>,
 }
 
 #[derive(Insertable, AsChangeset, Debug)]
@@ -264,6 +265,7 @@ pub struct NewOrdenMl {
     pub ganancia: i64,
     pub items: serde_json::Value,
     pub datos: serde_json::Value,
+    pub envio_id: Option<i64>,
 }
 
 // ----------------------------- Historial de producto -----------------------------

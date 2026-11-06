@@ -237,6 +237,29 @@ impl MlClient {
         .await
     }
 
+    /// Descarga en PDF las etiquetas de uno o varios envíos (Mercado Envíos Flex/Colecta).
+    /// Falla si algún envío no tiene etiqueta imprimible (p. ej. FULL).
+    pub async fn shipment_labels(&self, access_token: &str, shipment_ids: &[i64]) -> ApiResult<Vec<u8>> {
+        if shipment_ids.is_empty() {
+            return Err(ApiError::bad_request("Sin envíos para la etiqueta"));
+        }
+        let ids = shipment_ids.iter().map(|i| i.to_string()).collect::<Vec<_>>().join(",");
+        let res = self
+            .http
+            .get(format!("{}/shipment_labels?shipment_ids={ids}&response_type=pdf", self.cfg.api_base))
+            .bearer_auth(access_token)
+            .send()
+            .await
+            .map_err(|e| ApiError::internal(format!("Mercado Libre no respondió: {e}")))?;
+        let status = res.status();
+        if !status.is_success() {
+            let t = res.text().await.unwrap_or_default();
+            return Err(ApiError::bad_request(format!("Mercado Libre no entregó la etiqueta ({status}): {t}")));
+        }
+        let bytes = res.bytes().await.map_err(|e| ApiError::internal(format!("No se pudo leer el PDF de ML: {e}")))?;
+        Ok(bytes.to_vec())
+    }
+
     /// Nombre de una categoría de Mercado Libre (p. ej. "MLC1234" -> "Taladros").
     /// Best-effort: None si falla.
     pub async fn get_category(&self, access_token: &str, cat_id: &str) -> Option<String> {

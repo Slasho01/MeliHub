@@ -145,6 +145,7 @@ diesel::table! {
         items -> Jsonb,
         datos -> Jsonb,
         created_at -> Timestamp,
+        envio_id -> Nullable<Int8>,
     }
 }
 

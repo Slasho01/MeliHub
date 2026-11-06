@@ -51,6 +51,22 @@ export async function descargarCsv(path, filename) {
   saveBlob(await res.blob(), filename)
 }
 
+/** Descarga un archivo del backend usando el nombre que indica el servidor (PDF/ZIP/etc). */
+export async function descargarArchivo(path, fallback = 'archivo') {
+  const headers = { 'ngrok-skip-browser-warning': '1' }
+  if (token) headers.Authorization = `Bearer ${token}`
+  const res = await fetch(BASE + path, { headers })
+  if (!res.ok) {
+    const t = await res.text()
+    let msg
+    try { msg = JSON.parse(t)?.error } catch { /* no json */ }
+    throw new Error(msg || `Error ${res.status}`)
+  }
+  const cd = res.headers.get('Content-Disposition') || ''
+  const m = /filename="?([^"]+)"?/.exec(cd)
+  saveBlob(await res.blob(), m ? m[1] : fallback)
+}
+
 /** Genera y descarga un CSV desde datos en el navegador. `rows` = array de arrays. */
 export function csvLocal(filename, rows) {
   const esc = (v) => {

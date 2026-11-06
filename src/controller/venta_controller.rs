@@ -87,3 +87,105 @@ pub async fn listar(user: AuthVendedor, q: web::Query<ListQuery>, pool: web::Dat
     let items = db::run(&pool, move |conn| venta::listar(conn, vid, cuenta_id, limit.unwrap_or(50), offset.unwrap_or(0))).await?;
     Ok(HttpResponse::Ok().json(items))
 }
+
+// ----------------------------- Envíos / etiquetas -----------------------------
+
+#[derive(Deserialize)]
+pub struct DiaQuery {
+    pub dia: Option<String>,
+}
+
+fn rango_dia(dia: Option<&str>) -> (chrono::NaiveDateTime, chrono::NaiveDateTime) {
+    let d = dia
+        .and_then(|s| chrono::NaiveDate::parse_from_str(s.trim(), "%Y-%m-%d").ok())
+        .unwrap_or_else(|| chrono::Utc::now().naive_utc().date());
+    let ini = d.and_hms_opt(0, 0, 0).unwrap();
+    (ini, ini + chrono::Duration::days(1))
+}
+
+fn slug_archivo(s: &str) -> String {
+    let out: String = s.chars().map(|c| if c.is_ascii_alphanumeric() { c.to_ascii_lowercase() } else { '-' }).collect();
+    out.trim_matches('-').chars().take(40).collect()
+}
+
+fn pdf_resp(filename: &str, bytes: Vec<u8>) -> HttpResponse {
+    HttpResponse::Ok()
+        .insert_header(("Content-Type", "application/pdf"))
+        .insert_header(("Content-Disposition", format!("attachment; filename=\"{filename}\"")))
+        .body(bytes)
+}
+
+fn zip_pdfs(files: &[(String, Vec<u8>)]) -> ApiResult<Vec<u8>> {
+    use std::io::Write;
+    let mut cursor = std::io::Cursor::new(Vec::new());
+    {
+        let mut zw = zip::ZipWriter::new(&mut cursor);
+        let opts = zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+        for (name, bytes) in files {
+            zw.start_file(name.clone(), opts).map_err(|e| ApiError::internal(format!("zip: {e}")))?;
+            zw.write_all(bytes).map_err(|e| ApiError::internal(format!("zip: {e}")))?;
+        }
+        zw.finish().map_err(|e| ApiError::internal(format!("zip: {e}")))?;
+    }
+    Ok(cursor.into_inner())
+}
+
+/// Lista las ventas con envío imprimible de un día (todas las cuentas).
+pub async fn envios(user: AuthVendedor, q: web::Query<DiaQuery>, pool: web::Data<DbPool>) -> ApiResult<HttpResponse> {
+    let vid = user.id;
+    let (ini, fin) = rango_dia(q.into_inner().dia.as_deref());
+    let rows = db::run(&pool, move |conn| venta::envios(conn, vid, ini, fin)).await?;
+    Ok(HttpResponse::Ok().json(rows))
+}
+
+/// Etiqueta (PDF) de una venta puntual.
+pub async fn etiqueta(user: AuthVendedor, path: web::Path<Uuid>, pool: web::Data<DbPool>, client: web::Data<MlClient>, cfg: web::Data<Config>) -> ApiResult<HttpResponse> {
+    if !cfg.ml.configurado() {
+        return Err(ApiError::bad_request("Mercado Libre no está configurado."));
+    }
+    let (vid, oid) = (user.id, path.into_inner());
+    let (cuenta, envio) = db::run(&pool, move |conn| venta::orden_para_etiqueta(conn, vid, oid)).await?;
+    let token = crate::sync::access_token_valido(&pool, &client, &cuenta).await?;
+    let pdf = client.shipment_labels(&token, &[envio]).await?;
+    Ok(pdf_resp(&format!("etiqueta-{envio}.pdf"), pdf))
+}
+
+/// Descarga todas las etiquetas del día: 1 cuenta → PDF; varias → ZIP (un PDF por cuenta).
+pub async fn etiquetas(user: AuthVendedor, q: web::Query<DiaQuery>, pool: web::Data<DbPool>, client: web::Data<MlClient>, cfg: web::Data<Config>) -> ApiResult<HttpResponse> {
+    if !cfg.ml.configurado() {
+        return Err(ApiError::bad_request("Mercado Libre no está configurado."));
+    }
+    let vid = user.id;
+    let dia = q.into_inner().dia;
+    let (ini, fin) = rango_dia(dia.as_deref());
+    let grupos = db::run(&pool, move |conn| venta::envios_por_cuenta(conn, vid, ini, fin)).await?;
+    if grupos.is_empty() {
+        return Err(ApiError::bad_request("No hay ventas con envío imprimible en ese día."));
+    }
+    let mut pdfs: Vec<(String, Vec<u8>)> = Vec::new();
+    for (cuenta, ids) in grupos {
+        match crate::sync::access_token_valido(&pool, &client, &cuenta).await {
+            Ok(token) => match client.shipment_labels(&token, &ids).await {
+                Ok(pdf) => {
+                    let nombre = cuenta.nickname.clone().unwrap_or_else(|| format!("cuenta-{}", cuenta.ml_user_id));
+                    pdfs.push((format!("etiquetas-{}.pdf", slug_archivo(&nombre)), pdf));
+                }
+                Err(e) => log::warn!("etiquetas cuenta {}: {e}", cuenta.id),
+            },
+            Err(e) => log::warn!("token cuenta {}: {e}", cuenta.id),
+        }
+    }
+    if pdfs.is_empty() {
+        return Err(ApiError::bad_request("No se pudo generar ninguna etiqueta (¿envíos FULL, o falta el permiso de envíos en tu app de ML?)."));
+    }
+    let fecha = dia.unwrap_or_else(|| chrono::Utc::now().naive_utc().date().to_string());
+    if pdfs.len() == 1 {
+        let (_, pdf) = pdfs.into_iter().next().unwrap();
+        return Ok(pdf_resp(&format!("etiquetas-{fecha}.pdf"), pdf));
+    }
+    let zip = zip_pdfs(&pdfs)?;
+    Ok(HttpResponse::Ok()
+        .insert_header(("Content-Type", "application/zip"))
+        .insert_header(("Content-Disposition", format!("attachment; filename=\"etiquetas-{fecha}.zip\"")))
+        .body(zip))
+}
