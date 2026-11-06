@@ -15,6 +15,24 @@ diesel::table! {
         updated_at -> Timestamp,
         #[max_length = 20]
         plan -> Varchar,
+        #[max_length = 160]
+        twofa_secret -> Nullable<Varchar>,
+        twofa_enabled -> Bool,
+    }
+}
+
+diesel::table! {
+    auditoria (id) {
+        id -> Uuid,
+        vendedor_id -> Uuid,
+        actor_id -> Nullable<Uuid>,
+        #[max_length = 255]
+        actor -> Nullable<Varchar>,
+        #[max_length = 60]
+        accion -> Varchar,
+        #[max_length = 400]
+        detalle -> Nullable<Varchar>,
+        created_at -> Timestamp,
     }
 }
 
@@ -258,6 +276,7 @@ diesel::joinable!(miembros -> vendedores (vendedor_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
     api_keys,
+    auditoria,
     config_ganancias,
     cupones,
     facturacion,

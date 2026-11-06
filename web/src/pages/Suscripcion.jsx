@@ -15,11 +15,15 @@ function Fila({ k, children }) {
 
 export default function Suscripcion() {
   const [sub, setSub] = useState(undefined) // undefined = cargando, null = sin suscripción
+  const [pagos, setPagos] = useState([])
   const [error, setError] = useState(null)
   const [msg, setMsg] = useState(null)
   const [busy, setBusy] = useState(false)
 
-  const cargar = () => get('/suscripcion').then((r) => setSub(r.suscripcion)).catch((e) => setError(e.message))
+  const cargar = () => {
+    get('/suscripcion').then((r) => setSub(r.suscripcion)).catch((e) => setError(e.message))
+    get('/suscripcion/pagos').then((r) => setPagos(r.pagos || [])).catch(() => {})
+  }
   useEffect(() => { cargar() }, [])
 
   const cancelar = async () => {
@@ -66,6 +70,22 @@ export default function Suscripcion() {
           {!activa && (
             <div style={{ paddingTop: 10 }}><a className="btn btn-accent btn-sm" href="/plan">Ver planes</a></div>
           )}
+        </div>
+      )}
+
+      {pagos.length > 0 && (
+        <div className="card" style={{ padding: 0 }}>
+          <div className="muted sm" style={{ padding: '12px 14px 4px' }}>Historial de pagos</div>
+          <table>
+            <thead><tr><th>Fecha</th><th>Estado</th><th>Monto</th></tr></thead>
+            <tbody>{pagos.map((p, i) => (
+              <tr key={p.id || i}>
+                <td className="muted sm">{p.fecha ? new Date(p.fecha).toLocaleDateString('es-CL') : '—'}</td>
+                <td><span className="tag">{p.estado}</span></td>
+                <td>{money(p.monto)}</td>
+              </tr>
+            ))}</tbody>
+          </table>
         </div>
       )}
     </div>

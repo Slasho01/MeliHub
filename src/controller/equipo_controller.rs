@@ -50,6 +50,8 @@ pub async fn invitar(
         );
         let _ = mailer.enviar(&m.email, "Invitación a MeliHub", &html).await;
     }
+    let (actor, det) = (user.actor_id, format!("{} ({})", m.email, m.rol));
+    let _ = db::run(&pool, move |conn| crate::services::auditoria_services::log(conn, org, actor, "equipo_invitar".into(), det)).await;
     Ok(HttpResponse::Ok().json(json!({ "miembro": m, "enlace": link, "correo_enviado": mailer.configurado() })))
 }
 
@@ -84,7 +86,10 @@ pub struct RolBody {
 pub async fn cambiar_rol(user: AuthVendedor, path: web::Path<Uuid>, body: web::Json<RolBody>, pool: web::Data<DbPool>) -> ApiResult<HttpResponse> {
     user.exigir_owner()?;
     let (org, mid, rol) = (user.id, path.into_inner(), body.into_inner().rol);
+    let det = format!("{mid} → {rol}");
     db::run(&pool, move |conn| svc::cambiar_rol(conn, org, mid, &rol)).await?;
+    let actor = user.actor_id;
+    let _ = db::run(&pool, move |conn| crate::services::auditoria_services::log(conn, org, actor, "equipo_rol".into(), det)).await;
     Ok(HttpResponse::Ok().json(json!({ "ok": true })))
 }
 
@@ -93,6 +98,8 @@ pub async fn eliminar(user: AuthVendedor, path: web::Path<Uuid>, pool: web::Data
     user.exigir_owner()?;
     let (org, mid) = (user.id, path.into_inner());
     db::run(&pool, move |conn| svc::eliminar(conn, org, mid)).await?;
+    let actor = user.actor_id;
+    let _ = db::run(&pool, move |conn| crate::services::auditoria_services::log(conn, org, actor, "equipo_eliminar".into(), mid.to_string())).await;
     Ok(HttpResponse::Ok().json(json!({ "ok": true })))
 }
 

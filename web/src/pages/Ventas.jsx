@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { get, money, post } from '../api'
+import { get, money, post, descargarCsv } from '../api'
 
 const PERIODOS = [[7, '7 días'], [30, '30 días'], [90, '90 días']]
 
@@ -46,6 +46,7 @@ export default function Ventas() {
           <select className="input" value={dias} onChange={(e) => setDias(Number(e.target.value))}>
             {PERIODOS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
+          <button className="btn btn-sm" onClick={() => descargarCsv(`/ventas/export?dias=${dias}`, `ventas-${dias}d.csv`)}>Exportar CSV</button>
           <button className="btn btn-accent" disabled={sync} onClick={sincronizar}>{sync ? 'Sincronizando…' : 'Sincronizar ventas'}</button>
         </div>
       </div>
@@ -61,6 +62,7 @@ export default function Ventas() {
             <Kpi label="Comisión ML" value={money(dash.comision_total)} />
             <Kpi label="Costo" value={money(dash.costo_total)} />
             <Kpi label="Ticket promedio" value={money(dash.ticket_promedio)} />
+            <Kpi label="Sin costo cargado" value={dash.sin_costo} sub="margen no confiable" tone={dash.sin_costo > 0 ? 'warn' : undefined} />
           </div>
 
           <div className="card">
@@ -87,6 +89,18 @@ export default function Ventas() {
                 <thead><tr><th>Producto</th><th>Uds</th><th>Venta</th></tr></thead>
                 <tbody>{dash.top_productos.map((p) => (
                   <tr key={p.ml_item_id}><td>{p.titulo || p.ml_item_id}</td><td>{p.cantidad}</td><td>{money(p.venta)}</td></tr>
+                ))}</tbody>
+              </table>
+            )}
+          </div>
+
+          <div className="card" style={{ padding: 0 }}>
+            <div className="muted sm" style={{ padding: '12px 14px 4px' }}>Sin rotación en el período ({dash.sin_rotacion_total}) · productos activos con stock que no vendieron</div>
+            {dash.sin_rotacion.length === 0 ? <div className="empty">Todo rotó 🎉</div> : (
+              <table>
+                <thead><tr><th>Producto</th><th>Stock</th></tr></thead>
+                <tbody>{dash.sin_rotacion.map((p) => (
+                  <tr key={p.ml_item_id}><td>{p.titulo || p.ml_item_id}</td><td>{p.stock}</td></tr>
                 ))}</tbody>
               </table>
             )}

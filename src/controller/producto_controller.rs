@@ -42,7 +42,9 @@ pub async fn set_estado_ml(
     let (producto, cuenta) = db::run(&pool, move |conn| prod::get_con_cuenta(conn, pid, vid, admin)).await?;
     let token = crate::sync::access_token_valido(&pool, &client, &cuenta).await?;
     client.set_status(&token, &producto.ml_item_id, &estado).await?;
+    let (org, actor, det) = (user.id, user.actor_id, format!("{} → {}", producto.ml_item_id, estado));
     let p = db::run(&pool, move |conn| prod::aplicar_estado_local(conn, pid, &estado)).await?;
+    let _ = db::run(&pool, move |conn| crate::services::auditoria_services::log(conn, org, actor, "estado_ml".into(), det)).await;
     Ok(HttpResponse::Ok().json(p))
 }
 
@@ -71,6 +73,8 @@ pub async fn set_precio_ml(
     let token = crate::sync::access_token_valido(&pool, &client, &cuenta).await?;
     client.update_price(&token, &producto.ml_item_id, precio).await?;
     let p = db::run(&pool, move |conn| prod::aplicar_precio_local(conn, pid, precio)).await?;
+    let (org, actor, det) = (user.id, user.actor_id, format!("{} → ${}", producto.ml_item_id, precio));
+    let _ = db::run(&pool, move |conn| crate::services::auditoria_services::log(conn, org, actor, "precio_ml".into(), det)).await;
     Ok(HttpResponse::Ok().json(p))
 }
 

@@ -67,7 +67,13 @@ pub async fn suscribir(
     let ext = format!("{}:{}:{}", vid, plan.id, ciclo);
     let reason = format!("MeliHub - Plan {} ({})", plan.nombre, ciclo);
     let (frequency, ftype) = if ciclo == "anual" { (12, "months") } else { (1, "months") };
-    let pre = mp.crear_preapproval(&reason, monto, "CLP", &email, &back, &notif, &ext, frequency, ftype).await?;
+    // Prueba gratis solo en la primera suscripción.
+    let trial = if db::run(&pool, move |conn| subs::tuvo_suscripcion(conn, org)).await? {
+        None
+    } else {
+        Some(crate::planes::TRIAL_DIAS)
+    };
+    let pre = mp.crear_preapproval(&reason, monto, "CLP", &email, &back, &notif, &ext, frequency, ftype, trial).await?;
 
     let (pid, plan_id, ciclo_s, cupon_s) = (pre.id.clone(), plan.id.to_string(), ciclo.to_string(), cupon_norm.clone());
     db::run(&pool, move |conn| subs::registrar(conn, vid, &plan_id, monto, &pid, &ciclo_s, cupon_s.as_deref())).await?;
@@ -98,6 +104,17 @@ pub async fn estado(user: AuthVendedor, pool: web::Data<DbPool>, mp: web::Data<M
         }
     }
     Ok(HttpResponse::Ok().json(json!({ "suscripcion": sub })))
+}
+
+/// Historial de pagos de la suscripción (consultado a Mercado Pago).
+pub async fn pagos(user: AuthVendedor, pool: web::Data<DbPool>, mp: web::Data<MercadoPago>) -> ApiResult<HttpResponse> {
+    let vid = user.id;
+    let sub = db::run(&pool, move |conn| subs::actual(conn, vid)).await?;
+    let pagos = match sub.and_then(|s| s.preapproval_id) {
+        Some(pid) if mp.configurado() => mp.authorized_payments(&pid).await.unwrap_or_default(),
+        _ => Vec::new(),
+    };
+    Ok(HttpResponse::Ok().json(json!({ "pagos": pagos })))
 }
 
 /// Cancela la suscripción (en MeliHub y en Mercado Pago).
@@ -148,15 +165,22 @@ pub async fn webhook(
                 log::info!("[MP webhook] preapproval {id} estado={estado}");
                 let (id_c, estado_c) = (id.clone(), estado.clone());
                 let _ = db::run(&pool, move |conn| subs::aplicar_estado(conn, &id_c, &estado_c)).await;
-                // Correo de confirmación al activarse la suscripción.
-                if estado == "authorized" && mailer.configurado() {
-                    if let Ok(Some((email, plan))) = db::run(&pool, move |conn| subs::email_y_plan(conn, &id)).await {
-                        let html = format!(
-                            "<p>¡Tu suscripción al plan <b>{plan}</b> de MeliHub está activa!</p>\
-                             <p>Gracias por suscribirte. Puedes gestionarla desde <a href=\"{}/plan\">tu panel</a>.</p>",
-                            cfg.app_url
-                        );
-                        let _ = mailer.enviar(&email, "Suscripción activada · MeliHub", &html).await;
+                // Correo según el estado: activación o aviso de pago fallido (dunning).
+                if (estado == "authorized" || estado == "paused") && mailer.configurado() {
+                    let id_mail = id.clone();
+                    if let Ok(Some((email, plan))) = db::run(&pool, move |conn| subs::email_y_plan(conn, &id_mail)).await {
+                        let (asunto, html) = if estado == "authorized" {
+                            ("Suscripción activada · MeliHub".to_string(), format!(
+                                "<p>¡Tu suscripción al plan <b>{plan}</b> de MeliHub está activa!</p>\
+                                 <p>Gracias por suscribirte. Puedes gestionarla desde <a href=\"{}/suscripcion\">tu panel</a>.</p>",
+                                cfg.app_url))
+                        } else {
+                            ("Problema con tu pago · MeliHub".to_string(), format!(
+                                "<p>No pudimos cobrar tu suscripción al plan <b>{plan}</b> y quedó <b>pausada</b>.</p>\
+                                 <p>Revisa tu medio de pago o vuelve a suscribirte desde <a href=\"{}/plan\">tu panel</a> para no perder el acceso.</p>",
+                                cfg.app_url))
+                        };
+                        let _ = mailer.enviar(&email, &asunto, &html).await;
                     }
                 }
                 }

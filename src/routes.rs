@@ -1,4 +1,4 @@
-use crate::controller::{admin_controller as adm, api_key_controller as keys, auth_controller as auth, cupon_controller as cupon, equipo_controller as equipo, facturacion_controller as fact, health, ml_controller as ml, producto_controller as prod, pub_controller as pubc, saas_controller as saas, suscripcion_controller as subs, venta_controller as ventas};
+use crate::controller::{admin_controller as adm, api_key_controller as keys, auth_controller as auth, auditoria_controller as audit, cupon_controller as cupon, equipo_controller as equipo, facturacion_controller as fact, health, ml_controller as ml, producto_controller as prod, pub_controller as pubc, saas_controller as saas, suscripcion_controller as subs, venta_controller as ventas};
 use actix_web::web::{self, delete, get, post, put, resource as r};
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
@@ -13,6 +13,9 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(r("/auth/me").route(get().to(auth::me)))
             .service(r("/auth/perfil").route(put().to(auth::actualizar_perfil)))
             .service(r("/auth/password").route(put().to(auth::cambiar_password)))
+            .service(r("/auth/2fa/setup").route(post().to(auth::twofa_setup)))
+            .service(r("/auth/2fa/enable").route(post().to(auth::twofa_enable)))
+            .service(r("/auth/2fa/disable").route(post().to(auth::twofa_disable)))
             // Equipo (miembros de la organización)
             .service(r("/equipo/aceptar").route(post().to(equipo::aceptar))) // público (invitado)
             .service(r("/equipo").route(get().to(equipo::listar)).route(post().to(equipo::invitar)))
@@ -37,6 +40,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             // Ventas centralizadas (órdenes de ML) + dashboard con ganancia real
             .service(r("/ventas/sincronizar").route(post().to(ventas::sincronizar)))
             .service(r("/ventas/dashboard").route(get().to(ventas::dashboard)))
+            .service(r("/ventas/export").route(get().to(ventas::exportar)))
             .service(r("/ventas").route(get().to(ventas::listar)))
             // SaaS: plan/suscripción + notificaciones
             .service(r("/mi-plan").route(get().to(saas::mi_plan)))
@@ -44,6 +48,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(r("/notificaciones/leer").route(post().to(saas::marcar_leidas)))
             // Suscripción de pago (Mercado Pago)
             .service(r("/suscripcion").route(get().to(subs::estado)))
+            .service(r("/suscripcion/pagos").route(get().to(subs::pagos)))
             .service(r("/suscripcion/suscribir").route(post().to(subs::suscribir)))
             .service(r("/suscripcion/cancelar").route(post().to(subs::cancelar)))
             .service(r("/suscripcion/webhook").route(post().to(subs::webhook)))
@@ -58,6 +63,8 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(r("/admin/vendedores/{id}/plan").route(put().to(adm::set_plan)))
             .service(r("/admin/vendedores/{id}/estado").route(put().to(adm::set_estado)))
             .service(r("/admin/metricas").route(get().to(adm::metricas)))
+            // Auditoría (actividad del equipo, dueño)
+            .service(r("/auditoria").route(get().to(audit::listar)))
             // API keys (gestión por el vendedor autenticado)
             .service(r("/api-keys").route(get().to(keys::listar)).route(post().to(keys::crear)))
             .service(r("/api-keys/{id}").route(delete().to(keys::revocar)))

@@ -1,4 +1,4 @@
-use crate::schema::{cupones, facturacion, historial_producto, miembros, ml_cuentas, notificaciones, ordenes_ml, productos, suscripciones, vendedores};
+use crate::schema::{auditoria, cupones, facturacion, historial_producto, miembros, ml_cuentas, notificaciones, ordenes_ml, productos, suscripciones, vendedores};
 use chrono::NaiveDateTime;
 use diesel::prelude::*;
 use serde::Serialize;
@@ -19,6 +19,9 @@ pub struct Vendedor {
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
     pub plan: String,
+    #[serde(skip_serializing)]
+    pub twofa_secret: Option<String>,
+    pub twofa_enabled: bool,
 }
 
 #[derive(Insertable)]
@@ -29,6 +32,30 @@ pub struct NewVendedor {
     pub nombre: String,
     pub rol: String,
     pub plan: String,
+}
+
+// ----------------------------- Auditoría -----------------------------
+
+#[derive(Queryable, Selectable, Serialize, Debug, Clone)]
+#[diesel(table_name = auditoria, check_for_backend(diesel::pg::Pg))]
+pub struct Auditoria {
+    pub id: Uuid,
+    pub vendedor_id: Uuid,
+    pub actor_id: Option<Uuid>,
+    pub actor: Option<String>,
+    pub accion: String,
+    pub detalle: Option<String>,
+    pub created_at: NaiveDateTime,
+}
+
+#[derive(Insertable)]
+#[diesel(table_name = auditoria)]
+pub struct NewAuditoria {
+    pub vendedor_id: Uuid,
+    pub actor_id: Option<Uuid>,
+    pub actor: Option<String>,
+    pub accion: String,
+    pub detalle: Option<String>,
 }
 
 // ----------------------------- Miembro (equipo) -----------------------------

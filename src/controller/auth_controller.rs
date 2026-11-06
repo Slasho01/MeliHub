@@ -1,7 +1,7 @@
 use crate::auth::{crear_reset_token, crear_token, verificar_reset_token, AuthVendedor};
 use crate::config::Config;
 use crate::db::{self, DbPool};
-use crate::errors::ApiResult;
+use crate::errors::{ApiError, ApiResult};
 use crate::mailer::Mailer;
 use crate::services::auth_services::{self as svc, LoginRequest, PasswordUpdate, PerfilUpdate, RegistroRequest};
 use actix_web::{web, HttpResponse};
@@ -83,7 +83,11 @@ pub async fn login(
             .json(json!({ "error": "Demasiados intentos. Espera unos minutos e intenta de nuevo." })));
     }
     match db::run(&pool, move |conn| svc::login(conn, body.into_inner())).await {
-        Ok(s) => {
+        Ok(svc::LoginOutcome::TwoFaRequerido) => {
+            limiter.exito(&ip);
+            Ok(HttpResponse::Ok().json(json!({ "twofa_required": true })))
+        }
+        Ok(svc::LoginOutcome::Ok(s)) => {
             limiter.exito(&ip);
             let token = crear_token(s.org_id, &s.rol, s.actor_id, &s.rol_equipo, &cfg.jwt_secret)?;
             Ok(HttpResponse::Ok().json(json!({ "token": token, "me": s })))
@@ -102,12 +106,48 @@ pub async fn me(user: AuthVendedor, pool: web::Data<DbPool>) -> ApiResult<HttpRe
         "nombre": ident.nombre,
         "email": ident.email,
         "plan": ident.plan,
+        "twofa_enabled": ident.twofa_enabled,
         "rol": user.rol,
         "rol_equipo": user.rol_equipo,
         "es_admin": user.es_admin(),
         "es_owner": user.es_owner(),
         "es_miembro": user.es_miembro(),
     })))
+}
+
+#[derive(Deserialize)]
+pub struct CodigoBody {
+    pub codigo: String,
+}
+
+/// Genera el secreto 2FA (aún sin activar) y devuelve el QR/secreto para configurar.
+pub async fn twofa_setup(user: AuthVendedor, pool: web::Data<DbPool>) -> ApiResult<HttpResponse> {
+    if user.es_miembro() {
+        return Err(ApiError::forbidden("El 2FA pertenece a la cuenta dueño"));
+    }
+    let vid = user.id;
+    let (secret, url) = db::run(&pool, move |conn| svc::twofa_setup(conn, vid)).await?;
+    Ok(HttpResponse::Ok().json(json!({ "secret": secret, "url": url })))
+}
+
+/// Activa el 2FA tras verificar un código.
+pub async fn twofa_enable(user: AuthVendedor, body: web::Json<CodigoBody>, pool: web::Data<DbPool>) -> ApiResult<HttpResponse> {
+    if user.es_miembro() {
+        return Err(ApiError::forbidden("El 2FA pertenece a la cuenta dueño"));
+    }
+    let (vid, codigo) = (user.id, body.into_inner().codigo);
+    db::run(&pool, move |conn| svc::twofa_enable(conn, vid, &codigo)).await?;
+    Ok(HttpResponse::Ok().json(json!({ "ok": true })))
+}
+
+/// Desactiva el 2FA.
+pub async fn twofa_disable(user: AuthVendedor, body: web::Json<CodigoBody>, pool: web::Data<DbPool>) -> ApiResult<HttpResponse> {
+    if user.es_miembro() {
+        return Err(ApiError::forbidden("El 2FA pertenece a la cuenta dueño"));
+    }
+    let (vid, codigo) = (user.id, body.into_inner().codigo);
+    db::run(&pool, move |conn| svc::twofa_disable(conn, vid, &codigo)).await?;
+    Ok(HttpResponse::Ok().json(json!({ "ok": true })))
 }
 
 /// Actualiza el perfil (nombre/email) del vendedor autenticado.

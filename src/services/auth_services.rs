@@ -28,6 +28,14 @@ pub struct RegistroRequest {
 pub struct LoginRequest {
     pub email: String,
     pub password: String,
+    #[serde(default)]
+    pub codigo: Option<String>,
+}
+
+/// Resultado del login: sesión lista, o se requiere el código 2FA.
+pub enum LoginOutcome {
+    Ok(Box<Sesion>),
+    TwoFaRequerido,
 }
 
 pub fn validar_password(p: &str) -> ApiResult<()> {
@@ -78,7 +86,7 @@ pub fn registrar(conn: &mut PgConnection, req: RegistroRequest) -> ApiResult<Ven
         })
 }
 
-pub fn login(conn: &mut PgConnection, req: LoginRequest) -> ApiResult<Sesion> {
+pub fn login(conn: &mut PgConnection, req: LoginRequest) -> ApiResult<LoginOutcome> {
     let email = req.email.trim().to_lowercase();
 
     // 1) ¿Es un vendedor (dueño de la organización)?
@@ -94,7 +102,19 @@ pub fn login(conn: &mut PgConnection, req: LoginRequest) -> ApiResult<Sesion> {
         if !v.activo {
             return Err(ApiError::forbidden("Tu cuenta está desactivada"));
         }
-        return Ok(Sesion {
+        // 2FA: si está activo, exige el código TOTP.
+        if v.twofa_enabled {
+            match req.codigo.as_deref() {
+                None => return Ok(LoginOutcome::TwoFaRequerido),
+                Some(c) => {
+                    let secret = crate::crypto::descifrar(v.twofa_secret.as_deref().unwrap_or(""));
+                    if !crate::twofa::verificar(&secret, c) {
+                        return Err(ApiError::unauthorized("Código de verificación inválido"));
+                    }
+                }
+            }
+        }
+        return Ok(LoginOutcome::Ok(Box::new(Sesion {
             org_id: v.id,
             actor_id: v.id,
             nombre: v.nombre,
@@ -102,7 +122,7 @@ pub fn login(conn: &mut PgConnection, req: LoginRequest) -> ApiResult<Sesion> {
             rol: v.rol,
             rol_equipo: "owner".to_string(),
             plan: v.plan,
-        });
+        })));
     }
 
     // 2) ¿Es un miembro del equipo (invitación aceptada)?
@@ -121,7 +141,7 @@ pub fn login(conn: &mut PgConnection, req: LoginRequest) -> ApiResult<Sesion> {
         if !org.activo {
             return Err(ApiError::forbidden("La cuenta de tu organización está desactivada"));
         }
-        return Ok(Sesion {
+        return Ok(LoginOutcome::Ok(Box::new(Sesion {
             org_id: org.id,
             actor_id: m.id,
             nombre: m.nombre,
@@ -129,7 +149,7 @@ pub fn login(conn: &mut PgConnection, req: LoginRequest) -> ApiResult<Sesion> {
             rol: "vendedor".to_string(),
             rol_equipo: m.rol,
             plan: org.plan,
-        });
+        })));
     }
 
     Err(ApiError::unauthorized("Credenciales inválidas"))
@@ -150,16 +170,17 @@ pub struct Identidad {
     pub nombre: String,
     pub email: String,
     pub plan: String,
+    pub twofa_enabled: bool,
 }
 
 pub fn identidad(conn: &mut PgConnection, org_id: Uuid, actor_id: Uuid) -> ApiResult<Identidad> {
-    let plan: String = vendedores::table.find(org_id).select(vendedores::plan).first(conn)?;
     if actor_id == org_id {
         let v = get(conn, org_id)?;
-        Ok(Identidad { nombre: v.nombre, email: v.email, plan })
+        Ok(Identidad { nombre: v.nombre, email: v.email, plan: v.plan, twofa_enabled: v.twofa_enabled })
     } else {
+        let plan: String = vendedores::table.find(org_id).select(vendedores::plan).first(conn)?;
         let m: Miembro = miembros::table.find(actor_id).select(Miembro::as_select()).first(conn)?;
-        Ok(Identidad { nombre: m.nombre, email: m.email, plan })
+        Ok(Identidad { nombre: m.nombre, email: m.email, plan, twofa_enabled: false })
     }
 }
 
@@ -201,7 +222,7 @@ pub fn actualizar_perfil(conn: &mut PgConnection, org_id: Uuid, actor_id: Uuid, 
             .execute(conn)
             .map_err(|e| dup(ApiError::from(e)))?;
     }
-    Ok(Identidad { nombre, email, plan: ident.plan })
+    Ok(Identidad { nombre, email, plan: ident.plan, twofa_enabled: ident.twofa_enabled })
 }
 
 #[derive(Deserialize)]
@@ -254,6 +275,55 @@ pub fn set_password(conn: &mut PgConnection, id: Uuid, nueva: &str) -> ApiResult
         .map_err(|e| ApiError::internal(format!("No se pudo cifrar la contraseña: {e}")))?;
     diesel::update(vendedores::table.find(id))
         .set((vendedores::password_hash.eq(hash), vendedores::updated_at.eq(crate::services::common::now())))
+        .execute(conn)?;
+    Ok(())
+}
+
+/// Genera (o regenera) el secreto 2FA y lo guarda cifrado SIN activarlo todavía.
+/// Devuelve (secreto_base32, url_otpauth) para mostrar al usuario.
+pub fn twofa_setup(conn: &mut PgConnection, vendedor_id: Uuid) -> ApiResult<(String, String)> {
+    let v = get(conn, vendedor_id)?;
+    let secret = crate::twofa::generar_secret();
+    let url = crate::twofa::url(&secret, &v.email)?;
+    diesel::update(vendedores::table.find(vendedor_id))
+        .set((
+            vendedores::twofa_secret.eq(Some(crate::crypto::cifrar(&secret))),
+            vendedores::twofa_enabled.eq(false),
+            vendedores::updated_at.eq(crate::services::common::now()),
+        ))
+        .execute(conn)?;
+    Ok((secret, url))
+}
+
+/// Activa el 2FA tras verificar un código válido.
+pub fn twofa_enable(conn: &mut PgConnection, vendedor_id: Uuid, codigo: &str) -> ApiResult<()> {
+    let v = get(conn, vendedor_id)?;
+    let enc = v.twofa_secret.as_deref().ok_or_else(|| ApiError::bad_request("Primero genera el 2FA"))?;
+    let secret = crate::crypto::descifrar(enc);
+    if !crate::twofa::verificar(&secret, codigo) {
+        return Err(ApiError::bad_request("Código de verificación inválido"));
+    }
+    diesel::update(vendedores::table.find(vendedor_id))
+        .set((vendedores::twofa_enabled.eq(true), vendedores::updated_at.eq(crate::services::common::now())))
+        .execute(conn)?;
+    Ok(())
+}
+
+/// Desactiva el 2FA (verifica el código si estaba activo) y borra el secreto.
+pub fn twofa_disable(conn: &mut PgConnection, vendedor_id: Uuid, codigo: &str) -> ApiResult<()> {
+    let v = get(conn, vendedor_id)?;
+    if v.twofa_enabled {
+        let secret = crate::crypto::descifrar(v.twofa_secret.as_deref().unwrap_or(""));
+        if !crate::twofa::verificar(&secret, codigo) {
+            return Err(ApiError::bad_request("Código de verificación inválido"));
+        }
+    }
+    diesel::update(vendedores::table.find(vendedor_id))
+        .set((
+            vendedores::twofa_secret.eq::<Option<String>>(None),
+            vendedores::twofa_enabled.eq(false),
+            vendedores::updated_at.eq(crate::services::common::now()),
+        ))
         .execute(conn)?;
     Ok(())
 }

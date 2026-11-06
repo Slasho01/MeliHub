@@ -34,3 +34,29 @@ export const put = (p, b) => api(p, { method: 'PUT', body: b ?? {} })
 export const del = (p) => api(p, { method: 'DELETE' })
 
 export const money = (v, m = 'CLP') => new Intl.NumberFormat('es-CL', { style: 'currency', currency: m, maximumFractionDigits: 0 }).format(v || 0)
+
+function saveBlob(blob, filename) {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url; a.download = filename; a.click()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+/** Descarga un archivo del backend (con auth), p. ej. un CSV. */
+export async function descargarCsv(path, filename) {
+  const headers = { 'ngrok-skip-browser-warning': '1' }
+  if (token) headers.Authorization = `Bearer ${token}`
+  const res = await fetch(BASE + path, { headers })
+  if (!res.ok) throw new Error(`Error ${res.status}`)
+  saveBlob(await res.blob(), filename)
+}
+
+/** Genera y descarga un CSV desde datos en el navegador. `rows` = array de arrays. */
+export function csvLocal(filename, rows) {
+  const esc = (v) => {
+    const s = String(v ?? '')
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+  }
+  const csv = rows.map((r) => r.map(esc).join(',')).join('\n')
+  saveBlob(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }), filename)
+}

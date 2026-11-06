@@ -41,6 +41,38 @@ pub async fn dashboard(user: AuthVendedor, q: web::Query<DashQuery>, pool: web::
     Ok(HttpResponse::Ok().json(db::run(&pool, move |conn| venta::dashboard(conn, vid, dias)).await?))
 }
 
+fn csv_campo(s: &str) -> String {
+    if s.contains([',', '"', '\n']) {
+        format!("\"{}\"", s.replace('"', "\"\""))
+    } else {
+        s.to_string()
+    }
+}
+
+/// Exporta las órdenes del período a CSV (descarga).
+pub async fn exportar(user: AuthVendedor, q: web::Query<DashQuery>, pool: web::Data<DbPool>) -> ApiResult<HttpResponse> {
+    let (vid, dias) = (user.id, q.into_inner().dias.unwrap_or(30));
+    let ordenes = db::run(&pool, move |conn| venta::ordenes_periodo(conn, vid, dias)).await?;
+    let mut csv = String::from("fecha,orden_ml,estado,comprador,venta_total,comision,costo,ganancia\n");
+    for o in &ordenes {
+        csv.push_str(&format!(
+            "{},{},{},{},{},{},{},{}\n",
+            o.fecha.format("%Y-%m-%d %H:%M"),
+            o.ml_order_id,
+            csv_campo(&o.estado),
+            csv_campo(o.comprador.as_deref().unwrap_or("")),
+            o.venta_total,
+            o.comision_total,
+            o.costo_total,
+            o.ganancia,
+        ));
+    }
+    Ok(HttpResponse::Ok()
+        .insert_header(("Content-Type", "text/csv; charset=utf-8"))
+        .insert_header(("Content-Disposition", "attachment; filename=\"ventas-melihub.csv\""))
+        .body(csv))
+}
+
 #[derive(Deserialize)]
 pub struct ListQuery {
     pub cuenta_id: Option<Uuid>,

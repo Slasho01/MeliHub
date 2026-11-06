@@ -24,8 +24,19 @@ async fn key_de(req: &HttpRequest, pool: &web::Data<DbPool>) -> ApiResult<ApiKey
 /// GET /api/pub/productos — catálogo del vendedor (precio del canal de la key).
 pub async fn productos(req: HttpRequest, pool: web::Data<DbPool>) -> ApiResult<HttpResponse> {
     let key = key_de(&req, &pool).await?;
-    let items = db::run(&pool, move |conn| pub_services::productos(conn, &key)).await?;
-    Ok(HttpResponse::Ok().json(items))
+    let all = db::run(&pool, move |conn| pub_services::productos(conn, &key)).await?;
+    let total = all.len();
+    // Paginación OPCIONAL (?limit=&offset=): sin parámetros devuelve todo (compat.
+    // con JarStore y versiones previas del plugin). `X-Total-Count` trae el total.
+    let q: std::collections::HashMap<String, String> =
+        web::Query::<std::collections::HashMap<String, String>>::from_query(req.query_string()).map(|x| x.into_inner()).unwrap_or_default();
+    let offset = q.get("offset").and_then(|s| s.parse::<usize>().ok()).unwrap_or(0);
+    let limit = q.get("limit").and_then(|s| s.parse::<usize>().ok());
+    let page: Vec<_> = match limit {
+        Some(l) => all.into_iter().skip(offset).take(l).collect(),
+        None => all.into_iter().skip(offset).collect(),
+    };
+    Ok(HttpResponse::Ok().insert_header(("X-Total-Count", total.to_string())).json(page))
 }
 
 #[derive(Deserialize)]

@@ -8,8 +8,10 @@ export default function Login({ onAuth }) {
   const [error, setError] = useState(null)
   const [msg, setMsg] = useState(null)
   const [busy, setBusy] = useState(false)
+  const [need2fa, setNeed2fa] = useState(false)
+  const [codigo, setCodigo] = useState('')
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value })
-  const ir = (m) => { setModo(m); setError(null); setMsg(null) }
+  const ir = (m) => { setModo(m); setError(null); setMsg(null); setNeed2fa(false); setCodigo('') }
 
   const submit = async (e) => {
     e.preventDefault()
@@ -23,9 +25,10 @@ export default function Login({ onAuth }) {
       }
       const path = modo === 'login' ? '/auth/login' : '/auth/registro'
       const body = modo === 'login'
-        ? { email: form.email, password: form.password }
+        ? { email: form.email, password: form.password, ...(need2fa ? { codigo } : {}) }
         : { nombre: form.nombre, email: form.email, password: form.password }
       const r = await post(path, body)
+      if (modo === 'login' && r.twofa_required) { setNeed2fa(true); setBusy(false); return }
       setToken(r.token)
       onAuth()
     } catch (err) { setError(err.message) } finally { setBusy(false) }
@@ -48,6 +51,10 @@ export default function Login({ onAuth }) {
           {modo !== 'forgot' && (
             <div><label>Contraseña</label><input className="input" type="password" value={form.password} onChange={set('password')} required minLength={8} />
               {modo === 'registro' && <PasswordMeter value={form.password} />}</div>
+          )}
+          {need2fa && modo === 'login' && (
+            <div><label>Código de verificación (2FA)</label>
+              <input className="input" inputMode="numeric" autoComplete="one-time-code" placeholder="6 dígitos" value={codigo} onChange={(e) => setCodigo(e.target.value)} autoFocus /></div>
           )}
           {error && <div className="alert alert-bad">{error}</div>}
           {msg && <div className="alert alert-ok">{msg}</div>}

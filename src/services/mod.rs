@@ -2,6 +2,7 @@ pub mod admin_services;
 pub mod api_key_services;
 pub mod auth_services;
 pub mod common;
+pub mod auditoria_services;
 pub mod cupon_services;
 pub mod facturacion_services;
 pub mod equipo_services;

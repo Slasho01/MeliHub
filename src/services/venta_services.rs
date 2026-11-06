@@ -3,7 +3,7 @@
 //! cargaste en Inventario). Expone el listado y un dashboard agregado.
 
 use crate::errors::ApiResult;
-use crate::models::{NewOrdenMl, OrdenMl};
+use crate::models::{NewOrdenMl, OrdenMl, Producto};
 use crate::schema::{ml_cuentas, ordenes_ml, productos};
 use chrono::{Duration, NaiveDate, NaiveDateTime, Utc};
 use diesel::prelude::*;
@@ -150,6 +150,18 @@ pub struct Dashboard {
     pub margen_pct: f64,
     pub serie: Vec<DiaVenta>,
     pub top_productos: Vec<TopProducto>,
+    /// Productos activos con stock que NO vendieron en el período (hasta 10).
+    pub sin_rotacion: Vec<ProductoSimple>,
+    pub sin_rotacion_total: i64,
+    /// Productos activos sin costo cargado (la ganancia no es confiable).
+    pub sin_costo: i64,
+}
+
+#[derive(Serialize)]
+pub struct ProductoSimple {
+    pub ml_item_id: String,
+    pub titulo: String,
+    pub stock: i32,
 }
 
 /// Dashboard agregado de los últimos `dias` (excluye órdenes canceladas).
@@ -201,12 +213,29 @@ pub fn dashboard(conn: &mut PgConnection, vendedor_id: Uuid, dias: i64) -> ApiRe
             }
         }
     }
+    let vendidos: std::collections::HashSet<String> = acc.keys().cloned().collect();
     let mut top: Vec<TopProducto> = acc
         .into_iter()
         .map(|(id, (titulo, cant, vta))| TopProducto { ml_item_id: id, titulo, cantidad: cant, venta: vta })
         .collect();
     top.sort_by(|a, b| b.venta.cmp(&a.venta));
     top.truncate(10);
+
+    // Insights de inventario: sin rotación (activos con stock que no vendieron) y sin costo.
+    let prods: Vec<Producto> = productos::table
+        .inner_join(ml_cuentas::table)
+        .filter(ml_cuentas::vendedor_id.eq(vendedor_id))
+        .select(Producto::as_select())
+        .load(conn)?;
+    let mut sin_rot: Vec<ProductoSimple> = prods
+        .iter()
+        .filter(|p| p.estado == "active" && p.stock > 0 && !vendidos.contains(&p.ml_item_id))
+        .map(|p| ProductoSimple { ml_item_id: p.ml_item_id.clone(), titulo: p.titulo.clone(), stock: p.stock })
+        .collect();
+    let sin_rotacion_total = sin_rot.len() as i64;
+    sin_rot.sort_by(|a, b| b.stock.cmp(&a.stock));
+    sin_rot.truncate(10);
+    let sin_costo = prods.iter().filter(|p| p.estado == "active" && p.costo.unwrap_or(0) <= 0).count() as i64;
 
     Ok(Dashboard {
         dias,
@@ -219,5 +248,23 @@ pub fn dashboard(conn: &mut PgConnection, vendedor_id: Uuid, dias: i64) -> ApiRe
         margen_pct: if venta > 0 { (ganancia as f64 / venta as f64) * 100.0 } else { 0.0 },
         serie,
         top_productos: top,
+        sin_rotacion: sin_rot,
+        sin_rotacion_total,
+        sin_costo,
     })
+}
+
+/// Órdenes del período (no canceladas) para exportar. Reusa el mismo filtro que el dashboard.
+pub fn ordenes_periodo(conn: &mut PgConnection, vendedor_id: Uuid, dias: i64) -> ApiResult<Vec<OrdenMl>> {
+    let dias = dias.clamp(1, 730);
+    let desde = Utc::now().naive_utc() - Duration::days(dias);
+    ordenes_ml::table
+        .inner_join(ml_cuentas::table)
+        .filter(ml_cuentas::vendedor_id.eq(vendedor_id))
+        .filter(ordenes_ml::estado.ne("cancelled"))
+        .filter(ordenes_ml::fecha.ge(desde))
+        .order(ordenes_ml::fecha.desc())
+        .select(OrdenMl::as_select())
+        .load(conn)
+        .map_err(crate::errors::ApiError::from)
 }

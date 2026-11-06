@@ -98,6 +98,16 @@ pub fn cancelar_local(conn: &mut PgConnection, vendedor_id: Uuid) -> ApiResult<O
     Ok(sub.preapproval_id)
 }
 
+/// ¿El vendedor ya tuvo alguna suscripción real (no pending)? Para no dar trial 2 veces.
+pub fn tuvo_suscripcion(conn: &mut PgConnection, vendedor_id: Uuid) -> ApiResult<bool> {
+    let n: i64 = suscripciones::table
+        .filter(suscripciones::vendedor_id.eq(vendedor_id))
+        .filter(suscripciones::estado.ne("pending"))
+        .count()
+        .get_result(conn)?;
+    Ok(n > 0)
+}
+
 /// Email del vendedor y plan de una suscripción (para el correo de confirmación).
 pub fn email_y_plan(conn: &mut PgConnection, preapproval_id: &str) -> ApiResult<Option<(String, String)>> {
     let sub: Option<Suscripcion> = suscripciones::table

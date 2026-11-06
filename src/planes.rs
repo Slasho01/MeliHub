@@ -18,6 +18,9 @@ pub struct Plan {
     pub precio_anual: i64,
 }
 
+/// Días de prueba gratis en la primera suscripción a un plan de pago.
+pub const TRIAL_DIAS: i64 = 14;
+
 pub const PLANES: &[Plan] = &[
     Plan { id: "free", nombre: "Free", max_cuentas: 1, max_productos: 50, max_plataformas: 1, precio_mensual: 0, precio_anual: 0 },
     Plan { id: "pro", nombre: "Pro", max_cuentas: 3, max_productos: 1000, max_plataformas: 3, precio_mensual: 9990, precio_anual: 99900 },

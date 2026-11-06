@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState } from 'react'
-import { get, money, post, put } from '../api'
+import { get, money, post, put, csvLocal } from '../api'
 
 const CAMPO_LABEL = { precio: 'Precio', stock: 'Stock', estado: 'Estado' }
 const FUENTE_LABEL = { sync: 'sincronización', venta: 'venta', manual: 'manual' }
@@ -97,6 +97,14 @@ export default function Inventario({ me }) {
   const allSel = allIds.length > 0 && allIds.every((id) => sel.has(id))
   const toggleAll = () => setSel((s) => { const n = new Set(s); allSel ? allIds.forEach((id) => n.delete(id)) : allIds.forEach((id) => n.add(id)); return n })
 
+  const exportarCsv = () => {
+    const rows = [['ML ID', 'Título', 'Estado', 'Stock', 'Precio ML', 'Costo', 'Mi precio', 'Ganancia ML', 'Ganancia propio', 'Margen ML %']]
+    for (const p of items || []) {
+      rows.push([p.ml_item_id, p.titulo, p.estado, p.stock, p.precio, p.costo ?? '', p.precio_jarstore ?? '', p.ml?.ganancia ?? '', p.jarstore?.ganancia ?? '', p.ml?.margen ?? ''])
+    }
+    csvLocal('inventario-melihub.csv', rows)
+  }
+
   const aplicarMasivo = async () => {
     const ids = [...sel]
     if (!ids.length) return
@@ -119,6 +127,7 @@ export default function Inventario({ me }) {
             <option value="">Todas las cuentas</option>
             {cuentas.map((c) => <option key={c.id} value={c.id}>{c.nickname || `Usuario ${c.ml_user_id}`}</option>)}
           </select>
+          <button className="btn btn-sm" disabled={!items?.length} onClick={exportarCsv}>Exportar CSV</button>
         </div>
       </div>
       {error && <div className="alert alert-bad">{error}</div>}

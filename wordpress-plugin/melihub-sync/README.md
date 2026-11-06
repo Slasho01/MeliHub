@@ -16,10 +16,17 @@ sincronizado en dos vías (WooCommerce ↔ MeliHub ↔ Mercado Libre).
 ## Qué hace
 - **Importa** los productos de MeliHub a WooCommerce (los empareja por SKU = ID de
   Mercado Libre; guarda el id de MeliHub como metadato para reportar ventas).
-  Actualiza nombre, precio, stock y estado. La imagen se trae la primera vez.
+  Actualiza nombre, precio, stock, estado, descripción, ficha técnica (atributos)
+  y categoría. La imagen se (re)descarga si cambia.
+- La sincronización se hace **por páginas** (50 a la vez), así que no se cae con
+  catálogos grandes; si un producto falla, sigue con el resto y lo reporta.
 - Al **vender** en WooCommerce, descuenta stock en MeliHub (que a su vez lo baja
   en Mercado Libre).
 - Cada 15 min **re-sincroniza** para reflejar ventas ocurridas en Mercado Libre.
+- **Ocultar retirados** (opcional): los productos que ya no vienen de MeliHub se
+  pasan a borrador automáticamente.
+- **Probar conexión**: verifica URL + API key y muestra cuántos productos hay en
+  el canal, antes de sincronizar.
 
 ## Notas
 - MeliHub debe estar accesible por HTTPS desde el servidor de WordPress.
