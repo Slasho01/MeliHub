@@ -22,6 +22,7 @@ import Auditoria from './pages/Auditoria'
 export default function App() {
   const [auth, setAuth] = useState(() => !!getToken())
   const [me, setMe] = useState(null)
+  const [menu, setMenu] = useState(false)
 
   const logout = () => { setToken(null); setAuth(false); setMe(null) }
 
@@ -43,27 +44,30 @@ export default function App() {
     <>
       <header className="topbar">
         <div className="brand">Meli<b>Hub</b></div>
-        <nav className="nav">
-          <NavLink to="/" end className={cls}>Cuentas</NavLink>
-          <NavLink to="/inventario" className={cls}>Inventario</NavLink>
-          <NavLink to="/ganancias" className={cls}>Ganancias</NavLink>
-          <NavLink to="/ventas" className={cls}>Ventas</NavLink>
-          {me?.es_owner && <NavLink to="/api-keys" className={cls}>API keys</NavLink>}
-          {me?.es_owner && <NavLink to="/equipo" className={cls}>Equipo</NavLink>}
-          {me?.es_owner && <NavLink to="/auditoria" className={cls}>Actividad</NavLink>}
-          <NavLink to="/notificaciones" className={cls}>Notificaciones</NavLink>
-          {me?.es_owner && <NavLink to="/plan" className={cls}>Plan</NavLink>}
-          {me?.es_owner && <NavLink to="/suscripcion" className={cls}>Suscripción</NavLink>}
-          {me?.es_owner && <NavLink to="/facturacion" className={cls}>Facturación</NavLink>}
-          <NavLink to="/perfil" className={cls}>Mi cuenta</NavLink>
-          {me?.es_admin && <NavLink to="/admin" className={cls}>Admin</NavLink>}
-        </nav>
-        <div className="spacer" />
-        {me?.es_owner && (me.plan !== 'business'
-          ? <NavLink to="/plan" className="btn btn-sm btn-accent" style={{ marginRight: 10 }}>⭐ Mejorar plan</NavLink>
-          : <NavLink to="/plan" className="muted sm" style={{ marginRight: 10, textDecoration: 'none' }}>Plan Business ✓</NavLink>)}
-        {me && <span className="muted sm">{me.nombre}{me.es_admin ? ' · admin' : me.es_miembro ? ` · ${me.rol_equipo}` : ''}</span>}
-        <button className="btn btn-sm" onClick={logout}>Salir</button>
+        <button className="nav-toggle" aria-label="Menú" aria-expanded={menu} onClick={() => setMenu((v) => !v)}>☰</button>
+        <div className={`topbar-menu ${menu ? 'open' : ''}`} onClick={() => setMenu(false)}>
+          <nav className="nav">
+            <NavLink to="/" end className={cls}>Cuentas</NavLink>
+            <NavLink to="/inventario" className={cls}>Inventario</NavLink>
+            <NavLink to="/ganancias" className={cls}>Ganancias</NavLink>
+            <NavLink to="/ventas" className={cls}>Ventas</NavLink>
+            {me?.es_owner && <NavLink to="/api-keys" className={cls}>API keys</NavLink>}
+            {me?.es_owner && <NavLink to="/equipo" className={cls}>Equipo</NavLink>}
+            {me?.es_owner && <NavLink to="/auditoria" className={cls}>Actividad</NavLink>}
+            <NavLink to="/notificaciones" className={cls}>Notificaciones</NavLink>
+            {me?.es_owner && <NavLink to="/plan" className={cls}>Plan</NavLink>}
+            {me?.es_owner && <NavLink to="/suscripcion" className={cls}>Suscripción</NavLink>}
+            {me?.es_owner && <NavLink to="/facturacion" className={cls}>Facturación</NavLink>}
+            <NavLink to="/perfil" className={cls}>Mi cuenta</NavLink>
+            {me?.es_admin && <NavLink to="/admin" className={cls}>Admin</NavLink>}
+          </nav>
+          <div className="spacer" />
+          {me?.es_owner && (me.plan !== 'business'
+            ? <NavLink to="/plan" className="btn btn-sm btn-accent">⭐ Mejorar plan</NavLink>
+            : <NavLink to="/plan" className="muted sm" style={{ textDecoration: 'none' }}>Plan Business ✓</NavLink>)}
+          {me && <span className="muted sm">{me.nombre}{me.es_admin ? ' · admin' : me.es_miembro ? ` · ${me.rol_equipo}` : ''}</span>}
+          <button className="btn btn-sm" onClick={logout}>Salir</button>
+        </div>
       </header>
       <main className="container">
         <Routes>

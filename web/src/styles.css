@@ -12,13 +12,32 @@ button { font: inherit; cursor: pointer; }
 .topbar { display: flex; align-items: center; gap: 20px; padding: 14px 24px; background: var(--surface); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 10; }
 .brand { font-weight: 800; letter-spacing: -.02em; font-size: 18px; }
 .brand b { color: var(--accent); }
-.nav { display: flex; gap: 4px; margin-left: 12px; }
-.nav a { padding: 7px 12px; border-radius: 8px; text-decoration: none; color: var(--muted); font-weight: 600; }
+.nav { display: flex; gap: 4px; flex-wrap: wrap; }
+.nav a { padding: 7px 12px; border-radius: 8px; text-decoration: none; color: var(--muted); font-weight: 600; white-space: nowrap; }
 .nav a.on { background: var(--surface-2); color: var(--ink); }
 .spacer { flex: 1; }
+.topbar-menu { display: flex; flex: 1; align-items: center; gap: 14px; min-width: 0; }
+.nav-toggle { display: none; margin-left: auto; background: none; border: 1px solid var(--line); color: var(--ink); border-radius: 8px; padding: 6px 11px; font-size: 18px; line-height: 1; cursor: pointer; }
+
+/* Responsive: móviles y tablets en vertical -> menú hamburguesa */
+@media (max-width: 900px) {
+  .topbar { flex-wrap: wrap; gap: 10px; padding: 12px 16px; }
+  .nav-toggle { display: block; }
+  .topbar-menu { display: none; flex-basis: 100%; flex-direction: column; align-items: stretch; gap: 8px; }
+  .topbar-menu.open { display: flex; }
+  .nav { flex-direction: column; gap: 2px; margin: 0; }
+  .nav a { padding: 11px 12px; }
+  .spacer { display: none; }
+  .topbar-menu > .btn, .topbar-menu > a.btn, .topbar-menu > a.btn-accent { width: 100%; text-align: center; }
+  .container { padding: 16px; }
+  .card { overflow-x: auto; }                 /* tablas anchas hacen scroll dentro de su tarjeta */
+  table { font-size: 13px; }
+  th, td { padding: 8px 6px; }
+  h1 { font-size: 20px; }
+}
 
 .container { max-width: 1040px; margin: 0 auto; padding: 24px; }
-.row { display: flex; align-items: center; gap: 12px; }
+.row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .between { justify-content: space-between; }
 h1 { font-size: 22px; letter-spacing: -.02em; margin: 0 0 4px; }
 .muted { color: var(--muted); }
