@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { get, put, post } from '../api'
+import { get, put, post, setToken } from '../api'
 import PasswordMeter, { passwordOk } from '../components/PasswordMeter'
 
 export default function Perfil() {
@@ -36,6 +36,11 @@ export default function Perfil() {
     catch (e) { setError(e.message) }
   }
 
+  const cerrarTodo = async () => {
+    if (!window.confirm('Esto cerrará tu sesión en TODOS los dispositivos (incluido este). Tendrás que volver a entrar. ¿Continuar?')) return
+    try { await post('/auth/logout-all', {}); setToken(null); window.location.href = '/' } catch (e) { setError(e.message) }
+  }
+
   const cambiarPwd = async () => {
     setError(null); setMsg(null)
     if (!passwordOk(pwd.nueva)) { setError('La nueva contraseña debe tener al menos 8 caracteres, con letras y números.'); return }
@@ -68,6 +73,9 @@ export default function Perfil() {
           <input className="input" type="password" autoComplete="new-password" value={pwd.nueva} onChange={(e) => setPwd({ ...pwd, nueva: e.target.value })} />
           <PasswordMeter value={pwd.nueva} /></label>
         <div><button className="btn btn-accent" onClick={cambiarPwd}>Cambiar contraseña</button></div>
+        <hr style={{ border: 0, borderTop: '1px solid var(--line)', margin: '4px 0' }} />
+        <div className="sm muted">¿Dejaste la sesión abierta en otro lado?</div>
+        <div><button className="btn btn-sm btn-danger" onClick={cerrarTodo}>Cerrar sesión en todos los dispositivos</button></div>
       </div>
 
       <div className="card stack">

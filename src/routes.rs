@@ -11,6 +11,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(r("/auth/forgot").route(post().to(auth::forgot)))
             .service(r("/auth/reset").route(post().to(auth::reset)))
             .service(r("/auth/me").route(get().to(auth::me)))
+            .service(r("/auth/logout-all").route(post().to(auth::logout_all)))
             .service(r("/auth/perfil").route(put().to(auth::actualizar_perfil)))
             .service(r("/auth/password").route(put().to(auth::cambiar_password)))
             .service(r("/auth/2fa/setup").route(post().to(auth::twofa_setup)))

@@ -19,18 +19,21 @@ pub struct Claims {
     pub aid: String, // actor id (miembro o dueño); vacío (tokens viejos) = el dueño (sub)
     #[serde(default = "rol_owner")]
     pub req: String, // rol de equipo: owner | operador | lectura
+    #[serde(default)]
+    pub sv: i32, // versión de sesión (para revocar tokens)
     pub exp: usize,
 }
 
 /// Emite un JWT (válido 7 días). `org_id` es la organización (vendedor dueño);
 /// `actor_id` es quién inició sesión; `rol_equipo` su rol dentro de la org.
-pub fn crear_token(org_id: Uuid, rol: &str, actor_id: Uuid, rol_equipo: &str, secret: &str) -> Result<String, ApiError> {
+pub fn crear_token(org_id: Uuid, rol: &str, actor_id: Uuid, rol_equipo: &str, sv: i32, secret: &str) -> Result<String, ApiError> {
     let exp = (chrono::Utc::now() + chrono::Duration::days(7)).timestamp() as usize;
     let claims = Claims {
         sub: org_id.to_string(),
         rol: rol.to_string(),
         aid: actor_id.to_string(),
         req: rol_equipo.to_string(),
+        sv,
         exp,
     };
     encode(&Header::new(Algorithm::HS256), &claims, &EncodingKey::from_secret(secret.as_bytes()))
@@ -128,40 +131,49 @@ impl FromRequest for AuthVendedor {
     fn from_request(req: &HttpRequest, _: &mut Payload) -> Self::Future {
         let req = req.clone();
         Box::pin(async move {
-            let auth = extraer(&req)?;
-            // El dueño no se revalida (sin costo extra). A los miembros sí los
-            // revalidamos contra la BD: así la expulsión y los cambios de rol
-            // surten efecto de inmediato (el JWT por sí solo no se puede revocar).
-            if !auth.es_miembro() {
-                return Ok(auth);
-            }
+            let (auth, token_sv) = extraer(&req)?;
+            // Revalidación por request contra la BD: el dueño debe seguir activo y
+            // su `session_version` coincidir (permite revocar todos sus tokens); el
+            // miembro además debe seguir existiendo/activo (expulsión inmediata).
             let pool = req
                 .app_data::<web::Data<crate::db::DbPool>>()
                 .ok_or_else(|| ApiError::internal("Pool no disponible"))?
                 .clone();
-            let (aid, org) = (auth.actor_id, auth.id);
+            let (aid, org, es_m) = (auth.actor_id, auth.id, auth.es_miembro());
             let rol_db: Option<String> = crate::db::run(&pool, move |conn| {
-                use crate::schema::miembros::dsl as m;
                 use diesel::prelude::*;
-                m::miembros
-                    .filter(m::id.eq(aid))
-                    .filter(m::vendedor_id.eq(org))
-                    .filter(m::estado.eq("activo"))
-                    .select(m::rol)
-                    .first::<String>(conn)
-                    .optional()
-                    .map_err(ApiError::from)
+                if es_m {
+                    use crate::schema::miembros::dsl as m;
+                    m::miembros
+                        .filter(m::id.eq(aid))
+                        .filter(m::vendedor_id.eq(org))
+                        .filter(m::estado.eq("activo"))
+                        .select((m::rol, m::session_version))
+                        .first::<(String, i32)>(conn)
+                        .optional()
+                        .map(|o| o.and_then(|(rol, sv)| (sv == token_sv).then_some(rol)))
+                        .map_err(ApiError::from)
+                } else {
+                    use crate::schema::vendedores::dsl as v;
+                    v::vendedores
+                        .find(org)
+                        .select((v::activo, v::session_version))
+                        .first::<(bool, i32)>(conn)
+                        .optional()
+                        .map(|o| o.and_then(|(activo, sv)| (activo && sv == token_sv).then(|| "owner".to_string())))
+                        .map_err(ApiError::from)
+                }
             })
             .await?;
             match rol_db {
                 Some(rol) => Ok(AuthVendedor { rol_equipo: rol, ..auth }),
-                None => Err(ApiError::unauthorized("Tu acceso fue revocado")),
+                None => Err(ApiError::unauthorized("Tu sesión expiró o fue revocada. Inicia sesión de nuevo.")),
             }
         })
     }
 }
 
-fn extraer(req: &HttpRequest) -> Result<AuthVendedor, ApiError> {
+fn extraer(req: &HttpRequest) -> Result<(AuthVendedor, i32), ApiError> {
     let secret = req
         .app_data::<web::Data<Config>>()
         .map(|c| c.jwt_secret.clone())
@@ -184,7 +196,7 @@ fn extraer(req: &HttpRequest) -> Result<AuthVendedor, ApiError> {
     // Tokens antiguos no traen `aid`/`req`: por defecto el actor es el dueño.
     let actor_id = Uuid::parse_str(&data.claims.aid).unwrap_or(id);
     let rol_equipo = if data.claims.req.is_empty() { "owner".to_string() } else { data.claims.req };
-    Ok(AuthVendedor { id, actor_id, rol: data.claims.rol, rol_equipo })
+    Ok((AuthVendedor { id, actor_id, rol: data.claims.rol, rol_equipo }, data.claims.sv))
 }
 
 // ----------------------------- Rate limiting de login -----------------------------

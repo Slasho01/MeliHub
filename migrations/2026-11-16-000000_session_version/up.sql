@@ -1,0 +1,2 @@
+ALTER TABLE vendedores ADD COLUMN session_version INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE miembros ADD COLUMN session_version INTEGER NOT NULL DEFAULT 0;

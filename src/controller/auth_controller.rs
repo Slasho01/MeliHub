@@ -65,7 +65,7 @@ pub async fn registrar(
     cfg: web::Data<Config>,
 ) -> ApiResult<HttpResponse> {
     let v = db::run(&pool, move |conn| svc::registrar(conn, body.into_inner())).await?;
-    let token = crear_token(v.id, &v.rol, v.id, "owner", &cfg.jwt_secret)?;
+    let token = crear_token(v.id, &v.rol, v.id, "owner", v.session_version, &cfg.jwt_secret)?;
     Ok(HttpResponse::Created().json(json!({ "token": token, "vendedor": v })))
 }
 
@@ -89,7 +89,7 @@ pub async fn login(
         }
         Ok(svc::LoginOutcome::Ok(s)) => {
             limiter.exito(&ip);
-            let token = crear_token(s.org_id, &s.rol, s.actor_id, &s.rol_equipo, &cfg.jwt_secret)?;
+            let token = crear_token(s.org_id, &s.rol, s.actor_id, &s.rol_equipo, s.sv, &cfg.jwt_secret)?;
             Ok(HttpResponse::Ok().json(json!({ "token": token, "me": s })))
         }
         Err(e) => {
@@ -97,6 +97,13 @@ pub async fn login(
             Err(e)
         }
     }
+}
+
+/// Cierra la sesión en todos los dispositivos (invalida todos los tokens del actor).
+pub async fn logout_all(user: AuthVendedor, pool: web::Data<DbPool>) -> ApiResult<HttpResponse> {
+    let (es_m, actor) = (user.es_miembro(), user.actor_id);
+    db::run(&pool, move |conn| svc::logout_all(conn, es_m, actor)).await?;
+    Ok(HttpResponse::Ok().json(json!({ "ok": true })))
 }
 
 pub async fn me(user: AuthVendedor, pool: web::Data<DbPool>) -> ApiResult<HttpResponse> {

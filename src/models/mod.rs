@@ -22,6 +22,8 @@ pub struct Vendedor {
     #[serde(skip_serializing)]
     pub twofa_secret: Option<String>,
     pub twofa_enabled: bool,
+    #[serde(skip_serializing)]
+    pub session_version: i32,
 }
 
 #[derive(Insertable)]
@@ -80,6 +82,8 @@ pub struct Miembro {
     #[serde(skip_serializing)]
     pub twofa_secret: Option<String>,
     pub twofa_enabled: bool,
+    #[serde(skip_serializing)]
+    pub session_version: i32,
 }
 
 #[derive(Insertable)]

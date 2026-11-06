@@ -15,6 +15,8 @@ pub struct Sesion {
     pub rol: String,        // súper-admin de plataforma: admin | vendedor
     pub rol_equipo: String, // owner | operador | lectura
     pub plan: String,
+    #[serde(skip_serializing)]
+    pub sv: i32, // versión de sesión actual del actor
 }
 
 #[derive(Deserialize)]
@@ -122,6 +124,7 @@ pub fn login(conn: &mut PgConnection, req: LoginRequest) -> ApiResult<LoginOutco
             rol: v.rol,
             rol_equipo: "owner".to_string(),
             plan: v.plan,
+            sv: v.session_version,
         })));
     }
 
@@ -160,6 +163,7 @@ pub fn login(conn: &mut PgConnection, req: LoginRequest) -> ApiResult<LoginOutco
             rol: "vendedor".to_string(),
             rol_equipo: m.rol,
             plan: org.plan,
+            sv: m.session_version,
         })));
     }
 
@@ -253,7 +257,7 @@ pub fn cambiar_password(conn: &mut PgConnection, org_id: Uuid, actor_id: Uuid, r
             return Err(ApiError::unauthorized("La contraseña actual no es correcta"));
         }
         diesel::update(vendedores::table.find(org_id))
-            .set((vendedores::password_hash.eq(hash), vendedores::updated_at.eq(crate::services::common::now())))
+            .set((vendedores::password_hash.eq(hash), vendedores::session_version.eq(vendedores::session_version + 1), vendedores::updated_at.eq(crate::services::common::now())))
             .execute(conn)?;
     } else {
         let m: Miembro = miembros::table.find(actor_id).select(Miembro::as_select()).first(conn)?;
@@ -262,7 +266,7 @@ pub fn cambiar_password(conn: &mut PgConnection, org_id: Uuid, actor_id: Uuid, r
             return Err(ApiError::unauthorized("La contraseña actual no es correcta"));
         }
         diesel::update(miembros::table.find(actor_id))
-            .set((miembros::password_hash.eq(hash), miembros::updated_at.eq(crate::services::common::now())))
+            .set((miembros::password_hash.eq(hash), miembros::session_version.eq(miembros::session_version + 1), miembros::updated_at.eq(crate::services::common::now())))
             .execute(conn)?;
     }
     Ok(())
@@ -291,8 +295,23 @@ pub fn set_password(conn: &mut PgConnection, id: Uuid, pwf: &str, nueva: &str) -
     let hash = bcrypt::hash(nueva, bcrypt::DEFAULT_COST)
         .map_err(|e| ApiError::internal(format!("No se pudo cifrar la contraseña: {e}")))?;
     diesel::update(vendedores::table.find(id))
-        .set((vendedores::password_hash.eq(hash), vendedores::updated_at.eq(crate::services::common::now())))
+        .set((vendedores::password_hash.eq(hash), vendedores::session_version.eq(vendedores::session_version + 1), vendedores::updated_at.eq(crate::services::common::now())))
         .execute(conn)?;
+    Ok(())
+}
+
+/// Cierra la sesión en todos los dispositivos (sube la versión → invalida todos los tokens).
+pub fn logout_all(conn: &mut PgConnection, es_miembro: bool, actor_id: Uuid) -> ApiResult<()> {
+    let now = crate::services::common::now();
+    if es_miembro {
+        diesel::update(miembros::table.find(actor_id))
+            .set((miembros::session_version.eq(miembros::session_version + 1), miembros::updated_at.eq(now)))
+            .execute(conn)?;
+    } else {
+        diesel::update(vendedores::table.find(actor_id))
+            .set((vendedores::session_version.eq(vendedores::session_version + 1), vendedores::updated_at.eq(now)))
+            .execute(conn)?;
+    }
     Ok(())
 }
 
