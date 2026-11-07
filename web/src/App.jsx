@@ -20,6 +20,7 @@ import Suscripcion from './pages/Suscripcion'
 import Auditoria from './pages/Auditoria'
 import Envios from './pages/Envios'
 import Landing from './pages/Landing'
+import Docs from './pages/Docs'
 
 export default function App() {
   const [auth, setAuth] = useState(() => !!getToken())
@@ -38,6 +39,7 @@ export default function App() {
       <Route path="/reset" element={<Reset />} />
       <Route path="/aceptar" element={<Aceptar />} />
       <Route path="/legal" element={<Legal />} />
+      <Route path="/docs" element={<Docs />} />
       <Route path="/" element={<Landing />} />
       <Route path="*" element={<Login onAuth={() => setAuth(true)} />} />
     </Routes>
@@ -91,6 +93,7 @@ export default function App() {
           <Route path="/perfil" element={<Perfil />} />
           <Route path="/admin" element={me && !me.es_admin ? <Navigate to="/" replace /> : <Admin />} />
           <Route path="/legal" element={<Legal />} />
+          <Route path="/docs" element={<Docs />} />
           <Route path="/aceptar" element={<Aceptar />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

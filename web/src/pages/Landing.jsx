@@ -60,6 +60,7 @@ export default function Landing() {
           <a href="#features">Características</a>
           <a href="#como">Cómo funciona</a>
           <a href="#precios">Precios</a>
+          <Link to="/docs">API</Link>
           <Link to="/login" className="btn btn-sm">Entrar</Link>
           <Link to="/login?r=1" className="btn btn-sm btn-accent">Crear cuenta</Link>
         </nav>
@@ -80,12 +81,12 @@ export default function Landing() {
         <p className="muted sm" style={{ marginTop: 10 }}>14 días de prueba · Sin tarjeta para empezar</p>
 
         <div className="lp-mock">
-          <div className="lp-mock-bar"><span /><span /><span /></div>
+          <div className="lp-mock-bar"><span /><span /><span /><em className="muted sm">Panel MeliHub</em></div>
           <div className="lp-mock-body">
-            <div className="lp-mock-row"><b>JARSTORESPA</b><span className="tag tag-ok">Conectada</span><i className="muted sm">1.006 productos</i></div>
-            <div className="lp-mock-row"><b>mix8</b><span className="tag tag-ok">Conectada</span><i className="muted sm">342 productos</i></div>
+            <div className="lp-mock-row"><b>Inventario</b><span className="tag tag-ok">Sincronizado</span><i className="muted sm">1.342 productos</i></div>
             <div className="lp-mock-row"><b>Ventas de hoy</b><span className="tag">18 pedidos</span><i className="muted sm">Ganancia $284.900</i></div>
             <div className="lp-mock-row"><b>Envíos</b><span className="tag tag-ok">7 por imprimir</span><i className="muted sm">Flex + colecta</i></div>
+            <div className="lp-mock-row"><b>Canales</b><span className="tag">Tienda + WooCommerce</span><i className="muted sm">Stock en 2 vías</i></div>
           </div>
         </div>
       </section>
@@ -143,6 +144,7 @@ export default function Landing() {
       <footer className="lp-footer">
         <div className="brand">Meli<b>Hub</b></div>
         <div className="row" style={{ gap: 16, flexWrap: 'wrap' }}>
+          <Link to="/docs" className="muted">Documentación API</Link>
           <Link to="/legal" className="muted">Términos y privacidad</Link>
           <Link to="/login" className="muted">Entrar</Link>
         </div>

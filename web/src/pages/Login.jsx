@@ -71,6 +71,11 @@ export default function Login({ onAuth }) {
           {modo === 'forgot' && <div><button className="link-btn" onClick={() => ir('login')}>← Volver</button></div>}
         </div>
         <div className="center sm muted"><a className="link-btn" href="/legal">Términos y Privacidad</a></div>
+        <div className="center sm muted" style={{ borderTop: '1px solid var(--line)', paddingTop: 12, marginTop: 2 }}>
+          <a className="link-btn" href="/docs">Documentación de la API</a>
+          <span style={{ margin: '0 8px' }}>·</span>
+          <a className="link-btn" href="/melihub-sync.zip" download>⬇ Plugin de WordPress</a>
+        </div>
       </div>
     </div>
   )

@@ -30,7 +30,7 @@ export default function ApiKeys() {
 
   return (
     <div className="stack">
-      <div><h1>API keys</h1><p className="muted sm" style={{ margin: 0 }}>Para que tu tienda u otra plataforma (ej. WordPress) consuma tus productos y reporte ventas.</p></div>
+      <div><h1>API keys</h1><p className="muted sm" style={{ margin: 0 }}>Para que tu tienda u otra plataforma (ej. WordPress) consuma tus productos y reporte ventas. <a href="/docs" target="_blank" rel="noreferrer" style={{ color: 'var(--accent)' }}>Ver documentación</a> · <a href="/melihub-sync.zip" download style={{ color: 'var(--accent)' }}>Descargar plugin de WordPress</a>.</p></div>
       {error && <div className="alert alert-bad">{error}</div>}
       {creada && (
         <div className="card stack" style={{ borderColor: 'var(--accent)' }}>
