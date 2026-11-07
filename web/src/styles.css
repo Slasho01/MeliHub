@@ -135,6 +135,7 @@ td img { width: 40px; height: 40px; border-radius: 7px; object-fit: cover; backg
 /* ===================== Landing pública ===================== */
 .lp { max-width: 100%; overflow-x: hidden; background: var(--bg); }
 .btn-lg { padding: 13px 26px; font-size: 15px; border-radius: 11px; }
+.lp .btn, .doc .btn { display: inline-block; text-decoration: none; }
 
 .lp-nav { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 16px;
   padding: 14px 24px; background: color-mix(in srgb, var(--surface) 88%, transparent);
