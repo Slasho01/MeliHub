@@ -19,6 +19,7 @@ import Facturacion from './pages/Facturacion'
 import Suscripcion from './pages/Suscripcion'
 import Auditoria from './pages/Auditoria'
 import Envios from './pages/Envios'
+import Landing from './pages/Landing'
 
 export default function App() {
   const [auth, setAuth] = useState(() => !!getToken())
@@ -33,9 +34,11 @@ export default function App() {
 
   if (!auth) return (
     <Routes>
+      <Route path="/login" element={<Login onAuth={() => setAuth(true)} />} />
       <Route path="/reset" element={<Reset />} />
       <Route path="/aceptar" element={<Aceptar />} />
       <Route path="/legal" element={<Legal />} />
+      <Route path="/" element={<Landing />} />
       <Route path="*" element={<Login onAuth={() => setAuth(true)} />} />
     </Routes>
   )

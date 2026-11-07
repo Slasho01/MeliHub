@@ -3,7 +3,7 @@ import { post, setToken } from '../api'
 import PasswordMeter from '../components/PasswordMeter'
 
 export default function Login({ onAuth }) {
-  const [modo, setModo] = useState('login') // login | registro | forgot
+  const [modo, setModo] = useState(() => (new URLSearchParams(window.location.search).get('r') === '1' ? 'registro' : 'login')) // login | registro | forgot
   const [form, setForm] = useState({ nombre: '', email: '', password: '' })
   const [error, setError] = useState(null)
   const [msg, setMsg] = useState(null)
