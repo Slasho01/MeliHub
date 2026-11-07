@@ -244,3 +244,37 @@ pub fn reportar_venta(conn: &mut PgConnection, key: &ApiKey, producto_id: Uuid, 
         Ok(VentaAplicada { nuevo_stock: nuevo, ml_cuenta_id: p.ml_cuenta_id, ml_item_id: p.ml_item_id, user_product_id })
     })
 }
+
+/// Devuelve stock a un producto (cancelación/devolución en la plataforma): lo SUMA y lo
+/// deja listo para empujarlo de vuelta a Mercado Libre. Mismas validaciones de pertenencia.
+pub fn reportar_devolucion(conn: &mut PgConnection, key: &ApiKey, producto_id: Uuid, cantidad: i32) -> ApiResult<VentaAplicada> {
+    if cantidad <= 0 {
+        return Err(ApiError::bad_request("La cantidad debe ser mayor que 0"));
+    }
+    conn.transaction(|conn| {
+        let p: Producto = productos::table
+            .find(producto_id)
+            .select(Producto::as_select())
+            .for_update()
+            .first(conn)
+            .optional()?
+            .or_not_found("Producto")?;
+        use crate::schema::ml_cuentas;
+        let vend: Uuid = ml_cuentas::table.find(p.ml_cuenta_id).select(ml_cuentas::vendedor_id).first(conn)?;
+        if vend != key.vendedor_id || key.ml_cuenta_id.is_some_and(|c| c != p.ml_cuenta_id) {
+            return Err(ApiError::forbidden("Ese producto no corresponde a esta API key"));
+        }
+        let nuevo = p.stock.saturating_add(cantidad);
+        diesel::update(productos::table.find(producto_id))
+            .set((productos::stock.eq(nuevo), productos::sincronizado_at.eq(now())))
+            .execute(conn)?;
+        crate::services::producto_services::registrar_cambio(conn, producto_id, "stock", Some(p.stock.to_string()), nuevo.to_string(), "devolucion");
+        let user_product_id = p
+            .datos
+            .get("user_product_id")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string());
+        Ok(VentaAplicada { nuevo_stock: nuevo, ml_cuenta_id: p.ml_cuenta_id, ml_item_id: p.ml_item_id, user_product_id })
+    })
+}

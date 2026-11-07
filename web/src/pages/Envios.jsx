@@ -1,21 +1,24 @@
 import { useEffect, useState } from 'react'
 import { get, descargarArchivo } from '../api'
 
-const TERMINAL = { shipped: ['Enviado', 'tag'], delivered: ['Entregado', 'tag-ok'], not_delivered: ['No entregado', 'tag'], cancelled: ['Cancelado', 'tag'] }
-// Substatus que indican que ya salió / va en camino (se ocultan de pendientes).
-const EN_CAMINO = ['in_hub', 'at_the_place', 'in_route', 'out_for_delivery', 'picked_up', 'in_transit', 'arrived', 'dropped_off', 'returning_to_sender', 'receiver_absent', 'waiting_for_withdrawal', 'delivered', 'shipped']
-
+// Pendiente (hay etiqueta): el vendedor aún tiene que imprimir/entregar.
+const IMPRIMIBLE = ['ready_to_print', 'printed']
 const pendiente = (estado, sub) => {
-  if (TERMINAL[estado]) return false
-  return !EN_CAMINO.includes(sub)
+  if (estado === 'pending' || estado === 'handling') return true
+  if (estado === 'ready_to_ship') return sub ? IMPRIMIBLE.includes(sub) : true
+  return false
 }
 const estadoBadge = (estado, sub) => {
   let t, c
-  if (TERMINAL[estado]) [t, c] = TERMINAL[estado]
-  else if (EN_CAMINO.includes(sub)) [t, c] = ['En camino', 'tag']
+  if (estado === 'shipped') [t, c] = ['Enviado', 'tag']
+  else if (estado === 'delivered') [t, c] = ['Entregado', 'tag-ok']
+  else if (estado === 'not_delivered') [t, c] = ['No entregado', 'tag']
+  else if (estado === 'cancelled') [t, c] = ['Cancelado', 'tag']
+  else if (estado === 'pending' || estado === 'handling') [t, c] = ['Preparando', 'tag']
   else if (sub === 'ready_to_print') [t, c] = ['Por imprimir', 'tag-ok']
   else if (sub === 'printed') [t, c] = ['Impreso, por entregar', 'tag-ok']
-  else [t, c] = ['Listo para enviar', 'tag-ok']
+  else if (!sub) [t, c] = ['Listo para enviar', 'tag-ok']
+  else [t, c] = ['En camino', 'tag']
   return <span className={`tag ${c}`}>{t}</span>
 }
 

@@ -273,21 +273,17 @@ pub fn ordenes_periodo(conn: &mut PgConnection, vendedor_id: Uuid, dias: i64) ->
 
 // ----------------------------- Envíos / etiquetas -----------------------------
 
-// Substatus que indican que el envío YA salió / está en camino (aunque ML mantenga
-// status=ready_to_ship). Lista NEGRA: todo lo demás se considera pendiente (más seguro
-// que una lista blanca, que escondía pendientes con substatus no previstos).
-const SUBSTATUS_EN_CAMINO: &[&str] = &[
-    "in_hub", "at_the_place", "in_route", "out_for_delivery", "picked_up", "in_transit",
-    "arrived", "dropped_off", "returning_to_sender", "receiver_absent", "waiting_for_withdrawal",
-    "delivered", "shipped",
-];
+// Substatus de `ready_to_ship` donde el vendedor AÚN tiene que actuar (imprimir/entregar).
+// Cualquier otro substatus (in_hub, in_packing_list, in_route, dropped_off…) = ya en camino.
+const SUBSTATUS_IMPRIMIBLE: &[&str] = &["ready_to_print", "printed"];
 
-/// ¿El envío sigue pendiente de despacho (hay que imprimir/entregar)? Oculta los ya
-/// enviados/entregados y los `ready_to_ship` cuyo substatus ya indica "en camino".
+/// ¿El envío está pendiente de imprimir/entregar (hay etiqueta que descargar)? Solo cuando
+/// el vendedor todavía lo tiene; cualquier substatus de "ya salió" cuenta como en camino.
 pub fn es_pendiente(estado: Option<&str>, substatus: Option<&str>) -> bool {
     match estado {
-        Some("shipped") | Some("delivered") | Some("not_delivered") | Some("cancelled") => false,
-        _ => !substatus.map(|s| SUBSTATUS_EN_CAMINO.contains(&s)).unwrap_or(false),
+        Some("pending") | Some("handling") => true,
+        Some("ready_to_ship") => substatus.map(|s| SUBSTATUS_IMPRIMIBLE.contains(&s)).unwrap_or(true),
+        _ => false, // shipped / delivered / cancelled / en camino…
     }
 }
 
@@ -407,10 +403,10 @@ pub fn para_enriquecer(conn: &mut PgConnection, vendedor_id: Uuid, ini: NaiveDat
     let rows: Vec<(Uuid, MlCuenta, Option<i64>, Option<String>, Option<String>, Option<String>)> = q
         .select((ordenes_ml::id, MlCuenta::as_select(), ordenes_ml::envio_id, ordenes_ml::logistic_type, ordenes_ml::envio_estado, ordenes_ml::envio_substatus))
         .load(conn)?;
-    Ok(rows.into_iter().filter_map(|(id, cuenta, envio, lt, est, sub)| {
+    Ok(rows.into_iter().filter_map(|(id, cuenta, envio, lt, est, _sub)| {
         let envio = envio?;
-        // Clasificar (sin tipo logístico) o refrescar mientras siga pendiente.
-        let necesita = lt.is_none() || es_pendiente(est.as_deref(), sub.as_deref());
+        // Clasificar (sin tipo logístico) o refrescar mientras no esté cerrado (entregado).
+        let necesita = lt.is_none() || !es_cerrado(est.as_deref());
         necesita.then_some((id, cuenta, envio))
     }).collect())
 }
@@ -430,16 +426,19 @@ pub fn set_envio_info(conn: &mut PgConnection, orden_id: Uuid, logistic_type: &s
 
 /// Cuenta + envio_id de una orden puntual (verifica dueño y que no sea FULL).
 pub fn orden_para_etiqueta(conn: &mut PgConnection, vendedor_id: Uuid, orden_id: Uuid) -> ApiResult<(MlCuenta, i64)> {
-    let row: Option<(MlCuenta, Option<i64>, Option<String>)> = ordenes_ml::table
+    let row: Option<(MlCuenta, Option<i64>, Option<String>, Option<String>, Option<String>)> = ordenes_ml::table
         .inner_join(ml_cuentas::table)
         .filter(ordenes_ml::id.eq(orden_id))
         .filter(ml_cuentas::vendedor_id.eq(vendedor_id))
-        .select((MlCuenta::as_select(), ordenes_ml::envio_id, ordenes_ml::logistic_type))
+        .select((MlCuenta::as_select(), ordenes_ml::envio_id, ordenes_ml::logistic_type, ordenes_ml::envio_estado, ordenes_ml::envio_substatus))
         .first(conn)
         .optional()?;
-    let (cuenta, envio, lt) = row.ok_or_else(|| ApiError::not_found("Orden"))?;
+    let (cuenta, envio, lt, est, sub) = row.ok_or_else(|| ApiError::not_found("Orden"))?;
     if lt.as_deref() == Some("fulfillment") {
         return Err(ApiError::bad_request("Esta venta es FULL: la etiqueta la gestiona Mercado Libre."));
+    }
+    if !es_pendiente(est.as_deref(), sub.as_deref()) {
+        return Err(ApiError::bad_request("Este envío ya va en camino: no se puede descargar la etiqueta."));
     }
     let envio = envio.ok_or_else(|| ApiError::bad_request("Esta venta no tiene etiqueta imprimible."))?;
     Ok((cuenta, envio))

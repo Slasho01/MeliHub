@@ -87,3 +87,45 @@ pub async fn reportar_venta(
         "ml_actualizado": ml_actualizado,
     })))
 }
+
+/// Devuelve stock a un producto (cancelación/devolución en la plataforma) y lo empuja de
+/// vuelta a Mercado Libre. Mismo cuerpo que una venta (producto_id + cantidad).
+pub async fn reportar_devolucion(
+    req: HttpRequest,
+    body: web::Json<VentaRequest>,
+    pool: web::Data<DbPool>,
+    client: web::Data<MlClient>,
+    cfg: web::Data<Config>,
+) -> ApiResult<HttpResponse> {
+    let key = key_de(&req, &pool).await?;
+    let VentaRequest { producto_id, cantidad } = body.into_inner();
+    let kvid = key.vendedor_id;
+    let venta = db::run(&pool, move |conn| pub_services::reportar_devolucion(conn, &key, producto_id, cantidad)).await?;
+
+    // Empujar el stock recuperado a Mercado Libre (best-effort).
+    let mut ml_actualizado = false;
+    if cfg.ml.configurado() {
+        let cuenta_id = venta.ml_cuenta_id;
+        match db::run(&pool, move |conn| ml_services::get_cuenta(conn, cuenta_id, kvid, true)).await {
+            Ok(cuenta) => match crate::sync::access_token_valido(&pool, &client, &cuenta).await {
+                Ok(token) => {
+                    let res = match &venta.user_product_id {
+                        Some(upid) => client.update_deposito_stock(&token, upid, venta.nuevo_stock).await,
+                        None => client.update_stock(&token, &venta.ml_item_id, venta.nuevo_stock).await,
+                    };
+                    match res {
+                        Ok(()) => ml_actualizado = true,
+                        Err(e) => log::warn!("No se pudo actualizar stock en ML ({}): {e}", venta.ml_item_id),
+                    }
+                }
+                Err(e) => log::warn!("Token ML no disponible para {}: {e}", venta.ml_item_id),
+            },
+            Err(e) => log::warn!("Cuenta ML no encontrada para la devolución: {e}"),
+        }
+    }
+    Ok(HttpResponse::Ok().json(json!({
+        "producto_id": producto_id,
+        "nuevo_stock": venta.nuevo_stock,
+        "ml_actualizado": ml_actualizado,
+    })))
+}

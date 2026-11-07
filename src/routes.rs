@@ -74,6 +74,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(r("/api-keys/{id}").route(delete().to(keys::revocar)))
             // Público: lo consumen las plataformas externas con X-API-Key
             .service(r("/pub/productos").route(get().to(pubc::productos)))
-            .service(r("/pub/ventas").route(post().to(pubc::reportar_venta))),
+            .service(r("/pub/ventas").route(post().to(pubc::reportar_venta)))
+            .service(r("/pub/devoluciones").route(post().to(pubc::reportar_devolucion))),
     );
 }
