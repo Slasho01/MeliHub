@@ -152,7 +152,7 @@ async fn enriquecer(pool: &web::Data<DbPool>, client: &web::Data<MlClient>, cfg:
     }
     let pendientes = db::run(pool, move |conn| venta::para_enriquecer(conn, vid, ini, fin, cuenta)).await?;
     let mut tokens: std::collections::HashMap<Uuid, Option<String>> = std::collections::HashMap::new();
-    let mut updates: Vec<(Uuid, String, String, String)> = Vec::new();
+    let mut updates: Vec<(Uuid, String, String, String, String, String)> = Vec::new();
     for (orden_id, cuenta, envio) in pendientes.into_iter().take(80) {
         let token = match tokens.get(&cuenta.id) {
             Some(t) => t.clone(),
@@ -167,15 +167,17 @@ async fn enriquecer(pool: &web::Data<DbPool>, client: &web::Data<MlClient>, cfg:
             let lt = sh.get("logistic_type").and_then(|v| v.as_str()).unwrap_or("").to_string();
             let st = sh.get("status").and_then(|v| v.as_str()).unwrap_or("").to_string();
             let ss = sh.get("substatus").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let tn = sh.get("tracking_number").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let tm = sh.get("tracking_method").and_then(|v| v.as_str()).unwrap_or("").to_string();
             if !lt.is_empty() {
-                updates.push((orden_id, lt, st, ss));
+                updates.push((orden_id, lt, st, ss, tn, tm));
             }
         }
     }
     if !updates.is_empty() {
         db::run(pool, move |conn| {
-            for (id, lt, st, ss) in &updates {
-                let _ = venta::set_envio_info(conn, *id, lt, st, ss);
+            for (id, lt, st, ss, tn, tm) in &updates {
+                let _ = venta::set_envio_info(conn, *id, lt, st, ss, tn, tm);
             }
             Ok::<(), ApiError>(())
         })

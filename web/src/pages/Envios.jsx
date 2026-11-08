@@ -102,7 +102,9 @@ export default function Envios() {
                   <td><b>{o.cuenta}</b></td>
                   <td className="muted sm">{o.comprador || '—'}</td>
                   <td className="sm" style={{ maxWidth: 320 }}>{o.productos}</td>
-                  <td>{estadoBadge(o.envio_estado, o.envio_substatus)}</td>
+                  <td>{estadoBadge(o.envio_estado, o.envio_substatus)}
+                    {o.tracking && <div className="muted sm" style={{ marginTop: 4, whiteSpace: 'nowrap' }}>📦 {o.tracking_metodo ? `${o.tracking_metodo} · ` : ''}{o.tracking}</div>}
+                  </td>
                   <td style={{ textAlign: 'right' }}>
                     {pendiente(o.envio_estado, o.envio_substatus)
                       ? <button className="btn btn-sm" onClick={() => descargarUna(o)}>Etiqueta</button>

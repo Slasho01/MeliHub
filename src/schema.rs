@@ -152,6 +152,10 @@ diesel::table! {
         envio_estado -> Nullable<Varchar>,
         #[max_length = 40]
         envio_substatus -> Nullable<Varchar>,
+        #[max_length = 80]
+        envio_tracking -> Nullable<Varchar>,
+        #[max_length = 80]
+        envio_tracking_metodo -> Nullable<Varchar>,
     }
 }
 

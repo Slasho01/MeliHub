@@ -305,6 +305,8 @@ pub struct EnvioRow {
     pub envio_estado: Option<String>,
     pub envio_substatus: Option<String>,
     pub logistic_type: Option<String>,
+    pub tracking: Option<String>,
+    pub tracking_metodo: Option<String>,
 }
 
 fn resumen_items(items: &Value) -> String {
@@ -351,6 +353,8 @@ pub fn envios(conn: &mut PgConnection, vendedor_id: Uuid, ini: NaiveDateTime, fi
             envio_estado: o.envio_estado,
             envio_substatus: o.envio_substatus,
             logistic_type: o.logistic_type,
+            tracking: o.envio_tracking,
+            tracking_metodo: o.envio_tracking_metodo,
         })
         .collect())
 }
@@ -412,13 +416,15 @@ pub fn para_enriquecer(conn: &mut PgConnection, vendedor_id: Uuid, ini: NaiveDat
 }
 
 /// Guarda el tipo logístico y el estado de envío de una orden.
-pub fn set_envio_info(conn: &mut PgConnection, orden_id: Uuid, logistic_type: &str, estado: &str, substatus: &str) -> ApiResult<()> {
-    let sub: Option<&str> = if substatus.is_empty() { None } else { Some(substatus) };
+pub fn set_envio_info(conn: &mut PgConnection, orden_id: Uuid, logistic_type: &str, estado: &str, substatus: &str, tracking: &str, tracking_metodo: &str) -> ApiResult<()> {
+    let opt = |s: &str| if s.is_empty() { None } else { Some(s.to_string()) };
     diesel::update(ordenes_ml::table.find(orden_id))
         .set((
             ordenes_ml::logistic_type.eq(logistic_type),
             ordenes_ml::envio_estado.eq(estado),
-            ordenes_ml::envio_substatus.eq(sub),
+            ordenes_ml::envio_substatus.eq(opt(substatus)),
+            ordenes_ml::envio_tracking.eq(opt(tracking)),
+            ordenes_ml::envio_tracking_metodo.eq(opt(tracking_metodo)),
         ))
         .execute(conn)?;
     Ok(())
