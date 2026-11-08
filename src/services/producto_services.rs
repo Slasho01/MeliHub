@@ -113,17 +113,18 @@ pub struct ProductoFiltro {
     pub q: Option<String>,
 }
 
-/// Catálogo unificado del vendedor (o de todos, si es admin).
+/// Catálogo del vendedor. Siempre acotado a sus cuentas conectadas: al desconectar
+/// una cuenta sus productos (CASCADE) desaparecen y no se filtran los de otros usuarios.
 pub fn listar(
     conn: &mut PgConnection,
     vendedor_id: Uuid,
-    es_admin: bool,
+    _es_admin: bool,
     filtro: ProductoFiltro,
 ) -> ApiResult<Vec<Producto>> {
-    let mut q = productos::table.inner_join(ml_cuentas::table).into_boxed();
-    if !es_admin {
-        q = q.filter(ml_cuentas::vendedor_id.eq(vendedor_id));
-    }
+    let mut q = productos::table
+        .inner_join(ml_cuentas::table)
+        .filter(ml_cuentas::vendedor_id.eq(vendedor_id))
+        .into_boxed();
     if let Some(cid) = filtro.cuenta_id {
         q = q.filter(productos::ml_cuenta_id.eq(cid));
     }
@@ -187,7 +188,7 @@ pub fn aplicar_precio_local(conn: &mut PgConnection, producto_id: Uuid, precio: 
 pub fn set_inventario_masivo(
     conn: &mut PgConnection,
     vendedor_id: Uuid,
-    es_admin: bool,
+    _es_admin: bool,
     ids: &[Uuid],
     costo: Option<i64>,
     precio_jarstore: Option<i64>,
@@ -198,17 +199,13 @@ pub fn set_inventario_masivo(
     if ids.len() > 500 {
         return Err(ApiError::bad_request("Máximo 500 productos por operación"));
     }
-    // IDs que realmente pertenecen al vendedor (admin: todos los dados).
-    let propios: Vec<Uuid> = if es_admin {
-        productos::table.filter(productos::id.eq_any(ids)).select(productos::id).load(conn)?
-    } else {
-        productos::table
-            .inner_join(ml_cuentas::table)
-            .filter(productos::id.eq_any(ids))
-            .filter(ml_cuentas::vendedor_id.eq(vendedor_id))
-            .select(productos::id)
-            .load(conn)?
-    };
+    // Solo los IDs que pertenecen de verdad al vendedor (nunca de otro usuario).
+    let propios: Vec<Uuid> = productos::table
+        .inner_join(ml_cuentas::table)
+        .filter(productos::id.eq_any(ids))
+        .filter(ml_cuentas::vendedor_id.eq(vendedor_id))
+        .select(productos::id)
+        .load(conn)?;
     if let Some(c) = costo {
         diesel::update(productos::table.filter(productos::id.eq_any(&propios)))
             .set(productos::costo.eq(Some(c.max(0))))
@@ -223,12 +220,11 @@ pub fn set_inventario_masivo(
 }
 
 /// Productos ACTIVOS con stock (depósito) en o por debajo del umbral. Para alertas.
-pub fn stock_bajo(conn: &mut PgConnection, vendedor_id: Uuid, es_admin: bool, umbral: i32) -> ApiResult<Vec<Producto>> {
-    let mut q = productos::table.inner_join(ml_cuentas::table).into_boxed();
-    if !es_admin {
-        q = q.filter(ml_cuentas::vendedor_id.eq(vendedor_id));
-    }
-    q.filter(productos::estado.eq("active"))
+pub fn stock_bajo(conn: &mut PgConnection, vendedor_id: Uuid, _es_admin: bool, umbral: i32) -> ApiResult<Vec<Producto>> {
+    productos::table
+        .inner_join(ml_cuentas::table)
+        .filter(ml_cuentas::vendedor_id.eq(vendedor_id))
+        .filter(productos::estado.eq("active"))
         .filter(productos::stock.le(umbral))
         .order(productos::stock.asc())
         .limit(200)
