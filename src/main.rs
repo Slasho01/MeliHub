@@ -59,6 +59,7 @@ async fn main() -> std::io::Result<()> {
     let config_data = web::Data::new(config.clone());
     let pool_data = web::Data::new(pool);
     let ml_client = web::Data::new(ml::MlClient::new(config.ml.clone()));
+    let falabella_client = web::Data::new(falabella::FalabellaClient::new());
     let login_limiter = web::Data::new(auth::LoginLimiter::new());
     let mp_client = web::Data::new(mp::MercadoPago::new(config.mp_access_token.clone()));
     let mailer = web::Data::new(mailer::Mailer::new(config.resend_api_key.clone(), config.mail_from.clone()));
@@ -79,6 +80,7 @@ async fn main() -> std::io::Result<()> {
             .app_data(config_data.clone())
             .app_data(pool_data.clone())
             .app_data(ml_client.clone())
+            .app_data(falabella_client.clone())
             .app_data(login_limiter.clone())
             .app_data(mp_client.clone())
             .app_data(mailer.clone())

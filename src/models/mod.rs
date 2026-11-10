@@ -1,4 +1,4 @@
-use crate::schema::{auditoria, cupones, facturacion, historial_producto, miembros, ml_cuentas, notificaciones, ordenes_ml, productos, suscripciones, vendedores};
+use crate::schema::{auditoria, cupones, facturacion, falabella_cuentas, historial_producto, miembros, ml_cuentas, notificaciones, ordenes_ml, productos, suscripciones, vendedores};
 use chrono::NaiveDateTime;
 use diesel::prelude::*;
 use serde::Serialize;
@@ -130,6 +130,31 @@ pub struct NewMlCuenta {
     pub refresh_token: String,
     pub token_expira_at: NaiveDateTime,
     pub sitio: String,
+}
+
+// ----------------------------- Cuenta Falabella -----------------------------
+
+#[derive(Queryable, Selectable, Identifiable, Serialize, Debug, Clone)]
+#[diesel(table_name = falabella_cuentas, check_for_backend(diesel::pg::Pg))]
+pub struct FalabellaCuenta {
+    pub id: Uuid,
+    pub vendedor_id: Uuid,
+    pub user_id: String,
+    #[serde(skip_serializing)]
+    pub api_key: String,
+    pub nickname: Option<String>,
+    pub activa: bool,
+    pub created_at: NaiveDateTime,
+    pub updated_at: NaiveDateTime,
+}
+
+#[derive(Insertable)]
+#[diesel(table_name = falabella_cuentas)]
+pub struct NewFalabellaCuenta {
+    pub vendedor_id: Uuid,
+    pub user_id: String,
+    pub api_key: String,
+    pub nickname: Option<String>,
 }
 
 // ----------------------------- Producto -----------------------------

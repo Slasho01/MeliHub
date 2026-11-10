@@ -20,6 +20,7 @@ import Suscripcion from './pages/Suscripcion'
 import Auditoria from './pages/Auditoria'
 import Envios from './pages/Envios'
 import Preguntas from './pages/Preguntas'
+import Falabella from './pages/Falabella'
 import Landing from './pages/Landing'
 import Docs from './pages/Docs'
 
@@ -54,12 +55,17 @@ export default function App() {
         <button className="nav-toggle" aria-label="Menú" aria-expanded={menu} onClick={() => setMenu((v) => !v)}>☰</button>
         <div className={`topbar-menu ${menu ? 'open' : ''}`} onClick={() => setMenu(false)}>
           <nav className="nav">
+            <div className="nav-section">Mercado Libre</div>
             <NavLink to="/" end className={cls}>Cuentas</NavLink>
-            <NavLink to="/inventario" className={cls}>Inventario</NavLink>
-            <NavLink to="/ganancias" className={cls}>Ganancias</NavLink>
             <NavLink to="/ventas" className={cls}>Ventas</NavLink>
             <NavLink to="/envios" className={cls}>Envíos</NavLink>
             <NavLink to="/preguntas" className={cls}>Preguntas</NavLink>
+            <div className="nav-section">Falabella</div>
+            <NavLink to="/falabella" className={cls}>Cuentas</NavLink>
+            <div className="nav-section">Catálogo</div>
+            <NavLink to="/inventario" className={cls}>Inventario</NavLink>
+            <NavLink to="/ganancias" className={cls}>Ganancias</NavLink>
+            <div className="nav-section">Cuenta</div>
             {me?.es_owner && <NavLink to="/api-keys" className={cls}>API keys</NavLink>}
             {me?.es_owner && <NavLink to="/equipo" className={cls}>Equipo</NavLink>}
             {me?.es_owner && <NavLink to="/auditoria" className={cls}>Actividad</NavLink>}
@@ -86,6 +92,7 @@ export default function App() {
           <Route path="/ventas" element={<Ventas />} />
           <Route path="/envios" element={<Envios />} />
           <Route path="/preguntas" element={<Preguntas />} />
+          <Route path="/falabella" element={<Falabella me={me} />} />
           <Route path="/api-keys" element={me && !me.es_owner ? <Navigate to="/" replace /> : <ApiKeys />} />
           <Route path="/equipo" element={me && !me.es_owner ? <Navigate to="/" replace /> : <Equipo />} />
           <Route path="/auditoria" element={me && !me.es_owner ? <Navigate to="/" replace /> : <Auditoria />} />
