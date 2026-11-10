@@ -82,12 +82,51 @@ pub async fn login(
         return Ok(HttpResponse::TooManyRequests()
             .json(json!({ "error": "Demasiados intentos. Espera unos minutos e intenta de nuevo." })));
     }
+    let email = body.email.clone();
     match db::run(&pool, move |conn| svc::login(conn, body.into_inner())).await {
         Ok(svc::LoginOutcome::TwoFaRequerido) => {
             limiter.exito(&ip);
-            Ok(HttpResponse::Ok().json(json!({ "twofa_required": true })))
+            // Contraseña ya validada: emitimos un token temporal para completar el 2FA
+            // sin reenviar email+contraseña en el 2º paso.
+            let pending = crate::auth::crear_pending_2fa(&email, &cfg.jwt_secret)?;
+            Ok(HttpResponse::Ok().json(json!({ "twofa_required": true, "pending": pending })))
         }
         Ok(svc::LoginOutcome::Ok(s)) => {
+            limiter.exito(&ip);
+            let token = crear_token(s.org_id, &s.rol, s.actor_id, &s.rol_equipo, s.sv, &cfg.jwt_secret)?;
+            Ok(HttpResponse::Ok().json(json!({ "token": token, "me": s })))
+        }
+        Err(e) => {
+            limiter.fallo(&ip);
+            Err(e)
+        }
+    }
+}
+
+#[derive(serde::Deserialize)]
+pub struct TwoFaRequest {
+    pub pending: String,
+    pub codigo: String,
+}
+
+/// Segundo paso del login con 2FA: recibe el token temporal + el código TOTP, SIN
+/// reenviar email ni contraseña. Emite la sesión definitiva.
+pub async fn login_2fa(
+    req: actix_web::HttpRequest,
+    body: web::Json<TwoFaRequest>,
+    pool: web::Data<DbPool>,
+    cfg: web::Data<Config>,
+    limiter: web::Data<crate::auth::LoginLimiter>,
+) -> ApiResult<HttpResponse> {
+    let ip = req.connection_info().realip_remote_addr().unwrap_or("desconocida").to_string();
+    if !limiter.permitido(&ip) {
+        return Ok(HttpResponse::TooManyRequests()
+            .json(json!({ "error": "Demasiados intentos. Espera unos minutos e intenta de nuevo." })));
+    }
+    let TwoFaRequest { pending, codigo } = body.into_inner();
+    let email = crate::auth::verificar_pending_2fa(&pending, &cfg.jwt_secret)?;
+    match db::run(&pool, move |conn| svc::completar_2fa(conn, &email, &codigo)).await {
+        Ok(s) => {
             limiter.exito(&ip);
             let token = crear_token(s.org_id, &s.rol, s.actor_id, &s.rol_equipo, s.sv, &cfg.jwt_secret)?;
             Ok(HttpResponse::Ok().json(json!({ "token": token, "me": s })))

@@ -10,8 +10,9 @@ export default function Login({ onAuth }) {
   const [busy, setBusy] = useState(false)
   const [need2fa, setNeed2fa] = useState(false)
   const [codigo, setCodigo] = useState('')
+  const [pending, setPending] = useState('') // token temporal del 2FA (no se reenvía la contraseña)
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value })
-  const ir = (m) => { setModo(m); setError(null); setMsg(null); setNeed2fa(false); setCodigo('') }
+  const ir = (m) => { setModo(m); setError(null); setMsg(null); setNeed2fa(false); setCodigo(''); setPending('') }
 
   const submit = async (e) => {
     e.preventDefault()
@@ -23,12 +24,19 @@ export default function Login({ onAuth }) {
         setBusy(false)
         return
       }
+      // 2º paso del 2FA: solo el token temporal + el código (sin reenviar email/contraseña).
+      if (modo === 'login' && need2fa) {
+        const r = await post('/auth/login/2fa', { pending, codigo })
+        setToken(r.token)
+        onAuth()
+        return
+      }
       const path = modo === 'login' ? '/auth/login' : '/auth/registro'
       const body = modo === 'login'
-        ? { email: form.email, password: form.password, ...(need2fa ? { codigo } : {}) }
+        ? { email: form.email, password: form.password }
         : { nombre: form.nombre, email: form.email, password: form.password }
       const r = await post(path, body)
-      if (modo === 'login' && r.twofa_required) { setNeed2fa(true); setBusy(false); return }
+      if (modo === 'login' && r.twofa_required) { setNeed2fa(true); setPending(r.pending || ''); setBusy(false); return }
       setToken(r.token)
       onAuth()
     } catch (err) { setError(err.message) } finally { setBusy(false) }

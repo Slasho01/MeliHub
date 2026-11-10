@@ -80,6 +80,32 @@ pub fn verificar_reset_token(token: &str, secret: &str) -> Result<(Uuid, String)
     Ok((id, data.claims.pwf))
 }
 
+#[derive(Serialize, Deserialize)]
+struct Pending2faClaims {
+    sub: String,     // email (en minúsculas) que ya pasó la contraseña
+    purpose: String, // "2fa"
+    exp: usize,
+}
+
+/// Token temporal (5 min) emitido tras validar la contraseña, para completar el 2FA en
+/// un 2º request SIN reenviar email+contraseña. Lo valida `verificar_pending_2fa`.
+pub fn crear_pending_2fa(email: &str, secret: &str) -> Result<String, ApiError> {
+    let exp = (chrono::Utc::now() + chrono::Duration::minutes(5)).timestamp() as usize;
+    let claims = Pending2faClaims { sub: email.to_lowercase(), purpose: "2fa".to_string(), exp };
+    encode(&Header::new(Algorithm::HS256), &claims, &EncodingKey::from_secret(secret.as_bytes()))
+        .map_err(|e| ApiError::internal(format!("No se pudo emitir el token: {e}")))
+}
+
+/// Verifica el token temporal de 2FA y devuelve el email que ya validó contraseña.
+pub fn verificar_pending_2fa(token: &str, secret: &str) -> Result<String, ApiError> {
+    let data = decode::<Pending2faClaims>(token, &DecodingKey::from_secret(secret.as_bytes()), &Validation::new(Algorithm::HS256))
+        .map_err(|_| ApiError::unauthorized("La verificación expiró. Vuelve a iniciar sesión."))?;
+    if data.claims.purpose != "2fa" {
+        return Err(ApiError::unauthorized("Token inválido"));
+    }
+    Ok(data.claims.sub)
+}
+
 /// Vendedor autenticado (extraído del header Authorization: Bearer).
 #[derive(Clone)]
 pub struct AuthVendedor {

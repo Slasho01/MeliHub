@@ -8,6 +8,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             // Auth del hub
             .service(r("/auth/registro").route(post().to(auth::registrar)))
             .service(r("/auth/login").route(post().to(auth::login)))
+            .service(r("/auth/login/2fa").route(post().to(auth::login_2fa)))
             .service(r("/auth/forgot").route(post().to(auth::forgot)))
             .service(r("/auth/reset").route(post().to(auth::reset)))
             .service(r("/auth/me").route(get().to(auth::me)))

@@ -88,6 +88,82 @@ pub fn registrar(conn: &mut PgConnection, req: RegistroRequest) -> ApiResult<Ven
         })
 }
 
+fn sesion_vendedor(v: Vendedor) -> Sesion {
+    Sesion {
+        org_id: v.id,
+        actor_id: v.id,
+        nombre: v.nombre,
+        email: v.email,
+        rol: v.rol,
+        rol_equipo: "owner".to_string(),
+        plan: v.plan,
+        sv: v.session_version,
+    }
+}
+
+fn sesion_miembro(org: &Vendedor, m: Miembro) -> Sesion {
+    Sesion {
+        org_id: org.id,
+        actor_id: m.id,
+        nombre: m.nombre,
+        email: m.email,
+        rol: "vendedor".to_string(),
+        rol_equipo: m.rol,
+        plan: org.plan.clone(),
+        sv: m.session_version,
+    }
+}
+
+/// Completa el login tras un 2FA válido. Se llama SOLO con un token temporal de 2FA
+/// (emitido por `login` después de validar la contraseña), así que aquí NO se revisa la
+/// contraseña: solo se verifica el código TOTP. Evita reenviar email+password en el 2º paso.
+pub fn completar_2fa(conn: &mut PgConnection, email: &str, codigo: &str) -> ApiResult<Box<Sesion>> {
+    let email = email.trim().to_lowercase();
+    let codigo = codigo.trim();
+
+    if let Some(v) = vendedores::table
+        .filter(vendedores::email.eq(&email))
+        .select(Vendedor::as_select())
+        .first(conn)
+        .optional()?
+    {
+        if !v.activo {
+            return Err(ApiError::forbidden("Tu cuenta está desactivada"));
+        }
+        if !v.twofa_enabled {
+            return Err(ApiError::unauthorized("Este usuario no tiene 2FA activo"));
+        }
+        let secret = crate::crypto::descifrar(v.twofa_secret.as_deref().unwrap_or(""));
+        if !crate::twofa::verificar(&secret, codigo) {
+            return Err(ApiError::unauthorized("Código de verificación inválido"));
+        }
+        return Ok(Box::new(sesion_vendedor(v)));
+    }
+
+    if let Some(m) = miembros::table
+        .filter(miembros::email.eq(&email))
+        .filter(miembros::estado.eq("activo"))
+        .select(Miembro::as_select())
+        .first(conn)
+        .optional()?
+    {
+        if !m.twofa_enabled {
+            return Err(ApiError::unauthorized("Este usuario no tiene 2FA activo"));
+        }
+        let org: Vendedor = vendedores::table.find(m.vendedor_id).select(Vendedor::as_select()).first(conn)?;
+        if !org.activo {
+            return Err(ApiError::forbidden("La cuenta de tu organización está desactivada"));
+        }
+        let secret = crate::crypto::descifrar(m.twofa_secret.as_deref().unwrap_or(""));
+        if !crate::twofa::verificar(&secret, codigo) {
+            return Err(ApiError::unauthorized("Código de verificación inválido"));
+        }
+        return Ok(Box::new(sesion_miembro(&org, m)));
+    }
+
+    Err(ApiError::unauthorized("Sesión inválida. Vuelve a iniciar sesión."))
+}
+
 pub fn login(conn: &mut PgConnection, req: LoginRequest) -> ApiResult<LoginOutcome> {
     let email = req.email.trim().to_lowercase();
 
@@ -116,16 +192,7 @@ pub fn login(conn: &mut PgConnection, req: LoginRequest) -> ApiResult<LoginOutco
                 }
             }
         }
-        return Ok(LoginOutcome::Ok(Box::new(Sesion {
-            org_id: v.id,
-            actor_id: v.id,
-            nombre: v.nombre,
-            email: v.email,
-            rol: v.rol,
-            rol_equipo: "owner".to_string(),
-            plan: v.plan,
-            sv: v.session_version,
-        })));
+        return Ok(LoginOutcome::Ok(Box::new(sesion_vendedor(v))));
     }
 
     // 2) ¿Es un miembro del equipo (invitación aceptada)?
@@ -155,16 +222,7 @@ pub fn login(conn: &mut PgConnection, req: LoginRequest) -> ApiResult<LoginOutco
                 }
             }
         }
-        return Ok(LoginOutcome::Ok(Box::new(Sesion {
-            org_id: org.id,
-            actor_id: m.id,
-            nombre: m.nombre,
-            email: m.email,
-            rol: "vendedor".to_string(),
-            rol_equipo: m.rol,
-            plan: org.plan,
-            sv: m.session_version,
-        })));
+        return Ok(LoginOutcome::Ok(Box::new(sesion_miembro(&org, m))));
     }
 
     Err(ApiError::unauthorized("Credenciales inválidas"))
