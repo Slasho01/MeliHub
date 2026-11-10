@@ -91,13 +91,17 @@ pub struct PublicarReq {
     pub categoria: String,
     pub marca: String,
     #[serde(default)]
+    pub variation: Option<String>,
+    #[serde(default)]
+    pub operador: Option<String>,
+    #[serde(default)]
     pub atributos: Vec<AtributoKV>,
 }
 
 /// Publica (o actualiza) un producto del hub en Falabella con su categoría/atributos.
 pub async fn publicar(user: AuthVendedor, body: web::Json<PublicarReq>, pool: web::Data<DbPool>, client: web::Data<FalabellaClient>) -> ApiResult<HttpResponse> {
     user.exigir_edicion()?;
-    let PublicarReq { producto_id, cuenta_id, categoria, marca, atributos } = body.into_inner();
+    let PublicarReq { producto_id, cuenta_id, categoria, marca, variation, operador, atributos } = body.into_inner();
     let (vid, admin) = (user.id, user.es_admin());
     let (producto, cuenta) = db::run(&pool, move |conn| {
         let (p, _) = crate::services::producto_services::get_con_cuenta(conn, producto_id, vid, admin)?;
@@ -107,6 +111,13 @@ pub async fn publicar(user: AuthVendedor, body: web::Json<PublicarReq>, pool: we
     .await?;
     let api_key = crate::crypto::descifrar(&cuenta.api_key);
     let atributos: Vec<(String, String)> = atributos.into_iter().map(|a| (a.nombre, a.valor)).collect();
-    let xml = crate::services::falabella_push_services::build_product_xml(&producto, &categoria, &marca, &atributos);
+    let xml = crate::services::falabella_push_services::build_product_xml(
+        &producto,
+        &categoria,
+        &marca,
+        variation.as_deref().unwrap_or(""),
+        operador.as_deref().unwrap_or(""),
+        &atributos,
+    );
     Ok(HttpResponse::Ok().json(client.product_create(&cuenta.user_id, &api_key, xml).await?))
 }

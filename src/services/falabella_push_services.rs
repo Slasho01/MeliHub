@@ -49,8 +49,12 @@ fn imagenes_de(p: &Producto) -> Vec<String> {
 }
 
 /// Construye el XML de un `<Product>` para ProductCreate/Update.
+///
+/// En la API nueva de Falabella el **precio y el stock van dentro de `<BusinessUnits>`**
+/// (con `OperatorCode`: facl=Chile, fape=Perú, faco=Colombia), NO como `<Price>`/`<Quantity>`
+/// sueltos. `Variation` es obligatorio aunque el producto no tenga variantes (agrupa fotos).
 #[allow(clippy::too_many_arguments)]
-fn product_xml(sku: &str, name: &str, desc: &str, price: i64, qty: i32, category_id: &str, brand: &str, atributos: &[(String, String)], imagenes: &[String]) -> String {
+fn product_xml(sku: &str, name: &str, desc: &str, price: i64, qty: i32, category_id: &str, brand: &str, variation: &str, operador: &str, atributos: &[(String, String)], imagenes: &[String]) -> String {
     let mut data = String::from("<ConditionType>Nuevo</ConditionType>");
     for (k, v) in atributos {
         let v = v.trim();
@@ -64,21 +68,31 @@ fn product_xml(sku: &str, name: &str, desc: &str, price: i64, qty: i32, category
     for u in imagenes {
         images.push_str(&format!("<Image>{}</Image>", xml_escape(u)));
     }
+    let business = format!(
+        "<BusinessUnits><BusinessUnit>\
+<OperatorCode>{op}</OperatorCode>\
+<Price>{price}</Price>\
+<Stock>{qty}</Stock>\
+<Status>active</Status>\
+</BusinessUnit></BusinessUnits>",
+        op = xml_escape(operador),
+    );
     format!(
         "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Request><Product>\
 <SellerSku>{sku}</SellerSku>\
 <Name>{name}</Name>\
+<Variation>{variation}</Variation>\
 <PrimaryCategory>{cat}</PrimaryCategory>\
 <Description>{desc}</Description>\
 <Brand>{brand}</Brand>\
-<Price>{price}</Price>\
 <ProductId>{sku}</ProductId>\
-<Quantity>{qty}</Quantity>\
 <ProductData>{data}</ProductData>\
+{business}\
 <Images>{images}</Images>\
 </Product></Request>",
         sku = xml_escape(sku),
         name = xml_escape(name),
+        variation = xml_escape(variation),
         cat = xml_escape(category_id),
         desc = xml_escape(desc),
         brand = xml_escape(brand),
@@ -86,8 +100,11 @@ fn product_xml(sku: &str, name: &str, desc: &str, price: i64, qty: i32, category
 }
 
 /// XML de ProductCreate/Update para un producto del hub con su categoría/atributos Falabella.
-pub fn build_product_xml(p: &Producto, category_id: &str, brand: &str, atributos: &[(String, String)]) -> String {
+/// `variation` vacío → "No aplica"; `operador` vacío → "facl" (Chile).
+pub fn build_product_xml(p: &Producto, category_id: &str, brand: &str, variation: &str, operador: &str, atributos: &[(String, String)]) -> String {
     let desc = p.datos.get("descripcion").and_then(|d| d.as_str()).unwrap_or(&p.titulo);
+    let variation = if variation.trim().is_empty() { "No aplica" } else { variation.trim() };
+    let operador = if operador.trim().is_empty() { "facl" } else { operador.trim() };
     product_xml(
         &p.ml_item_id,
         &p.titulo,
@@ -96,6 +113,8 @@ pub fn build_product_xml(p: &Producto, category_id: &str, brand: &str, atributos
         p.stock.max(0),
         category_id,
         brand,
+        variation,
+        operador,
         atributos,
         &imagenes_de(p),
     )
@@ -113,11 +132,13 @@ mod tests {
             ("Vacio".to_string(), "  ".to_string()),            // se omite
         ];
         let imgs = vec!["https://img/1-O.jpg".to_string(), "https://img/2-O.jpg".to_string()];
-        let xml = product_xml("MLA123", "Polera <Azul>", "Linda & cómoda", 9990, 5, "CAT42", "Marca\"X\"", &atributos, &imgs);
+        let xml = product_xml("MLA123", "Polera <Azul>", "Linda & cómoda", 9990, 5, "CAT42", "Marca\"X\"", "No aplica", "facl", &atributos, &imgs);
         assert!(xml.contains("<SellerSku>MLA123</SellerSku>"));
         assert!(xml.contains("<Name>Polera &lt;Azul&gt;</Name>"));
-        assert!(xml.contains("<Price>9990</Price>"));
-        assert!(xml.contains("<Quantity>5</Quantity>"));
+        assert!(xml.contains("<Variation>No aplica</Variation>"));
+        // precio y stock van DENTRO de BusinessUnits (no sueltos)
+        assert!(xml.contains("<BusinessUnits><BusinessUnit><OperatorCode>facl</OperatorCode><Price>9990</Price><Stock>5</Stock><Status>active</Status></BusinessUnit></BusinessUnits>"));
+        assert!(!xml.contains("<Quantity>"));
         assert!(xml.contains("<PrimaryCategory>CAT42</PrimaryCategory>"));
         assert!(xml.contains("<Brand>Marca&quot;X&quot;</Brand>"));
         assert!(xml.contains("<Material>Algodón &amp; Lino</Material>"));

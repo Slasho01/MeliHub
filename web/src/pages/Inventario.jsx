@@ -29,6 +29,7 @@ export default function Inventario({ me }) {
   const [bulk, setBulk] = useState({ costo: '', precio_jarstore: '' })
   const [alertas, setAlertas] = useState([])
   const [verAlertas, setVerAlertas] = useState(false)
+  const [ocultarSinStock, setOcultarSinStock] = useState(true)
   const [hist, setHist] = useState({})   // { [id]: [...] }
   const [histId, setHistId] = useState(null)
 
@@ -93,7 +94,9 @@ export default function Inventario({ me }) {
 
   // --- Selección y edición masiva ---
   const toggleSel = (id) => setSel((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
-  const allIds = items?.map((p) => p.id) ?? []
+  // Oculta (opcional) las publicaciones sin stock en Mercado Libre.
+  const visibles = (items || []).filter((p) => !ocultarSinStock || (p.stock || 0) > 0)
+  const allIds = visibles.map((p) => p.id)
   const allSel = allIds.length > 0 && allIds.every((id) => sel.has(id))
   const toggleAll = () => setSel((s) => { const n = new Set(s); allSel ? allIds.forEach((id) => n.delete(id)) : allIds.forEach((id) => n.add(id)); return n })
 
@@ -127,6 +130,9 @@ export default function Inventario({ me }) {
             <option value="">Todas las cuentas</option>
             {cuentas.map((c) => <option key={c.id} value={c.id}>{c.nickname || `Usuario ${c.ml_user_id}`}</option>)}
           </select>
+          <label className="row sm muted" style={{ gap: 6, whiteSpace: 'nowrap' }} title="Oculta las publicaciones sin stock en Mercado Libre">
+            <input type="checkbox" checked={ocultarSinStock} onChange={(e) => setOcultarSinStock(e.target.checked)} /> Ocultar sin stock
+          </label>
           <button className="btn btn-sm" disabled={!items?.length} onClick={exportarCsv}>Exportar CSV</button>
         </div>
       </div>
@@ -165,6 +171,8 @@ export default function Inventario({ me }) {
       <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
         {!items ? <div className="empty">Cargando…</div> : items.length === 0 ? (
           <div className="empty">Sin publicaciones. Conecta una cuenta y sincroniza.</div>
+        ) : visibles.length === 0 ? (
+          <div className="empty">Todas las publicaciones están sin stock. <button className="link-btn" onClick={() => setOcultarSinStock(false)}>Mostrarlas</button></div>
         ) : (
           <table style={{ minWidth: 1000 }}>
             <thead><tr>
@@ -173,7 +181,7 @@ export default function Inventario({ me }) {
               <th>Ganancia ML</th><th>Ganancia (mi precio)</th><th>Stock</th><th>Estado</th>
             </tr></thead>
             <tbody>
-              {items.map((p) => {
+              {visibles.map((p) => {
                 const activo = p.estado === 'active'
                 const mlVal = precioMl[p.id] ?? p.precio
                 const cambiado = precioMl[p.id] !== undefined && Number(precioMl[p.id]) !== p.precio

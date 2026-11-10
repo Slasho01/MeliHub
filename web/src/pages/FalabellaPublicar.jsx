@@ -32,7 +32,8 @@ export default function FalabellaPublicar({ cuentas }) {
   const [error, setError] = useState(null)
   const [resultado, setResultado] = useState(null)
 
-  useEffect(() => { get('/productos').then((d) => setProductos(d || [])).catch(() => {}) }, [])
+  // Solo productos CON stock en Mercado Libre (no tiene sentido publicar sin stock).
+  useEffect(() => { get('/productos').then((d) => setProductos((d || []).filter((p) => (p.stock || 0) > 0))).catch(() => {}) }, [])
   useEffect(() => {
     if (!cuenta) return
     get(`/falabella/categorias?cuenta=${cuenta.id}`)
