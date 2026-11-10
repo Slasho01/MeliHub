@@ -19,6 +19,7 @@ import Facturacion from './pages/Facturacion'
 import Suscripcion from './pages/Suscripcion'
 import Auditoria from './pages/Auditoria'
 import Envios from './pages/Envios'
+import Preguntas from './pages/Preguntas'
 import Landing from './pages/Landing'
 import Docs from './pages/Docs'
 
@@ -58,6 +59,7 @@ export default function App() {
             <NavLink to="/ganancias" className={cls}>Ganancias</NavLink>
             <NavLink to="/ventas" className={cls}>Ventas</NavLink>
             <NavLink to="/envios" className={cls}>Envíos</NavLink>
+            <NavLink to="/preguntas" className={cls}>Preguntas</NavLink>
             {me?.es_owner && <NavLink to="/api-keys" className={cls}>API keys</NavLink>}
             {me?.es_owner && <NavLink to="/equipo" className={cls}>Equipo</NavLink>}
             {me?.es_owner && <NavLink to="/auditoria" className={cls}>Actividad</NavLink>}
@@ -83,6 +85,7 @@ export default function App() {
           <Route path="/ganancias" element={<Ganancias me={me} />} />
           <Route path="/ventas" element={<Ventas />} />
           <Route path="/envios" element={<Envios />} />
+          <Route path="/preguntas" element={<Preguntas />} />
           <Route path="/api-keys" element={me && !me.es_owner ? <Navigate to="/" replace /> : <ApiKeys />} />
           <Route path="/equipo" element={me && !me.es_owner ? <Navigate to="/" replace /> : <Equipo />} />
           <Route path="/auditoria" element={me && !me.es_owner ? <Navigate to="/" replace /> : <Auditoria />} />

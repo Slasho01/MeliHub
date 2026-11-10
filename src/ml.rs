@@ -75,6 +75,12 @@ pub struct MlItem {
     pub permalink: Option<String>,
     #[serde(default)]
     pub thumbnail: Option<String>,
+    /// Todas las imágenes de la publicación: [{id, url, secure_url, ...}, ...].
+    #[serde(default)]
+    pub pictures: serde_json::Value,
+    /// Id del video de YouTube de la publicación (si tiene).
+    #[serde(default)]
+    pub video_id: Option<String>,
     #[serde(default)]
     pub category_id: Option<String>,
     #[serde(default)]
@@ -199,7 +205,7 @@ impl MlClient {
         if ids.is_empty() {
             return Ok(vec![]);
         }
-        let attrs = "id,title,price,available_quantity,status,permalink,thumbnail,category_id,currency_id,variations,attributes,catalog_product_id,catalog_listing,shipping,user_product_id";
+        let attrs = "id,title,price,available_quantity,status,permalink,thumbnail,pictures,video_id,category_id,currency_id,variations,attributes,catalog_product_id,catalog_listing,shipping,user_product_id";
         let v: serde_json::Value = self
             .get(access_token, &format!("/items?ids={}&attributes={attrs}", ids.join(",")))
             .await?;
@@ -235,6 +241,34 @@ impl MlClient {
             &format!("/orders/search?seller={seller_id}&sort=date_desc&offset={offset}&limit=50"),
         )
         .await
+    }
+
+    /// Preguntas recibidas SIN responder de un vendedor (las más antiguas primero).
+    pub async fn questions_unanswered(&self, access_token: &str, seller_id: i64, offset: i64) -> ApiResult<serde_json::Value> {
+        self.get(
+            access_token,
+            &format!("/questions/search?seller_id={seller_id}&status=UNANSWERED&sort=date_asc&api_version=4&offset={offset}&limit=50"),
+        )
+        .await
+    }
+
+    /// Responde una pregunta de un comprador en Mercado Libre.
+    pub async fn answer_question(&self, access_token: &str, question_id: i64, text: &str) -> ApiResult<()> {
+        let res = self
+            .http
+            .post(format!("{}/answers", self.cfg.api_base))
+            .bearer_auth(access_token)
+            .header("Accept", "application/json")
+            .json(&serde_json::json!({ "question_id": question_id, "text": text }))
+            .send()
+            .await
+            .map_err(|e| ApiError::internal(format!("Mercado Libre no respondió: {e}")))?;
+        let status = res.status();
+        if !status.is_success() {
+            let text = res.text().await.unwrap_or_default();
+            return Err(ApiError::bad_request(format!("Mercado Libre rechazó la respuesta ({status}): {text}")));
+        }
+        Ok(())
     }
 
     /// Detalle de un envío: `logistic_type` (fulfillment/self_service/…) y `status`.

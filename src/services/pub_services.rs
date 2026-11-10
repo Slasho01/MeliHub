@@ -13,6 +13,19 @@ pub struct Especificacion {
     pub valor: String,
 }
 
+/// Una variante (combinación) de la publicación, normalizada para cualquier plataforma.
+#[derive(Serialize)]
+pub struct VariantePublica {
+    /// Id de la variación en Mercado Libre (para emparejar al re-sincronizar).
+    pub id: i64,
+    /// Atributos que definen la variante: [{nombre:"Color", valor:"Rojo"}, {nombre:"Talla", valor:"M"}].
+    pub atributos: Vec<Especificacion>,
+    pub precio: i64,
+    pub stock: i32,
+    /// Imágenes propias de la variante (ya resueltas a URL, alta calidad).
+    pub imagenes: Vec<String>,
+}
+
 /// Producto tal como lo ve una plataforma externa (precio del canal de la key).
 #[derive(Serialize)]
 pub struct PublicProducto {
@@ -24,10 +37,19 @@ pub struct PublicProducto {
     pub stock: i32,
     pub estado: String,
     pub thumbnail: Option<String>,
+    /// TODAS las imágenes de la publicación (galería), alta calidad y https. La primera
+    /// equivale al thumbnail. Cada plataforma decide cuántas usar.
+    pub imagenes: Vec<String>,
+    /// URL del video (YouTube) si la publicación tiene.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub video: Option<String>,
     pub canal: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub descripcion: Option<String>,
     pub especificaciones: Vec<Especificacion>,
+    /// Variantes (color/talla/etc.) con su propio stock, precio e imágenes.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub variantes: Vec<VariantePublica>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub categoria: Option<String>,
 }
@@ -86,6 +108,101 @@ fn mejor_imagen(url: Option<String>) -> Option<String> {
         let u = if let Some(r) = u.strip_prefix("http://") { format!("https://{r}") } else { u };
         u.replace("-I.jpg", "-O.jpg").replace("-I.webp", "-O.webp").replace("-I.png", "-O.png")
     })
+}
+
+/// Todas las imágenes de la publicación (desde `datos.pictures`), alta calidad y https,
+/// sin duplicados. Si no hay galería, cae al thumbnail.
+fn galeria(datos: &serde_json::Value, thumb: &Option<String>) -> Vec<String> {
+    let mut urls: Vec<String> = Vec::new();
+    if let Some(arr) = datos.get("pictures").and_then(|p| p.as_array()) {
+        for pic in arr {
+            let u = pic
+                .get("secure_url")
+                .and_then(|v| v.as_str())
+                .or_else(|| pic.get("url").and_then(|v| v.as_str()));
+            if let Some(u) = mejor_imagen(u.map(|s| s.to_string())) {
+                if !u.is_empty() && !urls.contains(&u) {
+                    urls.push(u);
+                }
+            }
+        }
+    }
+    if urls.is_empty() {
+        if let Some(t) = mejor_imagen(thumb.clone()) {
+            urls.push(t);
+        }
+    }
+    urls
+}
+
+/// Mapa `picture_id -> url` para resolver las imágenes de cada variante.
+fn mapa_imagenes(datos: &serde_json::Value) -> std::collections::HashMap<String, String> {
+    let mut m = std::collections::HashMap::new();
+    if let Some(arr) = datos.get("pictures").and_then(|p| p.as_array()) {
+        for pic in arr {
+            let id = pic.get("id").and_then(|v| v.as_str());
+            let url = pic
+                .get("secure_url")
+                .and_then(|v| v.as_str())
+                .or_else(|| pic.get("url").and_then(|v| v.as_str()));
+            if let (Some(id), Some(url)) = (id, mejor_imagen(url.map(|s| s.to_string()))) {
+                m.insert(id.to_string(), url);
+            }
+        }
+    }
+    m
+}
+
+/// URL del video de la publicación (ML guarda el id de YouTube en `video_id`).
+fn video_de(datos: &serde_json::Value) -> Option<String> {
+    datos
+        .get("video_id")
+        .and_then(|v| v.as_str())
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .map(|id| format!("https://www.youtube.com/watch?v={id}"))
+}
+
+/// Normaliza las variantes de ML (`productos.variantes`) a `VariantePublica`.
+fn variantes_de(p: &Producto, precio_base: i64, imgs: &std::collections::HashMap<String, String>) -> Vec<VariantePublica> {
+    let Some(arr) = p.variantes.as_array() else { return Vec::new() };
+    arr.iter()
+        .filter_map(|v| {
+            let id = v.get("id").and_then(|x| x.as_i64())?;
+            let atributos = v
+                .get("attribute_combinations")
+                .and_then(|a| a.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|a| {
+                            let nombre = a.get("name").and_then(|x| x.as_str()).unwrap_or("").trim().to_string();
+                            let valor = a.get("value_name").and_then(|x| x.as_str()).unwrap_or("").trim().to_string();
+                            (!nombre.is_empty() && !valor.is_empty()).then_some(Especificacion { nombre, valor })
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            let precio = v
+                .get("price")
+                .and_then(|x| x.as_f64())
+                .map(|f| f.round() as i64)
+                .filter(|&x| x > 0)
+                .unwrap_or(precio_base);
+            let stock = v.get("available_quantity").and_then(|x| x.as_i64()).unwrap_or(0).max(0) as i32;
+            let imagenes = v
+                .get("picture_ids")
+                .and_then(|a| a.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|pid| pid.as_str())
+                        .filter_map(|pid| imgs.get(pid).cloned())
+                        .filter(|s| !s.is_empty())
+                        .collect()
+                })
+                .unwrap_or_default();
+            Some(VariantePublica { id, atributos, precio, stock, imagenes })
+        })
+        .collect()
 }
 
 /// ¿La publicación es de Mercado Libre FULL (fulfillment)? Ese stock lo gestiona
@@ -180,6 +297,9 @@ pub fn productos(conn: &mut PgConnection, key: &ApiKey) -> ApiResult<Vec<PublicP
                 .and_then(|c| c.as_str())
                 .map(|s| s.trim().to_string())
                 .filter(|s| !s.is_empty());
+            let imagenes = galeria(&p.datos, &p.thumbnail);
+            let video = video_de(&p.datos);
+            let variantes = variantes_de(&p, precio, &mapa_imagenes(&p.datos));
             PublicProducto {
                 precio,
                 id: p.id,
@@ -189,9 +309,12 @@ pub fn productos(conn: &mut PgConnection, key: &ApiKey) -> ApiResult<Vec<PublicP
                 stock: p.stock,
                 estado: p.estado,
                 thumbnail: mejor_imagen(p.thumbnail),
+                imagenes,
+                video,
                 canal: key.canal.clone(),
                 descripcion,
                 especificaciones,
+                variantes,
                 categoria,
             }
         })

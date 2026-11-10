@@ -6,6 +6,7 @@ pub mod cupon_controller;
 pub mod facturacion_controller;
 pub mod equipo_controller;
 pub mod ml_controller;
+pub mod preguntas_controller;
 pub mod producto_controller;
 pub mod pub_controller;
 pub mod saas_controller;

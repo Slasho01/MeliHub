@@ -1,4 +1,4 @@
-use crate::controller::{admin_controller as adm, api_key_controller as keys, auth_controller as auth, auditoria_controller as audit, cupon_controller as cupon, equipo_controller as equipo, facturacion_controller as fact, health, ml_controller as ml, producto_controller as prod, pub_controller as pubc, saas_controller as saas, suscripcion_controller as subs, venta_controller as ventas};
+use crate::controller::{admin_controller as adm, api_key_controller as keys, auth_controller as auth, auditoria_controller as audit, cupon_controller as cupon, equipo_controller as equipo, facturacion_controller as fact, health, ml_controller as ml, preguntas_controller as preg, producto_controller as prod, pub_controller as pubc, saas_controller as saas, suscripcion_controller as subs, venta_controller as ventas};
 use actix_web::web::{self, delete, get, post, put, resource as r};
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
@@ -29,6 +29,9 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(r("/ml/cuentas").route(get().to(ml::listar_cuentas)))
             .service(r("/ml/cuentas/{id}").route(delete().to(ml::desconectar)))
             .service(r("/ml/cuentas/{id}/sincronizar").route(post().to(ml::sincronizar)))
+            // Preguntas de compradores (centralizadas de todas las cuentas)
+            .service(r("/ml/preguntas").route(get().to(preg::listar)))
+            .service(r("/ml/preguntas/responder").route(post().to(preg::responder)))
             // Catálogo unificado + gestor de inventario
             .service(r("/productos").route(get().to(prod::listar)))
             .service(r("/productos/inventario-masivo").route(post().to(prod::inventario_masivo)))

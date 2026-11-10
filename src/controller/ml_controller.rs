@@ -164,8 +164,22 @@ async fn procesar_notificacion(pool: &web::Data<DbPool>, client: &web::Data<MlCl
         if let Some(item_id) = resource.rsplit('/').next().filter(|s| !s.is_empty()) {
             crate::sync::refrescar_item(pool, client, &cuenta, item_id).await?;
         }
+    } else if topic == "questions" || resource.starts_with("/questions/") {
+        // Nueva pregunta de un comprador: avisamos al vendedor (se responde en /ml/preguntas).
+        let vid = cuenta.vendedor_id;
+        let nick = cuenta.nickname.clone().unwrap_or_default();
+        db::run(pool, move |conn| {
+            let cuerpo = if nick.is_empty() {
+                "Tienes una pregunta sin responder en Mercado Libre.".to_string()
+            } else {
+                format!("Cuenta {nick}: tienes una pregunta sin responder en Mercado Libre.")
+            };
+            crate::services::saas_services::notificar(conn, vid, "pregunta", "Nueva pregunta en Mercado Libre", Some(cuerpo));
+            Ok::<(), ApiError>(())
+        })
+        .await?;
     } else {
-        // Otros tópicos (orders, questions...) se manejarán en fases siguientes.
+        // Otros tópicos (orders…) se manejarán en fases siguientes.
         log::info!("Webhook ML tópico '{topic}' recibido (sin acción aún)");
     }
     Ok(())

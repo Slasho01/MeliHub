@@ -138,6 +138,22 @@ pub fn listar(
         .map_err(ApiError::from)
 }
 
+/// Mapa `ml_item_id -> título` de las publicaciones del vendedor, para mostrar nombres
+/// (p. ej. en Preguntas) sin llamar a Mercado Libre. Los item_ids que no tengamos no aparecen.
+pub fn titulos_por_item(conn: &mut PgConnection, vendedor_id: Uuid, item_ids: &[String]) -> std::collections::HashMap<String, String> {
+    if item_ids.is_empty() {
+        return std::collections::HashMap::new();
+    }
+    productos::table
+        .inner_join(ml_cuentas::table)
+        .filter(ml_cuentas::vendedor_id.eq(vendedor_id))
+        .filter(productos::ml_item_id.eq_any(item_ids))
+        .select((productos::ml_item_id, productos::titulo))
+        .load::<(String, String)>(conn)
+        .map(|rows| rows.into_iter().collect())
+        .unwrap_or_default()
+}
+
 // ----------------------------- Control de publicaciones (Fase A) -----------------------------
 
 /// Trae el producto y su cuenta ML (para el token), verificando propiedad.
