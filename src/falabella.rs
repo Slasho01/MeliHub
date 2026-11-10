@@ -132,9 +132,14 @@ impl FalabellaClient {
         self.request(user_id, api_key, "ProductUpdate", &[], Some(xml)).await
     }
 
-    /// Estado de un feed (ProductCreate/Update son asíncronos).
+    /// Estado detallado de un feed (ProductCreate/Update son asíncronos): errores por producto.
     pub async fn feed_status(&self, user_id: &str, api_key: &str, feed_id: &str) -> ApiResult<serde_json::Value> {
         self.request(user_id, api_key, "FeedStatus", &[("FeedID", feed_id)], None).await
+    }
+
+    /// Lista los feeds recientes (últimos ~30 días) con su estado y nº de errores.
+    pub async fn feed_list(&self, user_id: &str, api_key: &str) -> ApiResult<serde_json::Value> {
+        self.request(user_id, api_key, "FeedList", &[], None).await
     }
 }
 

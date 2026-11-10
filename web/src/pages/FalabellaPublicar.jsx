@@ -26,11 +26,13 @@ export default function FalabellaPublicar({ cuentas }) {
   const [ruta, setRuta] = useState([]) // categorías elegidas nivel a nivel
   const [productoId, setProductoId] = useState('')
   const [marca, setMarca] = useState('')
+  const [brands, setBrands] = useState(null) // nombres de marcas válidas de Falabella
   const [attrs, setAttrs] = useState(null) // atributos de la categoría hoja
   const [valores, setValores] = useState({})
   const [busy, setBusy] = useState('')
   const [error, setError] = useState(null)
   const [resultado, setResultado] = useState(null)
+  const [feedErrores, setFeedErrores] = useState(null) // errores reales del feed tras publicar
 
   // Solo productos CON stock en Mercado Libre (no tiene sentido publicar sin stock).
   useEffect(() => { get('/productos').then((d) => setProductos((d || []).filter((p) => (p.stock || 0) > 0))).catch(() => {}) }, [])
@@ -74,16 +76,53 @@ export default function FalabellaPublicar({ cuentas }) {
     } catch (e) { setError(e.message) } finally { setBusy('') }
   }
 
+  const cargarMarcas = () => {
+    if (brands !== null) return
+    setBrands([]) // evita recargas
+    get(`/falabella/marcas?cuenta=${cuenta.id}`)
+      .then((d) => {
+        let b = d?.SuccessResponse?.Body?.Brands?.Brand || []
+        if (!Array.isArray(b)) b = [b]
+        setBrands(b.map((x) => x?.Name).filter(Boolean))
+      })
+      .catch((e) => setError(e.message))
+  }
+  const marcasSugeridas = useMemo(() => {
+    if (!brands || !marca.trim()) return []
+    const q = marca.trim().toLowerCase()
+    return brands.filter((n) => n.toLowerCase().includes(q)).slice(0, 50)
+  }, [brands, marca])
+
   const publicar = async () => {
     if (!productoId || !hoja) return
-    setBusy('pub'); setError(null); setResultado(null)
+    // Valida que todos los atributos obligatorios del formulario estén llenos.
+    const faltan = (attrs || []).filter((a) => !(valores[a.FeedName] || '').trim()).map((a) => a.Label || a.FeedName)
+    if (faltan.length) { setError('Completa los atributos obligatorios: ' + faltan.join(', ')); return }
+    setBusy('pub'); setError(null); setResultado(null); setFeedErrores(null)
     try {
       const atributos = (attrs || [])
         .map((a) => ({ nombre: a.FeedName, valor: (valores[a.FeedName] || '').trim() }))
         .filter((x) => x.valor)
       const r = await post('/falabella/publicar', { producto_id: productoId, cuenta_id: cuenta.id, categoria: hoja.CategoryId, marca, atributos })
       setResultado(r)
+      // Falabella procesa el feed asíncrono: consultamos su estado real a los ~3s.
+      setTimeout(verEstadoUltimoFeed, 3000)
     } catch (e) { setError(e.message) } finally { setBusy('') }
+  }
+
+  const verEstadoUltimoFeed = async () => {
+    try {
+      const fl = await get(`/falabella/feeds?cuenta=${cuenta.id}`)
+      let feeds = fl?.SuccessResponse?.Body?.Feed || []
+      if (!Array.isArray(feeds)) feeds = [feeds]
+      if (!feeds.length) return
+      const fid = feeds[0].Feed
+      const fs = await get(`/falabella/feed?cuenta=${cuenta.id}&id=${fid}`)
+      const fd = fs?.SuccessResponse?.Body?.FeedDetail || fs?.SuccessResponse?.Body || {}
+      let errs = fd?.FeedErrors?.Error || []
+      if (!Array.isArray(errs)) errs = errs ? [errs] : []
+      setFeedErrores(errs.map((e) => (e.Message || String(e)).replace(/&#039;/g, "'")))
+    } catch { /* silencioso */ }
   }
 
   if (!cuenta) return null
@@ -113,8 +152,12 @@ export default function FalabellaPublicar({ cuentas }) {
         {hoja && <span className="muted xs">Categoría elegida: [{hoja.CategoryId}] {hoja.Name}</span>}
       </div>
 
-      <label className="stack" style={{ gap: 4 }}><span className="sm">Marca (debe existir en Falabella)</span>
-        <input className="input" value={marca} onChange={(e) => setMarca(e.target.value)} placeholder="Ej: Bosch" /></label>
+      <label className="stack" style={{ gap: 4 }}><span className="sm">Marca (debe existir en Falabella — elige de la lista)</span>
+        <input className="input" list="fala-brands" value={marca} onFocus={cargarMarcas}
+          onChange={(e) => setMarca(e.target.value)} placeholder={brands === null ? 'Haz clic para cargar marcas…' : 'Escribe para buscar (ej: Bosch)'} />
+        <datalist id="fala-brands">{marcasSugeridas.map((n) => <option key={n} value={n} />)}</datalist>
+        {brands && brands.length > 0 && <span className="muted xs">{brands.length.toLocaleString('es-CL')} marcas disponibles · escribe para filtrar</span>}
+      </label>
 
       {hoja && !attrs && (
         <div className="row"><button className="btn btn-sm" onClick={cargarAtributos} disabled={busy === 'attrs'}>{busy === 'attrs' ? 'Cargando…' : 'Cargar atributos obligatorios'}</button></div>
@@ -144,7 +187,10 @@ export default function FalabellaPublicar({ cuentas }) {
       )}
       {attrs && attrs.length === 0 && <div className="muted sm">Esta categoría no pide atributos extra. Puedes publicar.</div>}
 
-      {resultado && <div className="alert alert-ok">Enviado a Falabella. Respuesta: <code className="xs">{JSON.stringify(resultado?.SuccessResponse?.Body || resultado).slice(0, 300)}</code></div>}
+      {resultado && feedErrores === null && <div className="alert alert-ok">Enviado a Falabella. Verificando el estado del feed…</div>}
+      {feedErrores !== null && (feedErrores.length === 0
+        ? <div className="alert alert-ok">✓ Feed procesado sin errores. El producto puede tardar en aparecer o requerir aprobación de Falabella.</div>
+        : <div className="alert alert-bad"><b>Falabella rechazó el producto:</b><ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>{feedErrores.map((e, i) => <li key={i}>{e}</li>)}</ul></div>)}
 
       <div className="row" style={{ justifyContent: 'flex-end' }}>
         <button className="btn btn-accent" onClick={publicar} disabled={busy === 'pub' || !productoId || !hoja || !marca}>

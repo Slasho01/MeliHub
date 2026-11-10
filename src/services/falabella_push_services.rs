@@ -85,7 +85,6 @@ fn product_xml(sku: &str, name: &str, desc: &str, price: i64, qty: i32, category
 <PrimaryCategory>{cat}</PrimaryCategory>\
 <Description>{desc}</Description>\
 <Brand>{brand}</Brand>\
-<ProductId>{sku}</ProductId>\
 <ProductData>{data}</ProductData>\
 {business}\
 <Images>{images}</Images>\

@@ -56,6 +56,14 @@ pub struct CuentaQuery {
     pub cuenta: Uuid,
 }
 
+/// Marcas válidas de Falabella (para elegir una que exista; texto libre falla).
+pub async fn marcas(user: AuthVendedor, q: web::Query<CuentaQuery>, pool: web::Data<DbPool>, client: web::Data<FalabellaClient>) -> ApiResult<HttpResponse> {
+    let (vid, cid) = (user.id, q.cuenta);
+    let cuenta = db::run(&pool, move |conn| svc::get(conn, cid, vid)).await?;
+    let api_key = crate::crypto::descifrar(&cuenta.api_key);
+    Ok(HttpResponse::Ok().json(client.get_brands(&cuenta.user_id, &api_key).await?))
+}
+
 /// Árbol de categorías de Falabella (para mapear la categoría del producto).
 pub async fn categorias(user: AuthVendedor, q: web::Query<CuentaQuery>, pool: web::Data<DbPool>, client: web::Data<FalabellaClient>) -> ApiResult<HttpResponse> {
     let (vid, cid) = (user.id, q.cuenta);
@@ -96,6 +104,28 @@ pub struct PublicarReq {
     pub operador: Option<String>,
     #[serde(default)]
     pub atributos: Vec<AtributoKV>,
+}
+
+/// Feeds recientes (ProductCreate/Update son asíncronos): estado y nº de errores.
+pub async fn feeds(user: AuthVendedor, q: web::Query<CuentaQuery>, pool: web::Data<DbPool>, client: web::Data<FalabellaClient>) -> ApiResult<HttpResponse> {
+    let (vid, cid) = (user.id, q.cuenta);
+    let cuenta = db::run(&pool, move |conn| svc::get(conn, cid, vid)).await?;
+    let api_key = crate::crypto::descifrar(&cuenta.api_key);
+    Ok(HttpResponse::Ok().json(client.feed_list(&cuenta.user_id, &api_key).await?))
+}
+
+#[derive(Deserialize)]
+pub struct FeedQuery {
+    pub cuenta: Uuid,
+    pub id: String,
+}
+
+/// Detalle de un feed: errores por producto (por qué no se publicó).
+pub async fn feed_estado(user: AuthVendedor, q: web::Query<FeedQuery>, pool: web::Data<DbPool>, client: web::Data<FalabellaClient>) -> ApiResult<HttpResponse> {
+    let (vid, cid, fid) = (user.id, q.cuenta, q.id.clone());
+    let cuenta = db::run(&pool, move |conn| svc::get(conn, cid, vid)).await?;
+    let api_key = crate::crypto::descifrar(&cuenta.api_key);
+    Ok(HttpResponse::Ok().json(client.feed_status(&cuenta.user_id, &api_key, &fid).await?))
 }
 
 /// Publica (o actualiza) un producto del hub en Falabella con su categoría/atributos.
