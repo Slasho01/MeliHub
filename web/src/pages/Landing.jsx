@@ -37,7 +37,7 @@ function Precio({ p, destacado, bullets }) {
       </div>
       <ul className="lp-price-list">{bullets.map((b, i) => <li key={i}>{b}</li>)}</ul>
       <Link to="/login?r=1" className={`btn ${destacado ? 'btn-accent' : ''}`} style={{ width: '100%', textAlign: 'center' }}>
-        {p.precio_mensual === 0 ? 'Empezar gratis' : 'Probar 14 días'}
+        {p.precio_mensual === 0 ? 'Empezar gratis' : 'Probar 3 días'}
       </Link>
     </div>
   )
@@ -78,7 +78,7 @@ export default function Landing() {
           <Link to="/login?r=1" className="btn btn-accent btn-lg">Empezar gratis</Link>
           <a href="#precios" className="btn btn-lg">Ver planes</a>
         </div>
-        <p className="muted sm" style={{ marginTop: 10 }}>14 días de prueba · Sin tarjeta para empezar</p>
+        <p className="muted sm" style={{ marginTop: 10 }}>3 días de prueba · Sin tarjeta para empezar</p>
 
         <div className="lp-mock">
           <div className="lp-mock-bar"><span /><span /><span /><em className="muted sm">Panel MeliHub</em></div>
@@ -129,7 +129,7 @@ export default function Landing() {
 
       <section id="precios" className="lp-section">
         <h2 className="lp-h2">Planes simples</h2>
-        <p className="lp-lead">Empieza gratis y crece cuando lo necesites. Todos los planes pagados incluyen 14 días de prueba.</p>
+        <p className="lp-lead">Empieza gratis y crece cuando lo necesites. Todos los planes pagados incluyen 3 días de prueba.</p>
         <div className="lp-pricing">
           {planes.map((x, i) => <Precio key={i} {...x} />)}
         </div>

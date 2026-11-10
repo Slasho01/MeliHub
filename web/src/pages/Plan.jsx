@@ -120,7 +120,7 @@ export default function Plan() {
                   </>
                 )}
                 {ah > 0 && <div className="sm" style={{ color: 'var(--ok)' }}>Ahorras {ah}% vs mensual</div>}
-                {b > 0 && <div className="sm muted">14 días gratis en tu 1ª suscripción</div>}
+                {b > 0 && <div className="sm muted">3 días gratis en tu 1ª suscripción</div>}
                 {cupon && final !== b && b > 0 && <div className="sm" style={{ color: 'var(--ok)' }}>Cupón {cupon.codigo}: {cupon.descripcion}</div>}
               </div>
               <ul className="muted sm" style={{ margin: 0, paddingLeft: 16, lineHeight: 1.8 }}>

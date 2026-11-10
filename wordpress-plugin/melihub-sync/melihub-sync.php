@@ -2,7 +2,7 @@
 /**
  * Plugin Name: MeliHub Sync
  * Description: Sincroniza productos de MeliHub (Mercado Libre) a WooCommerce y reporta las ventas para mantener el stock en dos vías.
- * Version: 0.2.0
+ * Version: 0.3.0
  * Author: Jarstore
  * Requires Plugins: woocommerce
  */
@@ -67,6 +67,7 @@ function melihub_upsert_producto($it) {
     $product->set_stock_status($it['stock'] > 0 ? 'instock' : 'outofstock');
     $product->set_status($it['estado'] === 'active' ? 'publish' : 'draft');
     if (!empty($it['descripcion'])) $product->set_description($it['descripcion']);
+    melihub_set_video($product, $it['video'] ?? '');
 
     // Ficha técnica -> atributos (pestaña "Información adicional")
     if (!empty($it['especificaciones']) && is_array($it['especificaciones'])) {
@@ -98,13 +99,45 @@ function melihub_upsert_producto($it) {
     $product->update_meta_data(MELIHUB_META_ID, $it['id']);
     $id = $product->save();
 
-    // Imagen: (re)descarga si cambió la URL de origen (p. ej. mayor calidad)
-    $img_url = $it['thumbnail'] ?? '';
-    if ($img_url && get_post_meta($id, '_melihub_img_src', true) !== $img_url) {
-        melihub_set_imagen($id, $img_url);
-        update_post_meta($id, '_melihub_img_src', $img_url);
-    }
+    // Galería completa: imagen destacada + resto como galería. Sólo (re)descarga si
+    // cambió el conjunto de imágenes (se guarda una firma para no re-subir en cada sync).
+    $imgs = !empty($it['imagenes']) && is_array($it['imagenes']) ? $it['imagenes'] : array_filter([$it['thumbnail'] ?? '']);
+    melihub_sync_imagenes($product, $imgs);
     return [$id, $nuevo];
+}
+
+/** Descarga la galería: 1ª imagen = destacada, el resto = galería del producto. */
+function melihub_sync_imagenes($product, $imagenes) {
+    $imagenes = array_values(array_filter((array) $imagenes));
+    if (!$imagenes) return;
+    $id = $product->get_id();
+    $firma = md5(implode('|', $imagenes));
+    if (get_post_meta($id, '_melihub_img_firma', true) === $firma) return; // sin cambios
+    require_once(ABSPATH . 'wp-admin/includes/media.php');
+    require_once(ABSPATH . 'wp-admin/includes/file.php');
+    require_once(ABSPATH . 'wp-admin/includes/image.php');
+    $ids = [];
+    foreach ($imagenes as $url) {
+        $att = media_sideload_image($url, $id, null, 'id');
+        if (!is_wp_error($att)) $ids[] = (int) $att;
+    }
+    if (!$ids) return;
+    set_post_thumbnail($id, $ids[0]);
+    $product->set_gallery_image_ids(count($ids) > 1 ? array_slice($ids, 1) : []);
+    $product->save();
+    update_post_meta($id, '_melihub_img_firma', $firma);
+}
+
+/** Inserta/actualiza el video (YouTube) en la descripción, para que WordPress lo embeba.
+ *  La URL va sola en su línea (auto-embed) entre marcadores, para reemplazarla en cada sync. */
+function melihub_set_video($product, $video) {
+    $desc = (string) $product->get_description();
+    $desc = preg_replace('#\s*<!--melihub-video-->.*?<!--/melihub-video-->#s', '', $desc);
+    $video = trim((string) $video);
+    if ($video !== '') {
+        $desc = rtrim($desc) . "\n\n<!--melihub-video-->\n" . esc_url_raw($video) . "\n<!--/melihub-video-->";
+    }
+    $product->set_description($desc);
 }
 
 /** Trae TODOS los productos (por páginas) y los sincroniza en WooCommerce. */
@@ -171,14 +204,6 @@ function melihub_ocultar_huerfanos($vistos_ids) {
         }
     }
     return $n;
-}
-
-function melihub_set_imagen($product_id, $url) {
-    require_once(ABSPATH . 'wp-admin/includes/media.php');
-    require_once(ABSPATH . 'wp-admin/includes/file.php');
-    require_once(ABSPATH . 'wp-admin/includes/image.php');
-    $att_id = media_sideload_image($url, $product_id, null, 'id');
-    if (!is_wp_error($att_id)) set_post_thumbnail($product_id, $att_id);
 }
 
 /* ----------------------------- Reportar ventas ----------------------------- */

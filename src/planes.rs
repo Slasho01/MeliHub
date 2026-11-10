@@ -19,7 +19,7 @@ pub struct Plan {
 }
 
 /// Días de prueba gratis en la primera suscripción a un plan de pago.
-pub const TRIAL_DIAS: i64 = 14;
+pub const TRIAL_DIAS: i64 = 3;
 
 pub const PLANES: &[Plan] = &[
     Plan { id: "free", nombre: "Free", max_cuentas: 1, max_productos: 50, max_plataformas: 1, precio_mensual: 0, precio_anual: 0 },

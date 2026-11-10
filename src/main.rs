@@ -4,6 +4,7 @@ mod crypto;
 mod controller;
 mod db;
 mod errors;
+mod falabella;
 mod jobs;
 mod mailer;
 mod ml;

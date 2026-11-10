@@ -1773,6 +1773,7 @@ dependencies = [
  "dotenvy",
  "env_logger",
  "futures-util",
+ "hmac",
  "jsonwebtoken",
  "log",
  "rand 0.8.8",
