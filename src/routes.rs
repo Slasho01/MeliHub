@@ -36,6 +36,9 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             // Falabella Seller Center (cuentas)
             .service(r("/falabella/cuentas").route(get().to(fala::listar)).route(post().to(fala::conectar)))
             .service(r("/falabella/cuentas/{id}").route(delete().to(fala::desconectar)))
+            .service(r("/falabella/categorias").route(get().to(fala::categorias)))
+            .service(r("/falabella/categorias/atributos").route(get().to(fala::atributos)))
+            .service(r("/falabella/publicar").route(post().to(fala::publicar)))
             // Catálogo unificado + gestor de inventario
             .service(r("/productos").route(get().to(prod::listar)))
             .service(r("/productos/inventario-masivo").route(post().to(prod::inventario_masivo)))

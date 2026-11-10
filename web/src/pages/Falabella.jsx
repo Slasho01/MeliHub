@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { get, post, del } from '../api'
+import FalabellaPublicar from './FalabellaPublicar'
 
 export default function Falabella({ me }) {
   const owner = me?.es_owner
@@ -57,6 +58,8 @@ export default function Falabella({ me }) {
           )}
         </div>
       )}
+
+      {owner && cuentas && cuentas.length > 0 && <FalabellaPublicar cuentas={cuentas} />}
 
       {owner && (
         <form className="card stack" onSubmit={conectar} style={{ gap: 10 }}>

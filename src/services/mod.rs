@@ -7,6 +7,7 @@ pub mod cupon_services;
 pub mod facturacion_services;
 pub mod equipo_services;
 pub mod falabella_services;
+pub mod falabella_push_services;
 pub mod inventario_services;
 pub mod ml_services;
 pub mod pub_services;

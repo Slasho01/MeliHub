@@ -110,6 +110,32 @@ impl FalabellaClient {
     pub async fn get_brands(&self, user_id: &str, api_key: &str) -> ApiResult<serde_json::Value> {
         self.request(user_id, api_key, "GetBrands", &[], None).await
     }
+
+    /// Árbol de categorías de Falabella (para mapear la categoría del producto).
+    pub async fn get_category_tree(&self, user_id: &str, api_key: &str) -> ApiResult<serde_json::Value> {
+        self.request(user_id, api_key, "GetCategoryTree", &[], None).await
+    }
+
+    /// Atributos (obligatorios y opcionales) de una categoría.
+    pub async fn get_category_attributes(&self, user_id: &str, api_key: &str, category_id: &str) -> ApiResult<serde_json::Value> {
+        self.request(user_id, api_key, "GetCategoryAttributes", &[("PrimaryCategory", category_id)], None).await
+    }
+
+    /// Crea productos en Falabella. El cuerpo es un XML `<Request><Product>…`. Devuelve el
+    /// feed (asíncrono); su resultado se consulta luego con `FeedStatus`.
+    pub async fn product_create(&self, user_id: &str, api_key: &str, xml: String) -> ApiResult<serde_json::Value> {
+        self.request(user_id, api_key, "ProductCreate", &[], Some(xml)).await
+    }
+
+    /// Actualiza productos existentes (precio, stock, datos). Mismo formato XML.
+    pub async fn product_update(&self, user_id: &str, api_key: &str, xml: String) -> ApiResult<serde_json::Value> {
+        self.request(user_id, api_key, "ProductUpdate", &[], Some(xml)).await
+    }
+
+    /// Estado de un feed (ProductCreate/Update son asíncronos).
+    pub async fn feed_status(&self, user_id: &str, api_key: &str, feed_id: &str) -> ApiResult<serde_json::Value> {
+        self.request(user_id, api_key, "FeedStatus", &[("FeedID", feed_id)], None).await
+    }
 }
 
 #[cfg(test)]

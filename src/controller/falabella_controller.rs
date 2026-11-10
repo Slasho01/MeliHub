@@ -50,3 +50,63 @@ pub async fn desconectar(path: web::Path<Uuid>, user: AuthVendedor, pool: web::D
     db::run(&pool, move |conn| svc::desconectar(conn, cid, vid)).await?;
     Ok(HttpResponse::NoContent().finish())
 }
+
+#[derive(Deserialize)]
+pub struct CuentaQuery {
+    pub cuenta: Uuid,
+}
+
+/// Árbol de categorías de Falabella (para mapear la categoría del producto).
+pub async fn categorias(user: AuthVendedor, q: web::Query<CuentaQuery>, pool: web::Data<DbPool>, client: web::Data<FalabellaClient>) -> ApiResult<HttpResponse> {
+    let (vid, cid) = (user.id, q.cuenta);
+    let cuenta = db::run(&pool, move |conn| svc::get(conn, cid, vid)).await?;
+    let api_key = crate::crypto::descifrar(&cuenta.api_key);
+    Ok(HttpResponse::Ok().json(client.get_category_tree(&cuenta.user_id, &api_key).await?))
+}
+
+#[derive(Deserialize)]
+pub struct AtributosQuery {
+    pub cuenta: Uuid,
+    pub categoria: String,
+}
+
+/// Atributos (obligatorios/opcionales) de una categoría Falabella.
+pub async fn atributos(user: AuthVendedor, q: web::Query<AtributosQuery>, pool: web::Data<DbPool>, client: web::Data<FalabellaClient>) -> ApiResult<HttpResponse> {
+    let (vid, cid, cat) = (user.id, q.cuenta, q.categoria.clone());
+    let cuenta = db::run(&pool, move |conn| svc::get(conn, cid, vid)).await?;
+    let api_key = crate::crypto::descifrar(&cuenta.api_key);
+    Ok(HttpResponse::Ok().json(client.get_category_attributes(&cuenta.user_id, &api_key, &cat).await?))
+}
+
+#[derive(Deserialize)]
+pub struct AtributoKV {
+    pub nombre: String,
+    pub valor: String,
+}
+
+#[derive(Deserialize)]
+pub struct PublicarReq {
+    pub producto_id: Uuid,
+    pub cuenta_id: Uuid,
+    pub categoria: String,
+    pub marca: String,
+    #[serde(default)]
+    pub atributos: Vec<AtributoKV>,
+}
+
+/// Publica (o actualiza) un producto del hub en Falabella con su categoría/atributos.
+pub async fn publicar(user: AuthVendedor, body: web::Json<PublicarReq>, pool: web::Data<DbPool>, client: web::Data<FalabellaClient>) -> ApiResult<HttpResponse> {
+    user.exigir_edicion()?;
+    let PublicarReq { producto_id, cuenta_id, categoria, marca, atributos } = body.into_inner();
+    let (vid, admin) = (user.id, user.es_admin());
+    let (producto, cuenta) = db::run(&pool, move |conn| {
+        let (p, _) = crate::services::producto_services::get_con_cuenta(conn, producto_id, vid, admin)?;
+        let c = svc::get(conn, cuenta_id, vid)?;
+        Ok::<_, ApiError>((p, c))
+    })
+    .await?;
+    let api_key = crate::crypto::descifrar(&cuenta.api_key);
+    let atributos: Vec<(String, String)> = atributos.into_iter().map(|a| (a.nombre, a.valor)).collect();
+    let xml = crate::services::falabella_push_services::build_product_xml(&producto, &categoria, &marca, &atributos);
+    Ok(HttpResponse::Ok().json(client.product_create(&cuenta.user_id, &api_key, xml).await?))
+}
