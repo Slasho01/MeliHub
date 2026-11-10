@@ -23,7 +23,14 @@ fn xml_tag(s: &str) -> String {
     t
 }
 
-/// Imágenes (URLs) del producto desde `datos.pictures` (alta calidad), con fallback al thumbnail.
+/// Normaliza una URL de imagen de ML para Falabella: https, variante `-O` (alta calidad) y
+/// fuerza `.jpg` (Falabella acepta PNG/JPG, NO webp).
+fn img_falabella(u: &str) -> String {
+    u.replace("http://", "https://").replace("-I.", "-O.").replace(".webp", ".jpg")
+}
+
+/// Imágenes (URLs) del producto desde `datos.pictures`, máx 8 (límite de Falabella), con
+/// fallback al thumbnail.
 fn imagenes_de(p: &Producto) -> Vec<String> {
     let mut urls: Vec<String> = Vec::new();
     if let Some(arr) = p.datos.get("pictures").and_then(|a| a.as_array()) {
@@ -33,7 +40,7 @@ fn imagenes_de(p: &Producto) -> Vec<String> {
                 .and_then(|u| u.as_str())
                 .or_else(|| pic.get("url").and_then(|u| u.as_str()))
             {
-                let u = u.replace("-I.jpg", "-O.jpg").replace("http://", "https://");
+                let u = img_falabella(u);
                 if !u.is_empty() && !urls.contains(&u) {
                     urls.push(u);
                 }
@@ -42,10 +49,31 @@ fn imagenes_de(p: &Producto) -> Vec<String> {
     }
     if urls.is_empty() {
         if let Some(t) = p.thumbnail.as_deref().filter(|s| !s.trim().is_empty()) {
-            urls.push(t.replace("http://", "https://"));
+            urls.push(img_falabella(t));
         }
     }
+    urls.truncate(8);
     urls
+}
+
+/// XML de la acción `Image` (asocia las imágenes a un producto ya creado). `None` si no hay.
+pub fn build_image_xml(p: &Producto) -> Option<String> {
+    let imagenes = imagenes_de(p);
+    if imagenes.is_empty() {
+        return None;
+    }
+    let mut images = String::new();
+    for u in &imagenes {
+        images.push_str(&format!("<Image>{}</Image>", xml_escape(u)));
+    }
+    Some(format!(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Request><ProductImage>\
+<SellerSku>{}</SellerSku>\
+<Images>{}</Images>\
+</ProductImage></Request>",
+        xml_escape(&p.ml_item_id),
+        images,
+    ))
 }
 
 /// Construye el XML de un `<Product>` para ProductCreate/Update.
@@ -74,6 +102,7 @@ fn product_xml(sku: &str, name: &str, desc: &str, price: i64, qty: i32, category
 <Price>{price}</Price>\
 <Stock>{qty}</Stock>\
 <Status>active</Status>\
+<IsPublished>1</IsPublished>\
 </BusinessUnit></BusinessUnits>",
         op = xml_escape(operador),
     );

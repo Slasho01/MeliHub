@@ -40,6 +40,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(r("/falabella/categorias").route(get().to(fala::categorias)))
             .service(r("/falabella/categorias/atributos").route(get().to(fala::atributos)))
             .service(r("/falabella/publicar").route(post().to(fala::publicar)))
+            .service(r("/falabella/productos").route(get().to(fala::productos_fala)))
             .service(r("/falabella/feeds").route(get().to(fala::feeds)))
             .service(r("/falabella/feed").route(get().to(fala::feed_estado)))
             // Catálogo unificado + gestor de inventario

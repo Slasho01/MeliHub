@@ -56,6 +56,14 @@ pub struct CuentaQuery {
     pub cuenta: Uuid,
 }
 
+/// Productos ya publicados en Falabella (para ver su estado/stock/imágenes).
+pub async fn productos_fala(user: AuthVendedor, q: web::Query<CuentaQuery>, pool: web::Data<DbPool>, client: web::Data<FalabellaClient>) -> ApiResult<HttpResponse> {
+    let (vid, cid) = (user.id, q.cuenta);
+    let cuenta = db::run(&pool, move |conn| svc::get(conn, cid, vid)).await?;
+    let api_key = crate::crypto::descifrar(&cuenta.api_key);
+    Ok(HttpResponse::Ok().json(client.get_products(&cuenta.user_id, &api_key, None).await?))
+}
+
 /// Marcas válidas de Falabella (para elegir una que exista; texto libre falla).
 pub async fn marcas(user: AuthVendedor, q: web::Query<CuentaQuery>, pool: web::Data<DbPool>, client: web::Data<FalabellaClient>) -> ApiResult<HttpResponse> {
     let (vid, cid) = (user.id, q.cuenta);
@@ -149,5 +157,11 @@ pub async fn publicar(user: AuthVendedor, body: web::Json<PublicarReq>, pool: we
         operador.as_deref().unwrap_or(""),
         &atributos,
     );
-    Ok(HttpResponse::Ok().json(client.product_create(&cuenta.user_id, &api_key, xml).await?))
+    let creado = client.product_create(&cuenta.user_id, &api_key, xml).await?;
+    // Imágenes: van en una acción `Image` aparte (ProductCreate ignora el <Images> inline).
+    let imagenes = match crate::services::falabella_push_services::build_image_xml(&producto) {
+        Some(img_xml) => Some(client.product_image(&cuenta.user_id, &api_key, img_xml).await?),
+        None => None,
+    };
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "producto": creado, "imagenes": imagenes })))
 }

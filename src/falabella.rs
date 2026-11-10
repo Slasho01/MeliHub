@@ -116,6 +116,15 @@ impl FalabellaClient {
         self.request(user_id, api_key, "GetCategoryTree", &[], None).await
     }
 
+    /// Productos del vendedor (opcionalmente filtrados por SellerSku) — para ver estado/stock/imágenes.
+    pub async fn get_products(&self, user_id: &str, api_key: &str, sku: Option<&str>) -> ApiResult<serde_json::Value> {
+        let extra: Vec<(&str, &str)> = match sku {
+            Some(s) => vec![("SkuSellerList", s)],
+            None => vec![("Limit", "10")],
+        };
+        self.request(user_id, api_key, "GetProducts", &extra, None).await
+    }
+
     /// Atributos (obligatorios y opcionales) de una categoría.
     pub async fn get_category_attributes(&self, user_id: &str, api_key: &str, category_id: &str) -> ApiResult<serde_json::Value> {
         self.request(user_id, api_key, "GetCategoryAttributes", &[("PrimaryCategory", category_id)], None).await
@@ -130,6 +139,12 @@ impl FalabellaClient {
     /// Actualiza productos existentes (precio, stock, datos). Mismo formato XML.
     pub async fn product_update(&self, user_id: &str, api_key: &str, xml: String) -> ApiResult<serde_json::Value> {
         self.request(user_id, api_key, "ProductUpdate", &[], Some(xml)).await
+    }
+
+    /// Asocia imágenes a un producto (acción `Image`, aparte de ProductCreate). El cuerpo es
+    /// `<Request><ProductImage><SellerSku>…</SellerSku><Images>…</Images></ProductImage></Request>`.
+    pub async fn product_image(&self, user_id: &str, api_key: &str, xml: String) -> ApiResult<serde_json::Value> {
+        self.request(user_id, api_key, "Image", &[], Some(xml)).await
     }
 
     /// Estado detallado de un feed (ProductCreate/Update son asíncronos): errores por producto.
