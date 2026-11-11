@@ -19,11 +19,20 @@ pub struct ForgotBody {
 
 /// Solicita recuperar contraseña: envía un correo con enlace (si el email existe).
 pub async fn forgot(
+    req: actix_web::HttpRequest,
     body: web::Json<ForgotBody>,
     pool: web::Data<DbPool>,
     cfg: web::Data<Config>,
     mailer: web::Data<Mailer>,
+    limiter: web::Data<crate::auth::LoginLimiter>,
 ) -> ApiResult<HttpResponse> {
+    // Anti-spam: limita por IP (bucket propio) el envío de correos de reseteo.
+    let ip = req.connection_info().realip_remote_addr().unwrap_or("desconocida").to_string();
+    let key = format!("pw|{ip}");
+    if !limiter.permitido(&key) {
+        return Ok(HttpResponse::TooManyRequests().json(json!({ "error": "Demasiados intentos. Espera unos minutos." })));
+    }
+    limiter.fallo(&key);
     let email = body.into_inner().email;
     let email2 = email.clone();
     let found = db::run(&pool, move |conn| svc::buscar_por_email(conn, &email2)).await?;
@@ -60,10 +69,19 @@ pub async fn reset(body: web::Json<ResetBody>, pool: web::Data<DbPool>, cfg: web
 }
 
 pub async fn registrar(
+    req: actix_web::HttpRequest,
     body: web::Json<RegistroRequest>,
     pool: web::Data<DbPool>,
     cfg: web::Data<Config>,
+    limiter: web::Data<crate::auth::LoginLimiter>,
 ) -> ApiResult<HttpResponse> {
+    // Anti-spam: limita por IP la creación de cuentas (bucket propio).
+    let ip = req.connection_info().realip_remote_addr().unwrap_or("desconocida").to_string();
+    let key = format!("reg|{ip}");
+    if !limiter.permitido(&key) {
+        return Ok(HttpResponse::TooManyRequests().json(json!({ "error": "Demasiados intentos. Espera unos minutos." })));
+    }
+    limiter.fallo(&key);
     let v = db::run(&pool, move |conn| svc::registrar(conn, body.into_inner())).await?;
     let token = crear_token(v.id, &v.rol, v.id, "owner", v.session_version, &cfg.jwt_secret)?;
     Ok(HttpResponse::Created().json(json!({ "token": token, "vendedor": v })))

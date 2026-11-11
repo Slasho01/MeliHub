@@ -67,8 +67,10 @@ async fn main() -> std::io::Result<()> {
     jobs::start(pool_data.clone(), ml_client.clone(), falabella_client.clone(), config.ml.configurado());
 
     HttpServer::new(move || {
+        // Sin CORS_ORIGINS definido, acotamos al propio origen (APP_URL) en vez de abrir a
+        // cualquiera. El panel se sirve desde el mismo origen, así que no se rompe.
         let cors = if config_data.cors_origins.is_empty() {
-            Cors::default().allow_any_origin()
+            Cors::default().allowed_origin(&config_data.app_url)
         } else {
             config_data.cors_origins.iter().fold(Cors::default(), |c, o| c.allowed_origin(o))
         }
