@@ -41,8 +41,9 @@ function Combo({ options, value, onChange, placeholder }) {
 const norm = (s) => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\([^)]*\)/g, '').trim()
 const numOf = (v) => { const m = String(v || '').match(/[\d.,]+/); return m ? m[0].replace(',', '.') : '' }
 
-// ¿atributo obligatorio? Paris mete "OBLIGATORIO" en el nombre (o trae isRequired).
-const esReq = (a) => /obligatorio/i.test(a.name || '') || a.isRequired || a.required
+// ¿atributo obligatorio? Paris mete "OBLIGATORIO" en el nombre (o trae un flag).
+const esReq = (a) => /obligatorio/i.test(a.name || '') || a.isRequired || a.required || a.mandatory || a.isMandatory
+const tieneOpciones = (a) => (a.attributeOptions || a.options || []).length > 0
 
 // Pre-rellena los atributos de Paris con datos de ML del producto (heurística por nombre/id).
 function autoFill(product, parisAttrs) {
@@ -152,8 +153,9 @@ export default function ParisPublicar({ cuenta }) {
       </div>
     )
   }
-  const requeridos = attrDefs.filter(esReq)
-  const opcionales = attrDefs.filter((a) => !esReq(a))
+  // Siempre visibles: obligatorios + los de lista (desplegables, suelen ser requeridos).
+  const importantes = attrDefs.filter((a) => esReq(a) || tieneOpciones(a))
+  const opcionales = attrDefs.filter((a) => !(esReq(a) || tieneOpciones(a)))
 
   const publicar = async (e) => {
     e.preventDefault()
@@ -236,11 +238,11 @@ export default function ParisPublicar({ cuenta }) {
             <div className="muted sm">Esta familia no devolvió atributos.</div>
           ) : (
             <>
-              {requeridos.map(renderAttr)}
+              {importantes.map(renderAttr)}
               {opcionales.length > 0 && (
                 <>
                   <button type="button" className="btn btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => setShowOpc((v) => !v)}>
-                    {showOpc ? 'Ocultar' : 'Mostrar'} atributos opcionales ({opcionales.length})
+                    {showOpc ? 'Ocultar' : 'Mostrar'} más atributos opcionales ({opcionales.length})
                   </button>
                   {showOpc && opcionales.map(renderAttr)}
                 </>
