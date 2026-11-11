@@ -4,6 +4,40 @@ import { get, post } from '../api'
 // Las respuestas de Paris vienen como { results: [...] } (a veces { data: [...] }).
 const asList = (v) => v?.results || v?.data || (Array.isArray(v) ? v : [])
 
+// Combobox con búsqueda: escribes y filtra las opciones. options: [{value,label}].
+function Combo({ options, value, onChange, placeholder }) {
+  const [q, setQ] = useState('')
+  const [open, setOpen] = useState(false)
+  const sel = options.find((o) => o.value === value)
+  const text = open ? q : (sel ? sel.label : '')
+  const filtered = options.filter((o) => (o.label || '').toLowerCase().includes(q.toLowerCase())).slice(0, 80)
+  return (
+    <div style={{ position: 'relative' }}>
+      <input
+        className="input"
+        placeholder={placeholder}
+        value={text}
+        onChange={(e) => { setQ(e.target.value); setOpen(true) }}
+        onFocus={() => { setQ(''); setOpen(true) }}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+      />
+      {open && filtered.length > 0 && (
+        <div style={{ position: 'absolute', zIndex: 20, left: 0, right: 0, top: '100%', marginTop: 2, maxHeight: 240, overflowY: 'auto', background: 'var(--card, #fff)', border: '1px solid var(--line, #d0d0d0)', borderRadius: 8, boxShadow: '0 6px 18px rgba(0,0,0,.12)' }}>
+          {filtered.map((o) => (
+            <div
+              key={o.value}
+              style={{ padding: '8px 10px', cursor: 'pointer', fontSize: 14, borderBottom: '1px solid var(--line, #eee)', background: o.value === value ? 'var(--line, #f0f0f0)' : 'transparent' }}
+              onMouseDown={(e) => { e.preventDefault(); onChange(o.value); setOpen(false); setQ('') }}
+            >
+              {o.label}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function ParisPublicar({ cuenta }) {
   const [familias, setFamilias] = useState(null)
   const [categorias, setCategorias] = useState([])
@@ -59,6 +93,8 @@ export default function ParisPublicar({ cuenta }) {
 
   const publicar = async (e) => {
     e.preventDefault()
+    if (!form.family_code) { setError('Elige una familia'); return }
+    if (!form.categoria_id) { setError('Elige una categoría'); return }
     setBusy(true); setError(null); setResult(null)
     try {
       const atributos = Object.entries(attrVals).filter(([, v]) => v !== '' && v != null).map(([code, value]) => ({ code, value: String(value) }))
@@ -92,19 +128,23 @@ export default function ParisPublicar({ cuenta }) {
       <input className="input" placeholder="Nombre del producto" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
       <input className="input" placeholder="SKU / referencia (ej. el id de Mercado Libre)" value={form.ref_product} onChange={(e) => setForm({ ...form, ref_product: e.target.value })} required />
 
-      <label className="sm muted">Familia</label>
-      <select className="input" value={form.family_code} onChange={(e) => elegirFamilia(e.target.value)} required>
-        <option value="">{familias == null ? 'Cargando familias…' : (famList.length ? '— Elige una familia —' : 'Sin familias disponibles en tu cuenta')}</option>
-        {famList.map((f) => <option key={f.id || f.code} value={f.id || f.code}>{f.name || f.nombre}</option>)}
-      </select>
+      <label className="sm muted">Familia {familias == null && <span>(cargando…)</span>}</label>
+      <Combo
+        placeholder={famList.length ? 'Escribe para buscar familia…' : 'Sin familias disponibles en tu cuenta'}
+        options={famList.map((f) => ({ value: f.id || f.code, label: f.name || f.nombre }))}
+        value={form.family_code}
+        onChange={elegirFamilia}
+      />
 
       {form.family_code && (
         <>
-          <label className="sm muted">Categoría (subcategoría de la familia)</label>
-          <select className="input" value={form.categoria_id} onChange={(e) => setForm({ ...form, categoria_id: e.target.value })} required>
-            <option value="">{loadingFam ? 'Cargando categorías…' : (catSelect.length ? '— Elige una categoría —' : 'Sin categorías disponibles')}</option>
-            {catSelect.map((c) => <option key={c.id} value={c.id}>{c.path || c.name}</option>)}
-          </select>
+          <label className="sm muted">Categoría (subcategoría) {loadingFam && <span>(cargando…)</span>}</label>
+          <Combo
+            placeholder={catSelect.length ? 'Escribe para buscar categoría…' : 'Sin categorías disponibles'}
+            options={catSelect.map((c) => ({ value: c.id, label: c.path || c.name }))}
+            value={form.categoria_id}
+            onChange={(v) => setForm((f) => ({ ...f, categoria_id: v }))}
+          />
         </>
       )}
 

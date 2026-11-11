@@ -65,8 +65,8 @@ export default function App() {
           <NavLink to="/preguntas" className={cls}>Preguntas</NavLink>
           <div className="sidebar-section">Falabella</div>
           <NavLink to="/falabella" className={cls}>Cuentas</NavLink>
-          <div className="sidebar-section">Paris</div>
-          <NavLink to="/paris" className={cls}>Cuentas</NavLink>
+          {me?.es_admin && <div className="sidebar-section">Paris</div>}
+          {me?.es_admin && <NavLink to="/paris" className={cls}>Cuentas</NavLink>}
           <div className="sidebar-section">Catálogo</div>
           <NavLink to="/inventario" className={cls}>Inventario</NavLink>
           <NavLink to="/ganancias" className={cls}>Ganancias</NavLink>
@@ -104,7 +104,7 @@ export default function App() {
           <Route path="/envios" element={<Envios />} />
           <Route path="/preguntas" element={<Preguntas />} />
           <Route path="/falabella" element={<Falabella me={me} />} />
-          <Route path="/paris" element={<Paris me={me} />} />
+          <Route path="/paris" element={me && !me.es_admin ? <Navigate to="/" replace /> : <Paris me={me} />} />
           <Route path="/api-keys" element={me && !me.es_owner ? <Navigate to="/" replace /> : <ApiKeys />} />
           <Route path="/equipo" element={me && !me.es_owner ? <Navigate to="/" replace /> : <Equipo />} />
           <Route path="/auditoria" element={me && !me.es_owner ? <Navigate to="/" replace /> : <Auditoria />} />

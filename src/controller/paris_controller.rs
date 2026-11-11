@@ -26,6 +26,14 @@ fn verdadero() -> bool {
     true
 }
 
+/// Por ahora Paris está disponible solo para el administrador de la plataforma.
+fn exigir_admin(user: &AuthVendedor) -> ApiResult<()> {
+    if !user.es_admin() {
+        return Err(ApiError::forbidden("Por ahora Paris está disponible solo para el administrador."));
+    }
+    Ok(())
+}
+
 /// Obtiene la cuenta validando que sea del vendedor autenticado.
 async fn cuenta_de(pool: &web::Data<DbPool>, org: Uuid, id: Uuid) -> ApiResult<ParisCuenta> {
     db::run(pool, move |conn| {
@@ -40,6 +48,7 @@ async fn cuenta_de(pool: &web::Data<DbPool>, org: Uuid, id: Uuid) -> ApiResult<P
 
 pub async fn conectar(user: AuthVendedor, body: web::Json<ConectarReq>, pool: web::Data<DbPool>) -> ApiResult<HttpResponse> {
     user.exigir_owner()?;
+    exigir_admin(&user)?;
     let ConectarReq { api_key, nombre, sandbox } = body.into_inner();
     let org = user.id;
     let cuenta = db::run(&pool, move |conn| svc::conectar(conn, org, &api_key, nombre, sandbox)).await?;
@@ -47,6 +56,7 @@ pub async fn conectar(user: AuthVendedor, body: web::Json<ConectarReq>, pool: we
 }
 
 pub async fn listar(user: AuthVendedor, pool: web::Data<DbPool>) -> ApiResult<HttpResponse> {
+    exigir_admin(&user)?;
     let org = user.id;
     let cuentas = db::run(&pool, move |conn| svc::listar(conn, org)).await?;
     Ok(HttpResponse::Ok().json(cuentas))
@@ -54,6 +64,7 @@ pub async fn listar(user: AuthVendedor, pool: web::Data<DbPool>) -> ApiResult<Ht
 
 pub async fn desconectar(user: AuthVendedor, path: web::Path<Uuid>, pool: web::Data<DbPool>) -> ApiResult<HttpResponse> {
     user.exigir_owner()?;
+    exigir_admin(&user)?;
     let (org, id) = (user.id, path.into_inner());
     db::run(&pool, move |conn| svc::desconectar(conn, id, org)).await?;
     Ok(HttpResponse::Ok().json(serde_json::json!({ "ok": true })))
@@ -62,6 +73,7 @@ pub async fn desconectar(user: AuthVendedor, path: web::Path<Uuid>, pool: web::D
 // ----------------- Taxonomía -----------------
 
 pub async fn familias(user: AuthVendedor, path: web::Path<Uuid>, pool: web::Data<DbPool>, client: web::Data<ParisClient>) -> ApiResult<HttpResponse> {
+    exigir_admin(&user)?;
     let cuenta = cuenta_de(&pool, user.id, path.into_inner()).await?;
     let key = crate::crypto::descifrar(&cuenta.api_key);
     Ok(HttpResponse::Ok().json(client.get_families(cuenta.sandbox, &key).await?))
@@ -69,6 +81,7 @@ pub async fn familias(user: AuthVendedor, path: web::Path<Uuid>, pool: web::Data
 
 pub async fn categorias(user: AuthVendedor, path: web::Path<(Uuid, String)>, pool: web::Data<DbPool>, client: web::Data<ParisClient>) -> ApiResult<HttpResponse> {
     let (id, family) = path.into_inner();
+    exigir_admin(&user)?;
     let cuenta = cuenta_de(&pool, user.id, id).await?;
     let key = crate::crypto::descifrar(&cuenta.api_key);
     Ok(HttpResponse::Ok().json(client.get_categories(cuenta.sandbox, &key, &family).await?))
@@ -76,6 +89,7 @@ pub async fn categorias(user: AuthVendedor, path: web::Path<(Uuid, String)>, poo
 
 pub async fn atributos(user: AuthVendedor, path: web::Path<(Uuid, String)>, pool: web::Data<DbPool>, client: web::Data<ParisClient>) -> ApiResult<HttpResponse> {
     let (id, family_id) = path.into_inner();
+    exigir_admin(&user)?;
     let cuenta = cuenta_de(&pool, user.id, id).await?;
     let key = crate::crypto::descifrar(&cuenta.api_key);
     Ok(HttpResponse::Ok().json(client.get_attributes(cuenta.sandbox, &key, &family_id).await?))
@@ -115,6 +129,7 @@ pub struct PublicarReq {
 /// Crea un producto en Paris armando el cuerpo con el builder.
 pub async fn publicar(user: AuthVendedor, path: web::Path<Uuid>, body: web::Json<PublicarReq>, pool: web::Data<DbPool>, client: web::Data<ParisClient>) -> ApiResult<HttpResponse> {
     user.exigir_edicion()?;
+    exigir_admin(&user)?;
     let cuenta = cuenta_de(&pool, user.id, path.into_inner()).await?;
     let key = crate::crypto::descifrar(&cuenta.api_key);
     let r = body.into_inner();
@@ -137,6 +152,7 @@ pub async fn publicar(user: AuthVendedor, path: web::Path<Uuid>, body: web::Json
 pub async fn actualizar_producto(user: AuthVendedor, path: web::Path<(Uuid, String)>, body: web::Json<Value>, pool: web::Data<DbPool>, client: web::Data<ParisClient>) -> ApiResult<HttpResponse> {
     user.exigir_edicion()?;
     let (id, sku) = path.into_inner();
+    exigir_admin(&user)?;
     let cuenta = cuenta_de(&pool, user.id, id).await?;
     let key = crate::crypto::descifrar(&cuenta.api_key);
     Ok(HttpResponse::Ok().json(client.product_update(cuenta.sandbox, &key, &sku, &body.into_inner()).await?))
@@ -153,6 +169,7 @@ pub struct VarianteReq {
 
 pub async fn variante(user: AuthVendedor, path: web::Path<Uuid>, body: web::Json<VarianteReq>, pool: web::Data<DbPool>, client: web::Data<ParisClient>) -> ApiResult<HttpResponse> {
     user.exigir_edicion()?;
+    exigir_admin(&user)?;
     let cuenta = cuenta_de(&pool, user.id, path.into_inner()).await?;
     let key = crate::crypto::descifrar(&cuenta.api_key);
     let r = body.into_inner();
@@ -172,6 +189,7 @@ pub struct PrecioReq {
 pub async fn precio(user: AuthVendedor, path: web::Path<(Uuid, String)>, body: web::Json<PrecioReq>, pool: web::Data<DbPool>, client: web::Data<ParisClient>) -> ApiResult<HttpResponse> {
     user.exigir_edicion()?;
     let (id, sku) = path.into_inner();
+    exigir_admin(&user)?;
     let cuenta = cuenta_de(&pool, user.id, id).await?;
     let key = crate::crypto::descifrar(&cuenta.api_key);
     let r = body.into_inner();
@@ -191,6 +209,7 @@ pub struct StockReq {
 
 pub async fn stock(user: AuthVendedor, path: web::Path<Uuid>, body: web::Json<StockReq>, pool: web::Data<DbPool>, client: web::Data<ParisClient>) -> ApiResult<HttpResponse> {
     user.exigir_edicion()?;
+    exigir_admin(&user)?;
     let cuenta = cuenta_de(&pool, user.id, path.into_inner()).await?;
     let key = crate::crypto::descifrar(&cuenta.api_key);
     let items: Vec<(String, i32)> = body.into_inner().items.into_iter().map(|i| (i.sku_seller, i.cantidad)).collect();
@@ -207,6 +226,7 @@ pub struct OrdenesQuery {
 }
 
 pub async fn ordenes(user: AuthVendedor, path: web::Path<Uuid>, q: web::Query<OrdenesQuery>, pool: web::Data<DbPool>, client: web::Data<ParisClient>) -> ApiResult<HttpResponse> {
+    exigir_admin(&user)?;
     let cuenta = cuenta_de(&pool, user.id, path.into_inner()).await?;
     let key = crate::crypto::descifrar(&cuenta.api_key);
     let query = q.into_inner().query.unwrap_or_default();
@@ -215,12 +235,14 @@ pub async fn ordenes(user: AuthVendedor, path: web::Path<Uuid>, q: web::Query<Or
 
 pub async fn orden(user: AuthVendedor, path: web::Path<(Uuid, String)>, pool: web::Data<DbPool>, client: web::Data<ParisClient>) -> ApiResult<HttpResponse> {
     let (id, numero) = path.into_inner();
+    exigir_admin(&user)?;
     let cuenta = cuenta_de(&pool, user.id, id).await?;
     let key = crate::crypto::descifrar(&cuenta.api_key);
     Ok(HttpResponse::Ok().json(client.get_order(cuenta.sandbox, &key, &numero).await?))
 }
 
 pub async fn sub_ordenes(user: AuthVendedor, path: web::Path<Uuid>, q: web::Query<OrdenesQuery>, pool: web::Data<DbPool>, client: web::Data<ParisClient>) -> ApiResult<HttpResponse> {
+    exigir_admin(&user)?;
     let cuenta = cuenta_de(&pool, user.id, path.into_inner()).await?;
     let key = crate::crypto::descifrar(&cuenta.api_key);
     let query = q.into_inner().query.unwrap_or_default();
