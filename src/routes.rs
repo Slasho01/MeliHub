@@ -58,6 +58,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(r("/paris/cuentas/{id}/familias").route(get().to(paris::familias)))
             .service(r("/paris/cuentas/{id}/categorias/{family}").route(get().to(paris::categorias)))
             .service(r("/paris/cuentas/{id}/atributos/{familyId}").route(get().to(paris::atributos)))
+            .service(r("/paris/cuentas/{id}/atributos-variante/{familyId}").route(get().to(paris::atributos_variante)))
             .service(r("/paris/cuentas/{id}/producto").route(post().to(paris::publicar)))
             .service(r("/paris/cuentas/{id}/producto/{sku}").route(put().to(paris::actualizar_producto)))
             .service(r("/paris/cuentas/{id}/variante").route(post().to(paris::variante)))

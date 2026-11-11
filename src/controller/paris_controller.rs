@@ -112,6 +112,14 @@ pub async fn atributos(user: AuthVendedor, path: web::Path<(Uuid, String)>, pool
     Ok(HttpResponse::Ok().json(client.get_attributes(cuenta.sandbox, &key, &family_id).await?))
 }
 
+pub async fn atributos_variante(user: AuthVendedor, path: web::Path<(Uuid, String)>, pool: web::Data<DbPool>, client: web::Data<ParisClient>) -> ApiResult<HttpResponse> {
+    let (id, family_id) = path.into_inner();
+    exigir_admin(&user)?;
+    let cuenta = cuenta_de(&pool, user.id, id).await?;
+    let key = crate::crypto::descifrar(&cuenta.api_key);
+    Ok(HttpResponse::Ok().json(client.get_variant_attributes(cuenta.sandbox, &key, &family_id).await?))
+}
+
 // ----------------- Productos / variantes -----------------
 
 #[derive(Deserialize)]
@@ -138,6 +146,9 @@ pub struct PublicarReq {
     pub stock: Option<i32>,
     #[serde(default)]
     pub atributos: Vec<AttrReq>,
+    /// Atributos de la VARIANTE (color/talla…), requeridos por la familia.
+    #[serde(default)]
+    pub variante_atributos: Vec<AttrReq>,
     /// URLs de imágenes (Paris exige al menos una).
     #[serde(default)]
     pub imagenes: Vec<String>,
@@ -156,7 +167,7 @@ pub async fn publicar(user: AuthVendedor, path: web::Path<Uuid>, body: web::Json
     // storePrice: tipo de precio de la cuenta (preferimos "normal/lista").
     let store_price = client.get_price_types(cuenta.sandbox, &key).await.ok().and_then(|v| pick_store_price(&v));
     let (sp_id, sp_type) = match &store_price { Some((i, n)) => (Some(i.as_str()), Some(n.as_str())), None => (None, None) };
-    let b = push::build_product(&r.name, &r.ref_product, &r.family_code, &r.categoria_id, r.precio, r.stock.unwrap_or(0), &pares(&r.atributos), &r.imagenes, sp_id, sp_type);
+    let b = push::build_product(&r.name, &r.ref_product, &r.family_code, &r.categoria_id, r.precio, r.stock.unwrap_or(0), &pares(&r.atributos), &pares(&r.variante_atributos), &r.imagenes, sp_id, sp_type);
     let resp = client.product_create(cuenta.sandbox, &key, &b).await?;
     // Guarda el mapeo (producto hub ↔ cuenta/sku) para que el job sincronice el stock.
     if let Some(pid) = r.producto_id {

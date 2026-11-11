@@ -48,7 +48,7 @@ fn medias_json(imagenes: &[String]) -> Value {
 
 /// Cuerpo completo para `POST /v2/products`.
 #[allow(clippy::too_many_arguments)]
-pub fn build_product(name: &str, seller_sku: &str, family_id: &str, categoria_id: &str, precio: i64, stock: i32, atributos: &[(String, String)], imagenes: &[String], store_price_id: Option<&str>, tipo_precio: Option<&str>) -> Value {
+pub fn build_product(name: &str, seller_sku: &str, family_id: &str, categoria_id: &str, precio: i64, stock: i32, atributos: &[(String, String)], var_atributos: &[(String, String)], imagenes: &[String], store_price_id: Option<&str>, tipo_precio: Option<&str>) -> Value {
     json!({
         "product": {
             "name": name,
@@ -59,8 +59,8 @@ pub fn build_product(name: &str, seller_sku: &str, family_id: &str, categoria_id
         },
         "variants": [ {
             "skuSeller": seller_sku,
-            // La variante exige ≥1 atributo; reusamos los del producto.
-            "attributes": attrs_json(atributos),
+            // Atributos PROPIOS de la variante (color/talla…), de la familia.
+            "attributes": attrs_json(var_atributos),
             "medias": medias_json(imagenes),
             "quantity": stock.max(0),
         } ],
@@ -94,12 +94,14 @@ mod tests {
     fn producto_v2_completo() {
         let v = build_product(
             "Polera", "MLC123", "fam-1", "cat-1", 9990, 5,
-            &[("attr-color".into(), "Rojo".into()), ("".into(), "x".into())],
+            &[("attr-marca".into(), "opt-m".into()), ("".into(), "x".into())],
+            &[("attr-color".into(), "opt-rojo".into())],
             &["https://img/1.jpg".into(), "".into()],
             Some("sp-1"), Some("Normal"),
         );
-        // la variante también lleva atributos (Paris lo exige)
+        // la variante lleva SUS atributos (color/talla), distintos a los del producto
         assert_eq!(v["variants"][0]["attributes"].as_array().unwrap().len(), 1);
+        assert_eq!(v["variants"][0]["attributes"][0]["id"], "attr-color");
         assert_eq!(v["product"]["name"], "Polera");
         assert_eq!(v["product"]["sellerSku"], "MLC123");
         assert_eq!(v["product"]["familyId"], "fam-1");
@@ -107,8 +109,8 @@ mod tests {
         // atributos por id (el de id vacío se filtra)
         let attrs = v["product"]["attributes"].as_array().unwrap();
         assert_eq!(attrs.len(), 1);
-        assert_eq!(attrs[0]["id"], "attr-color");
-        assert_eq!(attrs[0]["value"], "Rojo");
+        assert_eq!(attrs[0]["id"], "attr-marca");
+        assert_eq!(attrs[0]["value"], "opt-m");
         // variante con media + quantity
         assert_eq!(v["variants"][0]["skuSeller"], "MLC123");
         assert_eq!(v["variants"][0]["quantity"], 5);

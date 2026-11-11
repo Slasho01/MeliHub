@@ -60,6 +60,8 @@ function autoFill(product, parisAttrs) {
     else if (pn.includes('largo') && pn.includes('paquete')) v = numOf(byId('PACKAGE_LENGTH'))
     else if (pn.includes('marca')) v = byId('BRAND') || byName('marca')
     else if (pn.includes('modelo')) v = byId('MODEL') || byName('modelo')
+    else if (pn.includes('color')) v = byId('COLOR') || byName('color')
+    else if (pn.includes('talla') || pn.includes('talle') || pn.includes('tamano')) v = byId('SIZE') || byName('talla') || byName('talle')
     else v = byName(pn)
     if (!v) continue
     const opts = pa.attributeOptions || pa.options || []
@@ -77,8 +79,10 @@ export default function ParisPublicar({ cuenta }) {
   const [familias, setFamilias] = useState(null)
   const [categorias, setCategorias] = useState([])
   const [productos, setProductos] = useState([])
-  const [attrDefs, setAttrDefs] = useState([]) // atributos de la familia elegida
+  const [attrDefs, setAttrDefs] = useState([]) // atributos de PRODUCTO
   const [attrVals, setAttrVals] = useState({}) // { [attrId]: valor }
+  const [varAttrDefs, setVarAttrDefs] = useState([]) // atributos de VARIANTE (color/talla)
+  const [varAttrVals, setVarAttrVals] = useState({})
   const [imagenes, setImagenes] = useState([''])
   const [loadingFam, setLoadingFam] = useState(false)
   const [showOpc, setShowOpc] = useState(false)
@@ -111,24 +115,29 @@ export default function ParisPublicar({ cuenta }) {
     setImagenes(imgs.length ? imgs : [''])
     // Si ya hay una familia con atributos cargados, autorrellena desde ML.
     if (attrDefs.length) setAttrVals(autoFill(p, attrDefs))
+    if (varAttrDefs.length) setVarAttrVals(autoFill(p, varAttrDefs))
   }
 
   const elegirFamilia = async (famId) => {
     setForm((f) => ({ ...f, family_code: famId, categoria_id: '' }))
-    setAttrDefs([]); setAttrVals({}); setCategorias([])
+    setAttrDefs([]); setAttrVals({}); setVarAttrDefs([]); setVarAttrVals({}); setCategorias([])
     if (!famId) return
     setLoadingFam(true)
     try {
-      const [cats, attrs] = await Promise.all([
+      const [cats, attrs, vattrs] = await Promise.all([
         get(`/paris/cuentas/${cuenta.id}/categorias/${famId}`).catch(() => null),
         get(`/paris/cuentas/${cuenta.id}/atributos/${famId}`).catch(() => null),
+        get(`/paris/cuentas/${cuenta.id}/atributos-variante/${famId}`).catch(() => null),
       ])
       setCategorias(asList(cats))
       const attrsList = asList(attrs)
+      const varList = asList(vattrs)
       setAttrDefs(attrsList)
+      setVarAttrDefs(varList)
       // Autocompleta desde el producto de ML elegido (si hay).
       const prod = productos.find((x) => x.id === form.producto_id)
       setAttrVals(prod ? autoFill(prod, attrsList) : {})
+      setVarAttrVals(prod ? autoFill(prod, varList) : {})
     } catch (e) { setError(e.message) } finally { setLoadingFam(false) }
   }
 
@@ -137,18 +146,20 @@ export default function ParisPublicar({ cuenta }) {
   const addImg = () => setImagenes((a) => [...a, ''])
   const rmImg = (i) => setImagenes((a) => a.filter((_, j) => j !== i))
 
-  const renderAttr = (a) => {
+  const setVarAttr = (id, v) => setVarAttrVals((m) => ({ ...m, [id]: v }))
+  const renderAttr = (a, vals, setter, forceReq) => {
     const opts = a.attributeOptions || a.options || []
+    const req = forceReq || esReq(a)
     return (
       <div key={a.id} className="row" style={{ gap: 6, alignItems: 'center' }}>
-        <label className="sm" style={{ minWidth: 180 }}>{a.name || a.id}{esReq(a) && <span style={{ color: 'var(--accent)' }}> *</span>}</label>
+        <label className="sm" style={{ minWidth: 180 }}>{a.name || a.id}{req && <span style={{ color: 'var(--accent)' }}> *</span>}</label>
         {opts.length > 0 ? (
-          <select className="input" value={attrVals[a.id] || ''} onChange={(e) => setAttr(a.id, e.target.value)}>
+          <select className="input" value={vals[a.id] || ''} onChange={(e) => setter(a.id, e.target.value)}>
             <option value="">—</option>
             {opts.map((o) => <option key={o.id || o.name} value={o.id || o.name}>{o.name || o.id}</option>)}
           </select>
         ) : (
-          <input className="input" value={attrVals[a.id] || ''} onChange={(e) => setAttr(a.id, e.target.value)} placeholder="valor" />
+          <input className="input" value={vals[a.id] || ''} onChange={(e) => setter(a.id, e.target.value)} placeholder="valor" />
         )}
       </div>
     )
@@ -163,7 +174,9 @@ export default function ParisPublicar({ cuenta }) {
     if (!form.categoria_id) { setError('Elige una categoría'); return }
     setBusy(true); setError(null); setResult(null)
     try {
-      const atributos = Object.entries(attrVals).filter(([, v]) => v !== '' && v != null).map(([code, value]) => ({ code, value: String(value) }))
+      const toPairs = (obj) => Object.entries(obj).filter(([, v]) => v !== '' && v != null).map(([code, value]) => ({ code, value: String(value) }))
+      const atributos = toPairs(attrVals)
+      const variante_atributos = toPairs(varAttrVals)
       const body = {
         name: form.name,
         ref_product: form.ref_product,
@@ -172,6 +185,7 @@ export default function ParisPublicar({ cuenta }) {
         precio: Number(form.precio) || 0,
         stock: Number(form.stock) || 0,
         atributos,
+        variante_atributos,
         imagenes: imagenes.filter((u) => u && u.trim()),
         producto_id: form.producto_id || null,
       }
@@ -238,17 +252,24 @@ export default function ParisPublicar({ cuenta }) {
             <div className="muted sm">Esta familia no devolvió atributos.</div>
           ) : (
             <>
-              {importantes.map(renderAttr)}
+              {importantes.map((a) => renderAttr(a, attrVals, setAttr))}
               {opcionales.length > 0 && (
                 <>
                   <button type="button" className="btn btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => setShowOpc((v) => !v)}>
                     {showOpc ? 'Ocultar' : 'Mostrar'} más atributos opcionales ({opcionales.length})
                   </button>
-                  {showOpc && opcionales.map(renderAttr)}
+                  {showOpc && opcionales.map((a) => renderAttr(a, attrVals, setAttr))}
                 </>
               )}
             </>
           )}
+        </div>
+      )}
+
+      {form.family_code && varAttrDefs.length > 0 && (
+        <div className="stack" style={{ gap: 6 }}>
+          <span className="sm muted">Atributos de la variante (requeridos){form.producto_id ? ' · autocompletados desde ML donde se pudo' : ''}</span>
+          {varAttrDefs.map((a) => renderAttr(a, varAttrVals, setVarAttr, true))}
         </div>
       )}
 

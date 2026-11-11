@@ -102,8 +102,12 @@ impl ParisClient {
         self.req(sandbox, api_key, reqwest::Method::GET, &format!("/v2/categories/family/{family}"), None).await
     }
     pub async fn get_attributes(&self, sandbox: bool, api_key: &str, family_id: &str) -> ApiResult<Value> {
-        // La variante "product" trae la lista con sus opciones (para armar el formulario).
+        // Atributos de PRODUCTO (ficha): van en product.attributes.
         self.req(sandbox, api_key, reqwest::Method::GET, &format!("/v2/attributes/product/family/{family_id}"), None).await
+    }
+    pub async fn get_variant_attributes(&self, sandbox: bool, api_key: &str, family_id: &str) -> ApiResult<Value> {
+        // Atributos de VARIANTE (color/talla…): van en variants[].attributes (requeridos).
+        self.req(sandbox, api_key, reqwest::Method::GET, &format!("/v2/attributes/variant/family/{family_id}"), None).await
     }
 
     // ---------------- Productos (v2; v1 está deprecado → 404) ----------------
