@@ -65,7 +65,7 @@ function autoFill(product, parisAttrs) {
     const opts = pa.attributeOptions || pa.options || []
     if (opts.length > 0) {
       const match = opts.find((o) => norm(o.name) === norm(v))
-      if (match) out[pa.id] = match.name // en enum, usa el valor exacto de la opción
+      if (match) out[pa.id] = match.id // en enum, Paris quiere el ID de la opción (no el nombre)
     } else {
       out[pa.id] = String(v)
     }
@@ -145,7 +145,7 @@ export default function ParisPublicar({ cuenta }) {
         {opts.length > 0 ? (
           <select className="input" value={attrVals[a.id] || ''} onChange={(e) => setAttr(a.id, e.target.value)}>
             <option value="">—</option>
-            {opts.map((o) => <option key={o.id || o.name} value={o.name || o.id}>{o.name || o.id}</option>)}
+            {opts.map((o) => <option key={o.id || o.name} value={o.id || o.name}>{o.name || o.id}</option>)}
           </select>
         ) : (
           <input className="input" value={attrVals[a.id] || ''} onChange={(e) => setAttr(a.id, e.target.value)} placeholder="valor" />
