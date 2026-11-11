@@ -38,6 +38,40 @@ function Combo({ options, value, onChange, placeholder }) {
   )
 }
 
+const norm = (s) => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\([^)]*\)/g, '').trim()
+const numOf = (v) => { const m = String(v || '').match(/[\d.,]+/); return m ? m[0].replace(',', '.') : '' }
+
+// ¿atributo obligatorio? Paris mete "OBLIGATORIO" en el nombre (o trae isRequired).
+const esReq = (a) => /obligatorio/i.test(a.name || '') || a.isRequired || a.required
+
+// Pre-rellena los atributos de Paris con datos de ML del producto (heurística por nombre/id).
+function autoFill(product, parisAttrs) {
+  const ml = (product && product.datos && product.datos.attributes) || []
+  const byId = (id) => { const x = ml.find((a) => a.id === id); return x ? x.value_name : '' }
+  const byName = (pn) => { const x = ml.find((a) => norm(a.name) === pn); return x ? x.value_name : '' }
+  const out = {}
+  for (const pa of parisAttrs) {
+    const pn = norm(pa.name)
+    let v = ''
+    if (pn.includes('peso') && pn.includes('paquete')) v = numOf(byId('PACKAGE_WEIGHT'))
+    else if (pn.includes('ancho') && pn.includes('paquete')) v = numOf(byId('PACKAGE_WIDTH'))
+    else if (pn.includes('alto') && pn.includes('paquete')) v = numOf(byId('PACKAGE_HEIGHT'))
+    else if (pn.includes('largo') && pn.includes('paquete')) v = numOf(byId('PACKAGE_LENGTH'))
+    else if (pn.includes('marca')) v = byId('BRAND') || byName('marca')
+    else if (pn.includes('modelo')) v = byId('MODEL') || byName('modelo')
+    else v = byName(pn)
+    if (!v) continue
+    const opts = pa.attributeOptions || pa.options || []
+    if (opts.length > 0) {
+      const match = opts.find((o) => norm(o.name) === norm(v))
+      if (match) out[pa.id] = match.name // en enum, usa el valor exacto de la opción
+    } else {
+      out[pa.id] = String(v)
+    }
+  }
+  return out
+}
+
 export default function ParisPublicar({ cuenta }) {
   const [familias, setFamilias] = useState(null)
   const [categorias, setCategorias] = useState([])
@@ -46,6 +80,7 @@ export default function ParisPublicar({ cuenta }) {
   const [attrVals, setAttrVals] = useState({}) // { [attrId]: valor }
   const [imagenes, setImagenes] = useState([''])
   const [loadingFam, setLoadingFam] = useState(false)
+  const [showOpc, setShowOpc] = useState(false)
   const [error, setError] = useState(null)
   const [result, setResult] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -68,7 +103,13 @@ export default function ParisPublicar({ cuenta }) {
     const p = productos.find((x) => x.id === id)
     if (!p) { setForm((f) => ({ ...f, producto_id: '' })); return }
     setForm((f) => ({ ...f, producto_id: p.id, name: p.titulo || f.name, ref_product: p.ml_item_id || p.sku || f.ref_product, precio: p.precio != null ? String(p.precio) : f.precio }))
-    if (p.thumbnail) setImagenes((imgs) => (imgs.some((u) => u) ? imgs : [p.thumbnail]))
+    // Trae TODAS las imágenes de ML (galería), no solo el thumbnail.
+    const pics = (p.datos && p.datos.pictures) || []
+    const imgs = pics.map((x) => x.secure_url || x.url).filter(Boolean)
+    if (!imgs.length && p.thumbnail) imgs.push(p.thumbnail)
+    setImagenes(imgs.length ? imgs : [''])
+    // Si ya hay una familia con atributos cargados, autorrellena desde ML.
+    if (attrDefs.length) setAttrVals(autoFill(p, attrDefs))
   }
 
   const elegirFamilia = async (famId) => {
@@ -82,7 +123,11 @@ export default function ParisPublicar({ cuenta }) {
         get(`/paris/cuentas/${cuenta.id}/atributos/${famId}`).catch(() => null),
       ])
       setCategorias(asList(cats))
-      setAttrDefs(asList(attrs))
+      const attrsList = asList(attrs)
+      setAttrDefs(attrsList)
+      // Autocompleta desde el producto de ML elegido (si hay).
+      const prod = productos.find((x) => x.id === form.producto_id)
+      setAttrVals(prod ? autoFill(prod, attrsList) : {})
     } catch (e) { setError(e.message) } finally { setLoadingFam(false) }
   }
 
@@ -90,6 +135,25 @@ export default function ParisPublicar({ cuenta }) {
   const setImg = (i, v) => setImagenes((a) => a.map((x, j) => (j === i ? v : x)))
   const addImg = () => setImagenes((a) => [...a, ''])
   const rmImg = (i) => setImagenes((a) => a.filter((_, j) => j !== i))
+
+  const renderAttr = (a) => {
+    const opts = a.attributeOptions || a.options || []
+    return (
+      <div key={a.id} className="row" style={{ gap: 6, alignItems: 'center' }}>
+        <label className="sm" style={{ minWidth: 180 }}>{a.name || a.id}{esReq(a) && <span style={{ color: 'var(--accent)' }}> *</span>}</label>
+        {opts.length > 0 ? (
+          <select className="input" value={attrVals[a.id] || ''} onChange={(e) => setAttr(a.id, e.target.value)}>
+            <option value="">—</option>
+            {opts.map((o) => <option key={o.id || o.name} value={o.name || o.id}>{o.name || o.id}</option>)}
+          </select>
+        ) : (
+          <input className="input" value={attrVals[a.id] || ''} onChange={(e) => setAttr(a.id, e.target.value)} placeholder="valor" />
+        )}
+      </div>
+    )
+  }
+  const requeridos = attrDefs.filter(esReq)
+  const opcionales = attrDefs.filter((a) => !esReq(a))
 
   const publicar = async (e) => {
     e.preventDefault()
@@ -165,28 +229,23 @@ export default function ParisPublicar({ cuenta }) {
 
       {form.family_code && (
         <div className="stack" style={{ gap: 6 }}>
-          <span className="sm muted">Atributos de la familia</span>
+          <span className="sm muted">Atributos de la familia{form.producto_id ? ' · autocompletados desde Mercado Libre donde se pudo' : ''}</span>
           {loadingFam ? (
             <div className="muted sm">Cargando atributos…</div>
           ) : attrDefs.length === 0 ? (
-            <div className="muted sm">Esta familia no devolvió atributos (o la API los rechazó). Revisa con el curl de diagnóstico.</div>
+            <div className="muted sm">Esta familia no devolvió atributos.</div>
           ) : (
-            attrDefs.map((a) => {
-            const opts = a.attributeOptions || a.options || []
-            return (
-              <div key={a.id} className="row" style={{ gap: 6, alignItems: 'center' }}>
-                <label className="sm" style={{ minWidth: 150 }}>{a.name || a.id}</label>
-                {opts.length > 0 ? (
-                  <select className="input" value={attrVals[a.id] || ''} onChange={(e) => setAttr(a.id, e.target.value)}>
-                    <option value="">—</option>
-                    {opts.map((o) => <option key={o.id || o.name} value={o.name || o.id}>{o.name || o.id}</option>)}
-                  </select>
-                ) : (
-                  <input className="input" value={attrVals[a.id] || ''} onChange={(e) => setAttr(a.id, e.target.value)} placeholder="valor" />
-                )}
-              </div>
-            )
-          })
+            <>
+              {requeridos.map(renderAttr)}
+              {opcionales.length > 0 && (
+                <>
+                  <button type="button" className="btn btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => setShowOpc((v) => !v)}>
+                    {showOpc ? 'Ocultar' : 'Mostrar'} atributos opcionales ({opcionales.length})
+                  </button>
+                  {showOpc && opcionales.map(renderAttr)}
+                </>
+              )}
+            </>
           )}
         </div>
       )}
