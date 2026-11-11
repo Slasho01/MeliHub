@@ -54,7 +54,7 @@ impl ParisClient {
         let res = self
             .http
             .post(&url)
-            .header("Authorization", api_key)
+            .header("Authorization", format!("Bearer {api_key}"))
             .header("Content-Type", "application/json")
             .send()
             .await
