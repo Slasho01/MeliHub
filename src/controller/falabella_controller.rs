@@ -114,6 +114,29 @@ pub struct PublicarReq {
     pub atributos: Vec<AtributoKV>,
 }
 
+#[derive(Deserialize)]
+pub struct ImagenesReq {
+    pub producto_id: Uuid,
+    pub cuenta_id: Uuid,
+}
+
+/// (Re)sube las imágenes de un producto YA publicado en Falabella (acción `Image`).
+pub async fn subir_imagenes(user: AuthVendedor, body: web::Json<ImagenesReq>, pool: web::Data<DbPool>, client: web::Data<FalabellaClient>) -> ApiResult<HttpResponse> {
+    user.exigir_edicion()?;
+    let ImagenesReq { producto_id, cuenta_id } = body.into_inner();
+    let (vid, admin) = (user.id, user.es_admin());
+    let (producto, cuenta) = db::run(&pool, move |conn| {
+        let (p, _) = crate::services::producto_services::get_con_cuenta(conn, producto_id, vid, admin)?;
+        let c = svc::get(conn, cuenta_id, vid)?;
+        Ok::<_, ApiError>((p, c))
+    })
+    .await?;
+    let api_key = crate::crypto::descifrar(&cuenta.api_key);
+    let xml = crate::services::falabella_push_services::build_image_xml(&producto)
+        .ok_or_else(|| ApiError::bad_request("Este producto no tiene imágenes para subir."))?;
+    Ok(HttpResponse::Ok().json(client.product_image(&cuenta.user_id, &api_key, xml).await?))
+}
+
 /// Feeds recientes (ProductCreate/Update son asíncronos): estado y nº de errores.
 pub async fn feeds(user: AuthVendedor, q: web::Query<CuentaQuery>, pool: web::Data<DbPool>, client: web::Data<FalabellaClient>) -> ApiResult<HttpResponse> {
     let (vid, cid) = (user.id, q.cuenta);
@@ -158,9 +181,28 @@ pub async fn publicar(user: AuthVendedor, body: web::Json<PublicarReq>, pool: we
         &atributos,
     );
     let creado = client.product_create(&cuenta.user_id, &api_key, xml).await?;
-    // Imágenes: van en una acción `Image` aparte (ProductCreate ignora el <Images> inline).
+    // Imágenes: van en una acción `Image` aparte, PERO el producto debe estar ya registrado
+    // (ProductCreate es asíncrono). Esperamos a que aparezca en GetProducts y recién subimos.
     let imagenes = match crate::services::falabella_push_services::build_image_xml(&producto) {
-        Some(img_xml) => Some(client.product_image(&cuenta.user_id, &api_key, img_xml).await?),
+        Some(img_xml) => {
+            let sku = producto.ml_item_id.clone();
+            let mut listo = false;
+            for _ in 0..8 {
+                actix_web::rt::time::sleep(std::time::Duration::from_secs(3)).await;
+                if let Ok(v) = client.get_products(&cuenta.user_id, &api_key, Some(&sku)).await {
+                    let hay = v.get("SuccessResponse").and_then(|s| s.get("Body")).and_then(|b| b.get("Products")).map(|p| !p.is_string()).unwrap_or(false);
+                    if hay {
+                        listo = true;
+                        break;
+                    }
+                }
+            }
+            if listo {
+                Some(client.product_image(&cuenta.user_id, &api_key, img_xml).await?)
+            } else {
+                Some(serde_json::json!({ "pendiente": "El producto aún se está creando; usa 'Subir imágenes' en unos minutos." }))
+            }
+        }
         None => None,
     };
     Ok(HttpResponse::Ok().json(serde_json::json!({ "producto": creado, "imagenes": imagenes })))
