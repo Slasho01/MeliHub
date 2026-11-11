@@ -123,10 +123,15 @@ export default function ParisPublicar({ cuenta }) {
         ))}
       </div>
 
-      {form.family_code && attrDefs.length > 0 && (
+      {form.family_code && (
         <div className="stack" style={{ gap: 6 }}>
           <span className="sm muted">Atributos de la familia</span>
-          {attrDefs.map((a) => {
+          {loadingFam ? (
+            <div className="muted sm">Cargando atributos…</div>
+          ) : attrDefs.length === 0 ? (
+            <div className="muted sm">Esta familia no devolvió atributos (o la API los rechazó). Revisa con el curl de diagnóstico.</div>
+          ) : (
+            attrDefs.map((a) => {
             const opts = a.attributeOptions || a.options || []
             return (
               <div key={a.id} className="row" style={{ gap: 6, alignItems: 'center' }}>
@@ -141,7 +146,8 @@ export default function ParisPublicar({ cuenta }) {
                 )}
               </div>
             )
-          })}
+          })
+          )}
         </div>
       )}
 
