@@ -23,10 +23,22 @@ fn xml_tag(s: &str) -> String {
     t
 }
 
-/// Normaliza una URL de imagen de ML para Falabella: https, variante `-O` (alta calidad) y
-/// fuerza `.jpg` (Falabella acepta PNG/JPG, NO webp).
+/// Normaliza una URL de imagen de ML para Falabella: https, variante **`-F`** (grande;
+/// Falabella exige ≥500×500 y `-O` deja el lado corto <500) y fuerza `.jpg` (NO webp).
 fn img_falabella(u: &str) -> String {
-    u.replace("http://", "https://").replace("-I.", "-O.").replace(".webp", ".jpg")
+    let u = u.replace("http://", "https://");
+    // ML termina en "-{tamaño}.{ext}" (I/O/F/W/V/G/S). Forzamos "-F.jpg".
+    if let Some(dot) = u.rfind('.') {
+        let base = &u[..dot];
+        if let Some(dash) = base.rfind('-') {
+            if base.len() - dash == 2 {
+                // sufijo de tamaño de 1 letra -> reemplazar por F
+                return format!("{}-F.jpg", &base[..dash]);
+            }
+        }
+        return format!("{base}.jpg");
+    }
+    u
 }
 
 /// Imágenes (URLs) del producto desde `datos.pictures`, máx 8 (límite de Falabella), con
@@ -165,7 +177,7 @@ mod tests {
         assert!(xml.contains("<Name>Polera &lt;Azul&gt;</Name>"));
         assert!(xml.contains("<Variation>No aplica</Variation>"));
         // precio y stock van DENTRO de BusinessUnits (no sueltos)
-        assert!(xml.contains("<BusinessUnits><BusinessUnit><OperatorCode>facl</OperatorCode><Price>9990</Price><Stock>5</Stock><Status>active</Status></BusinessUnit></BusinessUnits>"));
+        assert!(xml.contains("<BusinessUnits><BusinessUnit><OperatorCode>facl</OperatorCode><Price>9990</Price><Stock>5</Stock><Status>active</Status><IsPublished>1</IsPublished></BusinessUnit></BusinessUnits>"));
         assert!(!xml.contains("<Quantity>"));
         assert!(xml.contains("<PrimaryCategory>CAT42</PrimaryCategory>"));
         assert!(xml.contains("<Brand>Marca&quot;X&quot;</Brand>"));
@@ -174,5 +186,15 @@ mod tests {
         assert!(!xml.contains("Vacio")); // atributo vacío omitido
         assert!(xml.contains("<Image>https://img/1-O.jpg</Image>"));
         assert!(xml.contains("<Description>Linda &amp; cómoda</Description>"));
+    }
+
+    #[test]
+    fn imagen_fuerza_variante_grande_jpg() {
+        // -I.webp (thumbnail) -> -F.jpg (864x789, ≥500 en ambos lados)
+        assert_eq!(
+            img_falabella("http://http2.mlstatic.com/D_891743-MLC109938399813_042026-I.webp"),
+            "https://http2.mlstatic.com/D_891743-MLC109938399813_042026-F.jpg"
+        );
+        assert_eq!(img_falabella("https://x/D_123-O.jpg"), "https://x/D_123-F.jpg");
     }
 }
