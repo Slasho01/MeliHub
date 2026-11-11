@@ -102,7 +102,8 @@ impl ParisClient {
         self.req(sandbox, api_key, reqwest::Method::GET, &format!("/v2/categories/family/{family}"), None).await
     }
     pub async fn get_attributes(&self, sandbox: bool, api_key: &str, family_id: &str) -> ApiResult<Value> {
-        self.req(sandbox, api_key, reqwest::Method::GET, &format!("/v2/attributes/family/{family_id}"), None).await
+        // La variante "product" trae la lista con sus opciones (para armar el formulario).
+        self.req(sandbox, api_key, reqwest::Method::GET, &format!("/v2/attributes/product/family/{family_id}"), None).await
     }
 
     // ---------------- Productos / variantes ----------------

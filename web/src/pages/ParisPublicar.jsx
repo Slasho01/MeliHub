@@ -1,17 +1,23 @@
 import { useEffect, useState } from 'react'
 import { get, post } from '../api'
 
+// Las respuestas de Paris vienen como { results: [...] } (a veces { data: [...] }).
+const asList = (v) => v?.results || v?.data || (Array.isArray(v) ? v : [])
+
 export default function ParisPublicar({ cuenta }) {
   const [familias, setFamilias] = useState(null)
   const [productos, setProductos] = useState([])
+  const [attrDefs, setAttrDefs] = useState([]) // atributos de la familia elegida
+  const [attrVals, setAttrVals] = useState({}) // { [attrId]: valor }
+  const [loadingAttrs, setLoadingAttrs] = useState(false)
   const [error, setError] = useState(null)
   const [result, setResult] = useState(null)
   const [busy, setBusy] = useState(false)
-  const [atributos, setAtributos] = useState([{ code: '', value: '' }])
   const [form, setForm] = useState({ name: '', ref_product: '', family_code: '', precio: '', oferta: '', producto_id: '' })
 
   useEffect(() => {
-    setFamilias(null); setError(null)
+    setFamilias(null); setError(null); setAttrDefs([]); setAttrVals({})
+    setForm((f) => ({ ...f, family_code: '' }))
     get(`/paris/cuentas/${cuenta.id}/familias`).then(setFamilias).catch((e) => setError(e.message))
   }, [cuenta.id])
 
@@ -19,36 +25,41 @@ export default function ParisPublicar({ cuenta }) {
     get('/productos').then((d) => setProductos(Array.isArray(d) ? d : (d?.data || d?.productos || []))).catch(() => {})
   }, [])
 
+  const famList = asList(familias)
+
   const elegirProducto = (id) => {
     const p = productos.find((x) => x.id === id)
     if (!p) { setForm((f) => ({ ...f, producto_id: '' })); return }
-    setForm((f) => ({
-      ...f,
-      producto_id: p.id,
-      name: p.titulo || f.name,
-      ref_product: p.ml_item_id || p.sku || f.ref_product,
-      precio: p.precio != null ? String(p.precio) : f.precio,
-    }))
+    setForm((f) => ({ ...f, producto_id: p.id, name: p.titulo || f.name, ref_product: p.ml_item_id || p.sku || f.ref_product, precio: p.precio != null ? String(p.precio) : f.precio }))
   }
 
-  // La API puede devolver un array directo o { data: [...] }.
-  const famList = Array.isArray(familias) ? familias : (familias?.data || [])
+  const elegirFamilia = async (famId) => {
+    setForm((f) => ({ ...f, family_code: famId }))
+    setAttrDefs([]); setAttrVals({})
+    if (!famId) return
+    setLoadingAttrs(true)
+    try {
+      const d = await get(`/paris/cuentas/${cuenta.id}/atributos/${famId}`)
+      setAttrDefs(asList(d))
+    } catch (e) { setError(e.message) } finally { setLoadingAttrs(false) }
+  }
 
-  const setAttr = (i, k, v) => setAtributos((a) => a.map((x, j) => (j === i ? { ...x, [k]: v } : x)))
-  const addAttr = () => setAtributos((a) => [...a, { code: '', value: '' }])
-  const rmAttr = (i) => setAtributos((a) => a.filter((_, j) => j !== i))
+  const setAttr = (id, v) => setAttrVals((m) => ({ ...m, [id]: v }))
 
   const publicar = async (e) => {
     e.preventDefault()
     setBusy(true); setError(null); setResult(null)
     try {
+      const atributos = Object.entries(attrVals)
+        .filter(([, v]) => v !== '' && v != null)
+        .map(([code, value]) => ({ code, value: String(value) }))
       const body = {
         name: form.name,
         ref_product: form.ref_product,
         family_code: form.family_code,
         precio: Number(form.precio) || 0,
         oferta: form.oferta ? Number(form.oferta) : null,
-        atributos: atributos.filter((a) => a.code && a.value),
+        atributos,
         producto_id: form.producto_id || null,
       }
       const r = await post(`/paris/cuentas/${cuenta.id}/producto`, body)
@@ -71,9 +82,9 @@ export default function ParisPublicar({ cuenta }) {
       <input className="input" placeholder="SKU / referencia (ej. el id de Mercado Libre)" value={form.ref_product} onChange={(e) => setForm({ ...form, ref_product: e.target.value })} required />
 
       <label className="sm muted">Familia</label>
-      <select className="input" value={form.family_code} onChange={(e) => setForm({ ...form, family_code: e.target.value })} required>
-        <option value="">{familias == null ? 'Cargando familias…' : '— Elige una familia —'}</option>
-        {famList.map((f) => <option key={f.code || f.id} value={f.code || f.id}>{f.name || f.nombre || f.code}</option>)}
+      <select className="input" value={form.family_code} onChange={(e) => elegirFamilia(e.target.value)} required>
+        <option value="">{familias == null ? 'Cargando familias…' : (famList.length ? '— Elige una familia —' : 'Sin familias disponibles en tu cuenta')}</option>
+        {famList.map((f) => <option key={f.id || f.code} value={f.id || f.code}>{f.name || f.nombre}</option>)}
       </select>
 
       <div className="row" style={{ gap: 8 }}>
@@ -81,17 +92,33 @@ export default function ParisPublicar({ cuenta }) {
         <input className="input" type="number" placeholder="Precio oferta (opcional)" value={form.oferta} onChange={(e) => setForm({ ...form, oferta: e.target.value })} />
       </div>
 
-      <div className="stack" style={{ gap: 6 }}>
-        <div className="row between"><span className="sm muted">Atributos (según la familia)</span><button type="button" className="btn btn-sm" onClick={addAttr}>+ Atributo</button></div>
-        {atributos.map((a, i) => (
-          <div key={i} className="row" style={{ gap: 6 }}>
-            <input className="input" placeholder="código (ej. color)" value={a.code} onChange={(e) => setAttr(i, 'code', e.target.value)} />
-            <input className="input" placeholder="valor (ej. Rojo)" value={a.value} onChange={(e) => setAttr(i, 'value', e.target.value)} />
-            <button type="button" className="btn btn-sm" onClick={() => rmAttr(i)}>✕</button>
-          </div>
-        ))}
-        <p className="muted sm" style={{ margin: 0 }}>Los códigos válidos dependen de la familia elegida (los entrega la API de atributos de esa familia).</p>
-      </div>
+      {form.family_code && (
+        <div className="stack" style={{ gap: 6 }}>
+          <span className="sm muted">Atributos de la familia</span>
+          {loadingAttrs ? (
+            <div className="muted sm">Cargando atributos…</div>
+          ) : attrDefs.length === 0 ? (
+            <div className="muted sm">Esta familia no expone atributos (o no se pudieron cargar).</div>
+          ) : (
+            attrDefs.map((a) => {
+              const opts = a.attributeOptions || a.options || []
+              return (
+                <div key={a.id} className="row" style={{ gap: 6, alignItems: 'center' }}>
+                  <label className="sm" style={{ minWidth: 150 }}>{a.name || a.id}</label>
+                  {opts.length > 0 ? (
+                    <select className="input" value={attrVals[a.id] || ''} onChange={(e) => setAttr(a.id, e.target.value)}>
+                      <option value="">—</option>
+                      {opts.map((o) => <option key={o.id || o.name} value={o.name || o.id}>{o.name || o.id}</option>)}
+                    </select>
+                  ) : (
+                    <input className="input" value={attrVals[a.id] || ''} onChange={(e) => setAttr(a.id, e.target.value)} placeholder="valor" />
+                  )}
+                </div>
+              )
+            })
+          )}
+        </div>
+      )}
 
       <button className="btn btn-dark" disabled={busy}>{busy ? 'Publicando…' : 'Publicar en Paris'}</button>
     </form>
