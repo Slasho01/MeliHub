@@ -164,22 +164,27 @@ pub async fn publicar(user: AuthVendedor, path: web::Path<Uuid>, body: web::Json
     let cuenta = cuenta_de(&pool, user.id, path.into_inner()).await?;
     let key = crate::crypto::descifrar(&cuenta.api_key);
     let r = body.into_inner();
-    // storePrice: tipo de precio de la cuenta (preferimos "normal/lista").
-    let store_price = client.get_price_types(cuenta.sandbox, &key).await.ok().and_then(|v| pick_store_price(&v));
-    let (sp_id, sp_type) = match &store_price { Some((i, n)) => (Some(i.as_str()), Some(n.as_str())), None => (None, None) };
-    let b = push::build_product(&r.name, &r.ref_product, &r.family_code, &r.categoria_id, r.precio, r.stock.unwrap_or(0), &pares(&r.atributos), &pares(&r.variante_atributos), &r.imagenes, sp_id, sp_type);
+    // 1) Crear el producto SIN precio (el precio inline en v2 crashea en Paris; se setea aparte).
+    let b = push::build_product(&r.name, &r.ref_product, &r.family_code, &r.categoria_id, r.precio, r.stock.unwrap_or(0), &pares(&r.atributos), &pares(&r.variante_atributos), &r.imagenes, None, None);
     let resp = client.product_create(cuenta.sandbox, &key, &b).await?;
-    // Guarda el mapeo (producto hub ↔ cuenta/sku) para que el job sincronice el stock.
-    if let Some(pid) = r.producto_id {
-        let paris_sku = resp
-            .get("id")
-            .and_then(|v| v.as_str())
-            .or_else(|| resp.get("sellerSku").and_then(|v| v.as_str()))
-            .map(|s| s.to_string());
-        let (cid, sku) = (cuenta.id, r.ref_product.clone());
-        let _ = db::run(&pool, move |conn| crate::services::paris_services::registrar_publicacion(conn, pid, cid, &sku, paris_sku)).await;
+    // SKU que asignó Paris (para el precio y el mapeo).
+    let paris_sku = resp.get("sku").and_then(|v| v.as_str()).or_else(|| resp.get("sellerSku").and_then(|v| v.as_str())).map(|s| s.to_string());
+    // 2) Precio aparte (best-effort: si falla, el producto igual quedó creado).
+    let mut precio_ok = false;
+    if let Some(psku) = &paris_sku {
+        let store_price = client.get_price_types(cuenta.sandbox, &key).await.ok().and_then(|v| pick_store_price(&v));
+        let (sp_id, sp_type) = match &store_price { Some((i, n)) => (Some(i.as_str()), Some(n.as_str())), None => (None, None) };
+        if sp_id.is_some() {
+            let pb = serde_json::json!({ "prices": push::build_precio(r.precio, sp_id, sp_type) });
+            precio_ok = client.update_price(cuenta.sandbox, &key, psku, &pb).await.is_ok();
+        }
     }
-    Ok(HttpResponse::Ok().json(resp))
+    // 3) Mapeo para el sync continuo.
+    if let Some(pid) = r.producto_id {
+        let (cid, sku, psku) = (cuenta.id, r.ref_product.clone(), paris_sku.clone());
+        let _ = db::run(&pool, move |conn| crate::services::paris_services::registrar_publicacion(conn, pid, cid, &sku, psku)).await;
+    }
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "producto": resp, "precio_ok": precio_ok })))
 }
 
 /// Actualización avanzada (cuerpo JSON crudo, para campos puntuales).

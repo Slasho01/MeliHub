@@ -8,7 +8,13 @@ use serde_json::{json, Value};
 /// `tipo` = su nombre (Paris exige `type` como texto).
 pub fn build_precio(precio: i64, store_price_id: Option<&str>, tipo: Option<&str>) -> Value {
     match store_price_id {
-        Some(sp) if !sp.is_empty() => json!([{ "value": precio.max(0), "storePrice": sp, "type": tipo.unwrap_or("Normal") }]),
+        Some(sp) if !sp.is_empty() => json!([{
+            "value": precio.max(0),
+            "storePrice": sp,
+            "type": tipo.unwrap_or("Normal"),
+            "showFrom": "2020-01-01T00:00:00.000Z",
+            "showTo": "2999-12-31T00:00:00.000Z"
+        }]),
         _ => json!([]),
     }
 }
