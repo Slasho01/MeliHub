@@ -119,6 +119,8 @@ pub fn todas_cuentas(conn: &mut PgConnection) -> ApiResult<Vec<FalabellaCuenta>>
 
 /// Conecta (o actualiza) la cuenta Falabella del vendedor. Upsert por (vendedor_id, user_id).
 pub fn conectar(conn: &mut PgConnection, vendedor_id: Uuid, user_id: &str, api_key: &str, nickname: Option<String>) -> ApiResult<FalabellaCuenta> {
+    // Falabella (marketplace) solo en Pro/Business. El Free debe mejorar su plan.
+    crate::services::saas_services::permitir_marketplace(conn, vendedor_id)?;
     let nuevo = NewFalabellaCuenta {
         vendedor_id,
         user_id: user_id.trim().to_string(),

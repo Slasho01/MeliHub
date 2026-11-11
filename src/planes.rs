@@ -12,6 +12,8 @@ pub struct Plan {
     pub max_cuentas: i64,
     pub max_productos: i64,
     pub max_plataformas: i64,
+    /// Acceso a marketplaces (Falabella y futuros). El Free no los incluye.
+    pub marketplaces: bool,
     /// Precio mensual (CLP)
     pub precio_mensual: i64,
     /// Precio anual (CLP) — 2 meses gratis respecto al mensual
@@ -22,9 +24,9 @@ pub struct Plan {
 pub const TRIAL_DIAS: i64 = 3;
 
 pub const PLANES: &[Plan] = &[
-    Plan { id: "free", nombre: "Free", max_cuentas: 1, max_productos: 50, max_plataformas: 1, precio_mensual: 0, precio_anual: 0 },
-    Plan { id: "pro", nombre: "Pro", max_cuentas: 3, max_productos: 1000, max_plataformas: 3, precio_mensual: 9990, precio_anual: 99900 },
-    Plan { id: "business", nombre: "Business", max_cuentas: -1, max_productos: -1, max_plataformas: -1, precio_mensual: 29990, precio_anual: 299900 },
+    Plan { id: "free", nombre: "Free", max_cuentas: 1, max_productos: 50, max_plataformas: 1, marketplaces: false, precio_mensual: 0, precio_anual: 0 },
+    Plan { id: "pro", nombre: "Pro", max_cuentas: 3, max_productos: 1000, max_plataformas: 3, marketplaces: true, precio_mensual: 9990, precio_anual: 99900 },
+    Plan { id: "business", nombre: "Business", max_cuentas: -1, max_productos: -1, max_plataformas: -1, marketplaces: true, precio_mensual: 29990, precio_anual: 299900 },
 ];
 
 /// Plan por id; si no se reconoce, cae al más alto (no bloquear por error de dato).

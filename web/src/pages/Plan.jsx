@@ -127,6 +127,7 @@ export default function Plan() {
                 <li>{lim(p.max_cuentas)} cuenta(s) ML</li>
                 <li>{lim(p.max_productos)} productos</li>
                 <li>{lim(p.max_plataformas)} plataforma(s)</li>
+                <li style={p.marketplaces ? undefined : { opacity: 0.55 }}>{p.marketplaces ? 'Falabella y marketplaces' : 'Sin marketplaces'}</li>
               </ul>
               <div style={{ marginTop: 'auto', paddingTop: 10 }}>
                 {esActual ? (

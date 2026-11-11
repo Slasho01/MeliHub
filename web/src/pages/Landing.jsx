@@ -9,7 +9,8 @@ const FEATURES = [
   { ic: '🔄', t: 'Stock en dos vías', d: 'Vendes en tu tienda o en otro canal y el stock baja solo en Mercado Libre. Sin descuadres.' },
   { ic: '💰', t: 'Ventas y ganancias', d: 'Mira las ventas del día de todas las cuentas, con comisiones y ganancia neta ya calculada.' },
   { ic: '🏷️', t: 'Etiquetas de envío', d: 'Descarga juntas las etiquetas de Flex y Centro de envío (colecta) de todas tus cuentas, por día.' },
-  { ic: '🧩', t: 'Distribuye tu catálogo', d: 'Lleva tus productos a tu tienda web o a WooCommerce con API keys. Mercado Libre como fuente única.' },
+  { ic: '🧩', t: 'Distribuye tu catálogo', d: 'Lleva tus productos a tu tienda web, WooCommerce y marketplaces con Mercado Libre como fuente única.' },
+  { ic: '🏬', t: 'Publica en Falabella', d: 'Conecta Falabella Seller y lleva tu catálogo de ML con precios, stock, imágenes y órdenes sincronizados. (Pro y Business)' },
 ]
 
 const EXTRAS = [
@@ -46,9 +47,9 @@ function Precio({ p, destacado, bullets }) {
 export default function Landing() {
   const [menu, setMenu] = useState(false)
   const planes = [
-    { p: { nombre: 'Free', precio_mensual: 0, precio_anual: 0 }, bullets: ['1 cuenta de Mercado Libre', 'Hasta 50 productos', '1 canal de distribución'] },
-    { p: { nombre: 'Pro', precio_mensual: 9990, precio_anual: 99900 }, destacado: true, bullets: ['3 cuentas de Mercado Libre', 'Hasta 1.000 productos', '3 canales de distribución', 'Equipo y roles'] },
-    { p: { nombre: 'Business', precio_mensual: 29990, precio_anual: 299900 }, bullets: ['Cuentas ilimitadas', 'Productos ilimitados', 'Canales ilimitados', 'Soporte prioritario'] },
+    { p: { nombre: 'Free', precio_mensual: 0, precio_anual: 0 }, bullets: ['1 cuenta de Mercado Libre', 'Hasta 50 productos', '1 canal de distribución', 'Sin marketplaces (Falabella en Pro)'] },
+    { p: { nombre: 'Pro', precio_mensual: 9990, precio_anual: 99900 }, destacado: true, bullets: ['3 cuentas de Mercado Libre', 'Hasta 1.000 productos', '3 canales de distribución', 'Falabella y marketplaces', 'Equipo y roles'] },
+    { p: { nombre: 'Business', precio_mensual: 29990, precio_anual: 299900 }, bullets: ['Cuentas ilimitadas', 'Productos ilimitados', 'Canales ilimitados', 'Falabella y marketplaces', 'Soporte prioritario'] },
   ]
 
   return (
@@ -71,8 +72,8 @@ export default function Landing() {
         <h1 className="lp-h1">Todas tus cuentas de<br /><span className="hl">Mercado Libre</span>, en un solo panel.</h1>
         <p className="lp-sub">
           MeliHub centraliza el inventario, las ventas y los envíos de todas tus cuentas de Mercado Libre,
-          y te deja distribuir tu catálogo a tu tienda y otras plataformas. Sincroniza el stock en ambos
-          sentidos, descarga etiquetas y gestiona todo desde un mismo lugar.
+          y te deja distribuir tu catálogo a tu tienda, WooCommerce y marketplaces como Falabella. Sincroniza
+          el stock en ambos sentidos, descarga etiquetas y gestiona todo desde un mismo lugar.
         </p>
         <div className="lp-cta">
           <Link to="/login?r=1" className="btn btn-accent btn-lg">Empezar gratis</Link>
@@ -86,7 +87,7 @@ export default function Landing() {
             <div className="lp-mock-row"><b>Inventario</b><span className="tag tag-ok">Sincronizado</span><i className="muted sm">1.342 productos</i></div>
             <div className="lp-mock-row"><b>Ventas de hoy</b><span className="tag">18 pedidos</span><i className="muted sm">Ganancia $284.900</i></div>
             <div className="lp-mock-row"><b>Envíos</b><span className="tag tag-ok">7 por imprimir</span><i className="muted sm">Flex + colecta</i></div>
-            <div className="lp-mock-row"><b>Canales</b><span className="tag">Tienda + WooCommerce</span><i className="muted sm">Stock en 2 vías</i></div>
+            <div className="lp-mock-row"><b>Canales</b><span className="tag">Tienda + WooCommerce + Falabella</span><i className="muted sm">Stock en 2 vías</i></div>
           </div>
         </div>
       </section>

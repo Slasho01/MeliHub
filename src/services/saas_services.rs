@@ -132,6 +132,19 @@ pub fn permitir_cuenta_nueva(conn: &mut PgConnection, vendedor_id: Uuid, ml_user
     Ok(())
 }
 
+/// Permite conectar un marketplace (Falabella y futuros) según el plan.
+/// El Free no incluye marketplaces → debe mejorar a Pro o Business.
+pub fn permitir_marketplace(conn: &mut PgConnection, vendedor_id: Uuid) -> ApiResult<()> {
+    let p = plan_de(conn, vendedor_id)?;
+    if !p.marketplaces {
+        return Err(ApiError::forbidden(format!(
+            "Los marketplaces como Falabella están disponibles en Pro y Business. Tu plan {} no los incluye; mejora tu plan para conectarlos.",
+            p.nombre
+        )));
+    }
+    Ok(())
+}
+
 /// Permite crear una API-key (plataforma) según el plan.
 pub fn permitir_plataforma(conn: &mut PgConnection, vendedor_id: Uuid) -> ApiResult<()> {
     let p = plan_de(conn, vendedor_id)?;
