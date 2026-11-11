@@ -138,6 +138,12 @@ impl ParisClient {
         self.req(sandbox, api_key, reqwest::Method::POST, "/v2/stock", Some(body)).await
     }
 
+    /// Lista los productos del seller en Paris (con su estado de aprobación).
+    pub async fn buscar_productos(&self, sandbox: bool, api_key: &str, query: &str) -> ApiResult<Value> {
+        let q = if query.is_empty() { "limit=100&offset=0".to_string() } else { query.to_string() };
+        self.req(sandbox, api_key, reqwest::Method::GET, &format!("/v2/products/search?{q}"), None).await
+    }
+
     // ---------------- Órdenes ----------------
     pub async fn get_orders(&self, sandbox: bool, api_key: &str, query: &str) -> ApiResult<Value> {
         let path = if query.is_empty() { "/v1/orders".to_string() } else { format!("/v1/orders?{query}") };

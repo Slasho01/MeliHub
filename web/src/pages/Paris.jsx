@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { get, post, del } from '../api'
 import ParisPublicar from './ParisPublicar'
+import ParisEstado from './ParisEstado'
 import ParisOrdenes from './ParisOrdenes'
 
 export default function Paris({ me }) {
@@ -83,9 +84,10 @@ export default function Paris({ me }) {
           </div>
           <div className="seg">
             <button className={tab === 'publicar' ? 'on' : ''} onClick={() => setTab('publicar')}>Publicar</button>
+            <button className={tab === 'publicados' ? 'on' : ''} onClick={() => setTab('publicados')}>Publicados</button>
             <button className={tab === 'ordenes' ? 'on' : ''} onClick={() => setTab('ordenes')}>Órdenes</button>
           </div>
-          {tab === 'publicar' ? <ParisPublicar cuenta={sel} /> : <ParisOrdenes cuenta={sel} />}
+          {tab === 'publicar' ? <ParisPublicar cuenta={sel} /> : tab === 'publicados' ? <ParisEstado cuenta={sel} /> : <ParisOrdenes cuenta={sel} />}
         </div>
       )}
     </div>

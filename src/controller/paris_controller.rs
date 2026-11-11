@@ -273,6 +273,15 @@ pub async fn stock(user: AuthVendedor, path: web::Path<Uuid>, body: web::Json<St
     Ok(HttpResponse::Ok().json(client.update_stock_sku_seller(cuenta.sandbox, &key, &b).await?))
 }
 
+/// Productos publicados en Paris (con su estado de aprobación).
+pub async fn productos_paris(user: AuthVendedor, path: web::Path<Uuid>, q: web::Query<OrdenesQuery>, pool: web::Data<DbPool>, client: web::Data<ParisClient>) -> ApiResult<HttpResponse> {
+    exigir_admin(&user)?;
+    let cuenta = cuenta_de(&pool, user.id, path.into_inner()).await?;
+    let key = crate::crypto::descifrar(&cuenta.api_key);
+    let query = q.into_inner().query.unwrap_or_else(|| "limit=100&offset=0".to_string());
+    Ok(HttpResponse::Ok().json(client.buscar_productos(cuenta.sandbox, &key, &query).await?))
+}
+
 // ----------------- Órdenes -----------------
 
 #[derive(Deserialize)]
