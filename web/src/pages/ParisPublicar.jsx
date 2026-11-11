@@ -84,7 +84,7 @@ export default function ParisPublicar({ cuenta }) {
   const [error, setError] = useState(null)
   const [result, setResult] = useState(null)
   const [busy, setBusy] = useState(false)
-  const [form, setForm] = useState({ name: '', ref_product: '', family_code: '', categoria_id: '', precio: '', oferta: '', producto_id: '' })
+  const [form, setForm] = useState({ name: '', ref_product: '', family_code: '', categoria_id: '', precio: '', oferta: '', stock: '', producto_id: '' })
 
   useEffect(() => {
     setFamilias(null); setError(null); setAttrDefs([]); setAttrVals({}); setCategorias([])
@@ -102,7 +102,7 @@ export default function ParisPublicar({ cuenta }) {
   const elegirProducto = (id) => {
     const p = productos.find((x) => x.id === id)
     if (!p) { setForm((f) => ({ ...f, producto_id: '' })); return }
-    setForm((f) => ({ ...f, producto_id: p.id, name: p.titulo || f.name, ref_product: p.ml_item_id || p.sku || f.ref_product, precio: p.precio != null ? String(p.precio) : f.precio }))
+    setForm((f) => ({ ...f, producto_id: p.id, name: p.titulo || f.name, ref_product: p.ml_item_id || p.sku || f.ref_product, precio: p.precio != null ? String(p.precio) : f.precio, stock: p.stock != null ? String(p.stock) : f.stock }))
     // Trae TODAS las imágenes de ML (galería), no solo el thumbnail.
     const pics = (p.datos && p.datos.pictures) || []
     const imgs = pics.map((x) => x.secure_url || x.url).filter(Boolean)
@@ -168,7 +168,7 @@ export default function ParisPublicar({ cuenta }) {
         family_code: form.family_code,
         categoria_id: form.categoria_id,
         precio: Number(form.precio) || 0,
-        oferta: form.oferta ? Number(form.oferta) : null,
+        stock: Number(form.stock) || 0,
         atributos,
         imagenes: imagenes.filter((u) => u && u.trim()),
         producto_id: form.producto_id || null,
@@ -214,7 +214,7 @@ export default function ParisPublicar({ cuenta }) {
 
       <div className="row" style={{ gap: 8 }}>
         <input className="input" type="number" placeholder="Precio (CLP)" value={form.precio} onChange={(e) => setForm({ ...form, precio: e.target.value })} required />
-        <input className="input" type="number" placeholder="Precio oferta (opcional)" value={form.oferta} onChange={(e) => setForm({ ...form, oferta: e.target.value })} />
+        <input className="input" type="number" placeholder="Stock" value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} />
       </div>
 
       <div className="stack" style={{ gap: 6 }}>

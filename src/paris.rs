@@ -106,25 +106,28 @@ impl ParisClient {
         self.req(sandbox, api_key, reqwest::Method::GET, &format!("/v2/attributes/product/family/{family_id}"), None).await
     }
 
-    // ---------------- Productos / variantes ----------------
+    // ---------------- Productos (v2; v1 está deprecado → 404) ----------------
     pub async fn product_create(&self, sandbox: bool, api_key: &str, body: &Value) -> ApiResult<Value> {
-        self.req(sandbox, api_key, reqwest::Method::POST, "/v1/product", Some(body)).await
+        self.req(sandbox, api_key, reqwest::Method::POST, "/v2/products", Some(body)).await
     }
     pub async fn product_update(&self, sandbox: bool, api_key: &str, sku: &str, body: &Value) -> ApiResult<Value> {
-        self.req(sandbox, api_key, reqwest::Method::PUT, &format!("/v1/product/{sku}"), Some(body)).await
+        self.req(sandbox, api_key, reqwest::Method::PATCH, &format!("/v2/products/{sku}"), Some(body)).await
     }
     pub async fn variant_create(&self, sandbox: bool, api_key: &str, body: &Value) -> ApiResult<Value> {
         self.req(sandbox, api_key, reqwest::Method::POST, "/v1/variant", Some(body)).await
     }
 
-    // ---------------- Precio / stock ----------------
-    pub async fn update_price(&self, sandbox: bool, api_key: &str, sku: &str, body: &Value) -> ApiResult<Value> {
-        self.req(sandbox, api_key, reqwest::Method::PUT, &format!("/v1/product-price/upsert/{sku}"), Some(body)).await
+    // ---------------- Precio / stock (v2) ----------------
+    /// Tipos de precio de la cuenta (para `storePrice`): `{ results: [{ id, name }] }`.
+    pub async fn get_price_types(&self, sandbox: bool, api_key: &str) -> ApiResult<Value> {
+        self.req(sandbox, api_key, reqwest::Method::GET, "/v2/price-types", None).await
     }
-    /// Stock por SKU del seller (nuestro SKU), sin necesitar el SKU interno de Paris.
-    /// `body` = `{ "skus": [ { "sku_seller": "...", "quantity": N } ] }`.
+    pub async fn update_price(&self, sandbox: bool, api_key: &str, sku: &str, body: &Value) -> ApiResult<Value> {
+        self.req(sandbox, api_key, reqwest::Method::POST, &format!("/v2/prices/product/{sku}"), Some(body)).await
+    }
+    /// Stock v2: `body = { "skus": [ { "sku": "...", "quantity": N } ] }`.
     pub async fn update_stock_sku_seller(&self, sandbox: bool, api_key: &str, body: &Value) -> ApiResult<Value> {
-        self.req(sandbox, api_key, reqwest::Method::POST, "/v1/stock/sku-seller", Some(body)).await
+        self.req(sandbox, api_key, reqwest::Method::POST, "/v2/stock", Some(body)).await
     }
 
     // ---------------- Órdenes ----------------
