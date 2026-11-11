@@ -10,19 +10,40 @@ use uuid::Uuid;
 
 /// Registra (o actualiza) que un producto quedó publicado en una cuenta de Falabella,
 /// para la sincronización continua de precio/stock.
-pub fn registrar_publicacion(conn: &mut PgConnection, producto_id: Uuid, cuenta_id: Uuid, seller_sku: &str, operador: &str) -> ApiResult<()> {
+pub fn registrar_publicacion(conn: &mut PgConnection, producto_id: Uuid, cuenta_id: Uuid, seller_sku: &str, operador: &str, categoria: &str, marca: &str, atributos: serde_json::Value) -> ApiResult<()> {
+    let cat = (!categoria.trim().is_empty()).then(|| categoria.trim().to_string());
+    let mar = (!marca.trim().is_empty()).then(|| marca.trim().to_string());
     diesel::insert_into(falabella_publicaciones::table)
         .values(NewFalabellaPublicacion {
             producto_id,
             cuenta_id,
             seller_sku: seller_sku.to_string(),
             operador: operador.to_string(),
+            categoria: cat.clone(),
+            marca: mar.clone(),
+            atributos: atributos.clone(),
         })
         .on_conflict((falabella_publicaciones::producto_id, falabella_publicaciones::cuenta_id))
         .do_update()
-        .set(falabella_publicaciones::seller_sku.eq(seller_sku))
+        .set((
+            falabella_publicaciones::seller_sku.eq(seller_sku),
+            falabella_publicaciones::categoria.eq(cat),
+            falabella_publicaciones::marca.eq(mar),
+            falabella_publicaciones::atributos.eq(atributos),
+        ))
         .execute(conn)?;
     Ok(())
+}
+
+/// Mapeo guardado (categoría, marca, operador, atributos) — para republicar sin re-elegir.
+pub fn mapeo_de(conn: &mut PgConnection, producto_id: Uuid, cuenta_id: Uuid) -> ApiResult<Option<(Option<String>, Option<String>, String, serde_json::Value)>> {
+    falabella_publicaciones::table
+        .filter(falabella_publicaciones::producto_id.eq(producto_id))
+        .filter(falabella_publicaciones::cuenta_id.eq(cuenta_id))
+        .select((falabella_publicaciones::categoria, falabella_publicaciones::marca, falabella_publicaciones::operador, falabella_publicaciones::atributos))
+        .first(conn)
+        .optional()
+        .map_err(ApiError::from)
 }
 
 /// Para una cuenta Falabella, los productos publicados con su precio/stock ACTUAL del hub
@@ -80,6 +101,11 @@ pub fn listar_publicaciones(conn: &mut PgConnection, cuenta_id: Uuid) -> ApiResu
         .select((falabella_publicaciones::producto_id, falabella_publicaciones::seller_sku, productos::titulo))
         .load::<(Uuid, String, String)>(conn)
         .map_err(ApiError::from)
+}
+
+/// Cuenta Falabella por id, sin filtrar por vendedor (uso interno: webhook/jobs).
+pub fn cuenta_por_id(conn: &mut PgConnection, id: Uuid) -> ApiResult<Option<FalabellaCuenta>> {
+    falabella_cuentas::table.find(id).select(FalabellaCuenta::as_select()).first(conn).optional().map_err(ApiError::from)
 }
 
 /// Todas las cuentas Falabella (para el job de sincronización).

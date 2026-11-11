@@ -27,13 +27,21 @@ async fn sincronizar_ventas_falabella(pool: &web::Data<DbPool>, ml: &web::Data<M
         Err(_) => return,
     };
     for cuenta in cuentas {
+        procesar_ventas_cuenta(pool, ml, fala, &cuenta, ml_ok).await;
+    }
+}
+
+/// Procesa las órdenes recientes de UNA cuenta Falabella (descuenta stock + empuja a ML).
+/// Reusable por el job periódico y por el webhook (tiempo real).
+pub async fn procesar_ventas_cuenta(pool: &web::Data<DbPool>, ml: &web::Data<MlClient>, fala: &web::Data<FalabellaClient>, cuenta: &crate::models::FalabellaCuenta, ml_ok: bool) {
+    {
         let api_key = crate::crypto::descifrar(&cuenta.api_key);
         let desde = (chrono::Utc::now() - chrono::Duration::hours(48)).format("%Y-%m-%dT%H:%M:%S%:z").to_string();
         let ordenes = match fala.get_orders(&cuenta.user_id, &api_key, &desde).await {
             Ok(v) => como_lista(v.pointer("/SuccessResponse/Body/Orders/Order")),
             Err(e) => {
                 log::warn!("Falabella {}: no se pudieron traer órdenes: {e}", cuenta.user_id);
-                continue;
+                return;
             }
         };
         for ord in ordenes {
@@ -57,6 +65,14 @@ async fn sincronizar_ventas_falabella(pool: &web::Data<DbPool>, ml: &web::Data<M
                     *conteo.entry(sku.to_string()).or_insert(0) += 1;
                 }
             }
+            let vid = cuenta.vendedor_id;
+            let n_items: i32 = conteo.values().sum();
+            let msg = format!("Orden {order_id} · {n_items} ítem(s). Marca 'listo para enviar' en Falabella.");
+            let _ = db::run(pool, move |conn| {
+                crate::services::saas_services::notificar(conn, vid, "falabella_venta", "Nueva venta en Falabella", Some(msg));
+                Ok::<_, crate::errors::ApiError>(())
+            })
+            .await;
             for (sku, qty) in conteo {
                 let (cid, sku2) = (cuenta.id, sku.clone());
                 let pid = db::run(pool, move |conn| crate::services::falabella_services::producto_de_sku(conn, cid, &sku2)).await.ok().flatten();
@@ -91,7 +107,15 @@ async fn sincronizar_falabella(pool: &web::Data<DbPool>, fala: &web::Data<Falabe
             let xml = crate::services::falabella_push_services::build_stock_precio_batch_xml(chunk);
             match fala.product_update(&cuenta.user_id, &api_key, xml).await {
                 Ok(_) => log::info!("Falabella {}: {} productos sincronizados (precio/stock)", cuenta.user_id, chunk.len()),
-                Err(e) => log::warn!("Falabella {}: error sync precio/stock: {e}", cuenta.user_id),
+                Err(e) => {
+                    log::warn!("Falabella {}: error sync precio/stock: {e}", cuenta.user_id);
+                    let (vid, msg) = (cuenta.vendedor_id, e.to_string());
+                    let _ = db::run(pool, move |conn| {
+                        crate::services::saas_services::notificar(conn, vid, "falabella_sync", "Error sincronizando con Falabella", Some(msg));
+                        Ok::<_, crate::errors::ApiError>(())
+                    })
+                    .await;
+                }
             }
         }
     }

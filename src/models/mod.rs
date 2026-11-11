@@ -176,6 +176,9 @@ pub struct NewFalabellaPublicacion {
     pub cuenta_id: Uuid,
     pub seller_sku: String,
     pub operador: String,
+    pub categoria: Option<String>,
+    pub marca: Option<String>,
+    pub atributos: serde_json::Value,
 }
 
 // ----------------------------- Producto -----------------------------

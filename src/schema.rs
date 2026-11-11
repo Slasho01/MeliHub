@@ -306,6 +306,11 @@ diesel::table! {
         operador -> Varchar,
         ultima_sync_at -> Nullable<Timestamp>,
         created_at -> Timestamp,
+        #[max_length = 30]
+        categoria -> Nullable<Varchar>,
+        #[max_length = 255]
+        marca -> Nullable<Varchar>,
+        atributos -> Jsonb,
     }
 }
 

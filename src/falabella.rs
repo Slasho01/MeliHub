@@ -155,6 +155,17 @@ impl FalabellaClient {
         self.request(user_id, api_key, "FeedStatus", &[("FeedID", feed_id)], None).await
     }
 
+    /// Registra un webhook (callback) para eventos (p. ej. onOrderCreated) en tiempo real.
+    pub async fn create_webhook(&self, user_id: &str, api_key: &str, callback_url: &str, eventos: &[&str]) -> ApiResult<serde_json::Value> {
+        let evs: String = eventos.iter().map(|e| format!("<Event>{e}</Event>")).collect();
+        let xml = format!(
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Request><Webhook><CallbackUrl>{}</CallbackUrl><Events>{}</Events></Webhook></Request>",
+            callback_url.replace('&', "&amp;"),
+            evs
+        );
+        self.request(user_id, api_key, "CreateWebhook", &[], Some(xml)).await
+    }
+
     /// Lista los feeds recientes (últimos ~30 días) con su estado y nº de errores.
     pub async fn feed_list(&self, user_id: &str, api_key: &str) -> ApiResult<serde_json::Value> {
         self.request(user_id, api_key, "FeedList", &[], None).await
@@ -175,6 +186,27 @@ impl FalabellaClient {
     /// Ítems de una orden (productos vendidos).
     pub async fn get_order_items(&self, user_id: &str, api_key: &str, order_id: &str) -> ApiResult<serde_json::Value> {
         self.request(user_id, api_key, "GetOrderItems", &[("OrderId", order_id)], None).await
+    }
+
+    /// Marca ítems como "listo para enviar". `delivery_type`: dropship | pickup | send_to_warehouse.
+    /// Para `dropship` con courier propio se pasan `shipping_provider` y `tracking_number`.
+    pub async fn set_ready_to_ship(&self, user_id: &str, api_key: &str, order_item_ids: &[i64], delivery_type: &str, shipping_provider: &str, tracking_number: &str) -> ApiResult<serde_json::Value> {
+        let ids = format!("[{}]", order_item_ids.iter().map(|i| i.to_string()).collect::<Vec<_>>().join(","));
+        let mut extra: Vec<(&str, &str)> = vec![("OrderItemIds", ids.as_str()), ("DeliveryType", delivery_type)];
+        if !shipping_provider.is_empty() {
+            extra.push(("ShippingProvider", shipping_provider));
+        }
+        if !tracking_number.is_empty() {
+            extra.push(("TrackingNumber", tracking_number));
+        }
+        self.request(user_id, api_key, "SetStatusToReadyToShip", &extra, None).await
+    }
+
+    /// Documento de una orden (etiqueta/factura). `tipo`: shippingLabel | invoice | carrierManifest.
+    /// Devuelve el JSON con el PDF en base64 (`…/Documents/Document/File`).
+    pub async fn get_document(&self, user_id: &str, api_key: &str, order_item_ids: &[i64], tipo: &str) -> ApiResult<serde_json::Value> {
+        let ids = format!("[{}]", order_item_ids.iter().map(|i| i.to_string()).collect::<Vec<_>>().join(","));
+        self.request(user_id, api_key, "GetDocument", &[("OrderItemIds", ids.as_str()), ("DocumentType", tipo)], None).await
     }
 }
 

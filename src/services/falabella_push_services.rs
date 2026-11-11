@@ -249,6 +249,87 @@ fn product_xml(sku: &str, name: &str, desc: &str, price: i64, qty: i32, category
     )
 }
 
+/// Mapa `picture_id -> url` (alta calidad jpg) para resolver las imágenes de cada variante.
+fn mapa_pics(p: &Producto) -> std::collections::HashMap<String, String> {
+    let mut m = std::collections::HashMap::new();
+    if let Some(arr) = p.datos.get("pictures").and_then(|a| a.as_array()) {
+        for pic in arr {
+            if let (Some(id), Some(url)) = (
+                pic.get("id").and_then(|v| v.as_str()),
+                pic.get("secure_url").and_then(|v| v.as_str()).or_else(|| pic.get("url").and_then(|v| v.as_str())),
+            ) {
+                m.insert(id.to_string(), img_falabella(url));
+            }
+        }
+    }
+    m
+}
+
+/// Bloque `<Product>` para una variante (comparte nombre/categoría/marca/descr. con las demás).
+#[allow(clippy::too_many_arguments)]
+fn product_block(sku: &str, name: &str, desc: &str, category_id: &str, brand: &str, variation: &str, operador: &str, precio: i64, stock: i32, data_extra: &str, imagenes: &[String]) -> String {
+    let mut images = String::new();
+    for u in imagenes {
+        images.push_str(&format!("<Image>{}</Image>", xml_escape(u)));
+    }
+    format!(
+        "<Product><SellerSku>{}</SellerSku><Name>{}</Name><Variation>{}</Variation>\
+<PrimaryCategory>{}</PrimaryCategory><Description>{}</Description><Brand>{}</Brand>\
+<ProductData><ConditionType>Nuevo</ConditionType>{}</ProductData>\
+<BusinessUnits><BusinessUnit><OperatorCode>{}</OperatorCode><Price>{}</Price><Stock>{}</Stock><Status>active</Status><IsPublished>1</IsPublished></BusinessUnit></BusinessUnits>\
+<Images>{}</Images></Product>",
+        xml_escape(sku), xml_escape(name), xml_escape(variation),
+        xml_escape(category_id), xml_escape(desc), xml_escape(brand),
+        data_extra, xml_escape(operador), precio.max(0), stock.max(0), images,
+    )
+}
+
+/// Si el producto tiene variantes de ML, arma un ProductCreate con un `<Product>` por variante.
+/// `None` si no tiene (usar `build_product_xml` normal). `atributos` = los comunes (obligatorios).
+pub fn build_variantes_xml(p: &Producto, category_id: &str, brand: &str, operador: &str, atributos: &[(String, String)]) -> Option<String> {
+    let vars = p.variantes.as_array().filter(|a| !a.is_empty())?;
+    let op = if operador.trim().is_empty() { "facl" } else { operador.trim() };
+    let desc = p.datos.get("descripcion").and_then(|d| d.as_str()).unwrap_or(&p.titulo);
+    let precio_base = p.precio_falabella.filter(|&x| x > 0).unwrap_or(p.precio);
+    let pics = mapa_pics(p);
+    let comunes: String = atributos
+        .iter()
+        .filter(|(_, v)| !v.trim().is_empty())
+        .map(|(k, v)| format!("<{t}>{}</{t}>", xml_escape(v.trim()), t = xml_tag(k)))
+        .collect();
+
+    let mut bloques = String::new();
+    for v in vars {
+        let Some(vid) = v.get("id").and_then(|x| x.as_i64()) else { continue };
+        let combos = v.get("attribute_combinations").and_then(|a| a.as_array());
+        let variation: String = combos
+            .map(|c| c.iter().filter_map(|a| a.get("value_name").and_then(|x| x.as_str())).collect::<Vec<_>>().join(" / "))
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| format!("Opción {vid}"));
+        // atributos propios de la variante (color/talla) + los comunes
+        let mut data = comunes.clone();
+        if let Some(c) = combos {
+            for a in c {
+                if let (Some(name), Some(val)) = (a.get("name").and_then(|x| x.as_str()), a.get("value_name").and_then(|x| x.as_str())) {
+                    if !name.is_empty() && !val.is_empty() {
+                        data.push_str(&format!("<{t}>{}</{t}>", xml_escape(val), t = xml_tag(name)));
+                    }
+                }
+            }
+        }
+        let precio = v.get("price").and_then(|x| x.as_f64()).map(|f| f.round() as i64).filter(|&x| x > 0).unwrap_or(precio_base);
+        let stock = v.get("available_quantity").and_then(|x| x.as_i64()).unwrap_or(0).max(0) as i32;
+        let imagenes: Vec<String> = v
+            .get("picture_ids")
+            .and_then(|a| a.as_array())
+            .map(|arr| arr.iter().filter_map(|pid| pid.as_str()).filter_map(|pid| pics.get(pid).cloned()).collect())
+            .unwrap_or_default();
+        let sku = format!("{}-{}", p.ml_item_id, vid);
+        bloques.push_str(&product_block(&sku, &p.titulo, desc, category_id, brand, &variation, op, precio, stock, &data, &imagenes));
+    }
+    (!bloques.is_empty()).then(|| format!("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Request>{bloques}</Request>"))
+}
+
 /// XML de ProductCreate/Update para un producto del hub con su categoría/atributos Falabella.
 /// `variation` vacío → "No aplica"; `operador` vacío → "facl" (Chile).
 pub fn build_product_xml(p: &Producto, category_id: &str, brand: &str, variation: &str, operador: &str, atributos: &[(String, String)]) -> String {
@@ -297,6 +378,16 @@ mod tests {
         assert!(!xml.contains("Vacio")); // atributo vacío omitido
         assert!(xml.contains("<Image>https://img/1-O.jpg</Image>"));
         assert!(xml.contains("<Description>Linda &amp; cómoda</Description>"));
+    }
+
+    #[test]
+    fn bloque_variante_bien_formado() {
+        let xml = product_block("MLA1-77", "Polera", "desc", "CAT1", "Nike", "Rojo / M", "facl", 9990, 4, "<Color>Rojo</Color>", &["https://img/a-F.jpg".to_string()]);
+        assert!(xml.starts_with("<Product><SellerSku>MLA1-77</SellerSku>"));
+        assert!(xml.contains("<Variation>Rojo / M</Variation>"));
+        assert!(xml.contains("<ProductData><ConditionType>Nuevo</ConditionType><Color>Rojo</Color></ProductData>"));
+        assert!(xml.contains("<Price>9990</Price><Stock>4</Stock>"));
+        assert!(xml.contains("<Image>https://img/a-F.jpg</Image>"));
     }
 
     #[test]

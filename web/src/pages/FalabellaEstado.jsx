@@ -39,6 +39,12 @@ export default function FalabellaEstado({ cuenta }) {
     try { await post('/falabella/estado', { producto_id: row.producto_id, cuenta_id: cuenta.id, activo }); setTimeout(cargar, 1800) }
     catch (e) { setError(e.message) } finally { setBusy('') }
   }
+  const republicar = async (row) => {
+    setBusy(row.producto_id)
+    setError(null)
+    try { await post('/falabella/republicar', { producto_id: row.producto_id, cuenta_id: cuenta.id }); setTimeout(cargar, 2500) }
+    catch (e) { setError(e.message) } finally { setBusy('') }
+  }
 
   if (!cuenta) return null
 
@@ -64,7 +70,8 @@ export default function FalabellaEstado({ cuenta }) {
                     <td>{qcBadge(s.qc)}</td>
                     <td className="sm">{s.img ? '✓' : '—'}</td>
                     <td className="sm">{s.publicado ? 'Sí' : 'No'}</td>
-                    <td style={{ textAlign: 'right' }}>
+                    <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      <button className="btn btn-sm" disabled={busy === r.producto_id} onClick={() => republicar(r)} title="Volver a publicar reusando la categoría/marca guardadas">↻ Republicar</button>{' '}
                       {s.publicado
                         ? <button className="btn btn-sm" disabled={busy === r.producto_id} onClick={() => cambiar(r, false)}>Pausar</button>
                         : <button className="btn btn-sm btn-accent" disabled={busy === r.producto_id} onClick={() => cambiar(r, true)}>Reactivar</button>}
