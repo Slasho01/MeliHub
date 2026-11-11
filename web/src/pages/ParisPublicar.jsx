@@ -22,11 +22,11 @@ function Combo({ options, value, onChange, placeholder }) {
         onBlur={() => setTimeout(() => setOpen(false), 150)}
       />
       {open && filtered.length > 0 && (
-        <div style={{ position: 'absolute', zIndex: 20, left: 0, right: 0, top: '100%', marginTop: 2, maxHeight: 240, overflowY: 'auto', background: 'var(--card, #fff)', border: '1px solid var(--line, #d0d0d0)', borderRadius: 8, boxShadow: '0 6px 18px rgba(0,0,0,.12)' }}>
+        <div style={{ position: 'absolute', zIndex: 20, left: 0, right: 0, top: '100%', marginTop: 2, maxHeight: 240, overflowY: 'auto', background: 'var(--surface)', color: 'var(--ink)', border: '1px solid var(--line)', borderRadius: 8, boxShadow: '0 10px 24px rgba(0,0,0,.45)' }}>
           {filtered.map((o) => (
             <div
               key={o.value}
-              style={{ padding: '8px 10px', cursor: 'pointer', fontSize: 14, borderBottom: '1px solid var(--line, #eee)', background: o.value === value ? 'var(--line, #f0f0f0)' : 'transparent' }}
+              style={{ padding: '8px 10px', cursor: 'pointer', fontSize: 14, color: 'var(--ink)', borderBottom: '1px solid var(--line)', background: o.value === value ? 'var(--line)' : 'transparent' }}
               onMouseDown={(e) => { e.preventDefault(); onChange(o.value); setOpen(false); setQ('') }}
             >
               {o.label}
