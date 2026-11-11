@@ -94,15 +94,15 @@ impl ParisClient {
         Ok(data)
     }
 
-    // ---------------- Taxonomía (para mapear productos) ----------------
+    // ---------------- Taxonomía v2 (las v1 están deprecadas → 503) ----------------
     pub async fn get_families(&self, sandbox: bool, api_key: &str) -> ApiResult<Value> {
-        self.req(sandbox, api_key, reqwest::Method::GET, "/v1/family", None).await
+        self.req(sandbox, api_key, reqwest::Method::GET, "/v2/families", None).await
     }
     pub async fn get_categories(&self, sandbox: bool, api_key: &str, family: &str) -> ApiResult<Value> {
-        self.req(sandbox, api_key, reqwest::Method::GET, &format!("/v1/category/family/{family}"), None).await
+        self.req(sandbox, api_key, reqwest::Method::GET, &format!("/v2/categories/family/{family}"), None).await
     }
     pub async fn get_attributes(&self, sandbox: bool, api_key: &str, family_id: &str) -> ApiResult<Value> {
-        self.req(sandbox, api_key, reqwest::Method::GET, &format!("/v1/attribute/family/{family_id}"), None).await
+        self.req(sandbox, api_key, reqwest::Method::GET, &format!("/v2/attributes/family/{family_id}"), None).await
     }
 
     // ---------------- Productos / variantes ----------------

@@ -102,6 +102,9 @@ pub struct PublicarReq {
     pub oferta: Option<i64>,
     #[serde(default)]
     pub atributos: Vec<AttrReq>,
+    /// Producto del hub (opcional): si viene, se guarda el mapeo para el sync continuo.
+    #[serde(default)]
+    pub producto_id: Option<Uuid>,
 }
 
 /// Crea un producto en Paris armando el cuerpo con el builder.
@@ -111,7 +114,18 @@ pub async fn publicar(user: AuthVendedor, path: web::Path<Uuid>, body: web::Json
     let key = crate::crypto::descifrar(&cuenta.api_key);
     let r = body.into_inner();
     let b = push::build_product(&r.name, &r.ref_product, &r.family_code, r.precio, r.oferta, &pares(&r.atributos));
-    Ok(HttpResponse::Ok().json(client.product_create(cuenta.sandbox, &key, &b).await?))
+    let resp = client.product_create(cuenta.sandbox, &key, &b).await?;
+    // Guarda el mapeo (producto hub ↔ cuenta/sku) para que el job sincronice el stock.
+    if let Some(pid) = r.producto_id {
+        let paris_sku = resp
+            .get("sku")
+            .and_then(|v| v.as_str())
+            .or_else(|| resp.pointer("/data/sku").and_then(|v| v.as_str()))
+            .map(|s| s.to_string());
+        let (cid, sku) = (cuenta.id, r.ref_product.clone());
+        let _ = db::run(&pool, move |conn| crate::services::paris_services::registrar_publicacion(conn, pid, cid, &sku, paris_sku)).await;
+    }
+    Ok(HttpResponse::Ok().json(resp))
 }
 
 /// Actualización avanzada (cuerpo JSON crudo, para campos puntuales).

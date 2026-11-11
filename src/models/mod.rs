@@ -1,4 +1,4 @@
-use crate::schema::{auditoria, cupones, facturacion, falabella_cuentas, falabella_publicaciones, historial_producto, miembros, ml_cuentas, notificaciones, ordenes_ml, paris_cuentas, productos, suscripciones, vendedores};
+use crate::schema::{auditoria, cupones, facturacion, falabella_cuentas, falabella_publicaciones, historial_producto, miembros, ml_cuentas, notificaciones, ordenes_ml, paris_cuentas, paris_publicaciones, paris_ventas, productos, suscripciones, vendedores};
 use chrono::NaiveDateTime;
 use diesel::prelude::*;
 use serde::Serialize;
@@ -178,6 +178,22 @@ pub struct NewParisCuenta {
     pub nombre: Option<String>,
     pub api_key: String,
     pub sandbox: bool,
+}
+
+#[derive(Insertable)]
+#[diesel(table_name = paris_publicaciones)]
+pub struct NewParisPublicacion {
+    pub producto_id: Uuid,
+    pub cuenta_id: Uuid,
+    pub sku_seller: String,
+    pub paris_sku: Option<String>,
+}
+
+#[derive(Insertable)]
+#[diesel(table_name = paris_ventas)]
+pub struct NewParisVenta {
+    pub cuenta_id: Uuid,
+    pub order_number: String,
 }
 
 #[derive(Queryable, Selectable, Serialize, Debug, Clone)]

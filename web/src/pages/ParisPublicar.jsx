@@ -3,16 +3,33 @@ import { get, post } from '../api'
 
 export default function ParisPublicar({ cuenta }) {
   const [familias, setFamilias] = useState(null)
+  const [productos, setProductos] = useState([])
   const [error, setError] = useState(null)
   const [result, setResult] = useState(null)
   const [busy, setBusy] = useState(false)
   const [atributos, setAtributos] = useState([{ code: '', value: '' }])
-  const [form, setForm] = useState({ name: '', ref_product: '', family_code: '', precio: '', oferta: '' })
+  const [form, setForm] = useState({ name: '', ref_product: '', family_code: '', precio: '', oferta: '', producto_id: '' })
 
   useEffect(() => {
     setFamilias(null); setError(null)
     get(`/paris/cuentas/${cuenta.id}/familias`).then(setFamilias).catch((e) => setError(e.message))
   }, [cuenta.id])
+
+  useEffect(() => {
+    get('/productos').then((d) => setProductos(Array.isArray(d) ? d : (d?.data || d?.productos || []))).catch(() => {})
+  }, [])
+
+  const elegirProducto = (id) => {
+    const p = productos.find((x) => x.id === id)
+    if (!p) { setForm((f) => ({ ...f, producto_id: '' })); return }
+    setForm((f) => ({
+      ...f,
+      producto_id: p.id,
+      name: p.titulo || f.name,
+      ref_product: p.ml_item_id || p.sku || f.ref_product,
+      precio: p.precio != null ? String(p.precio) : f.precio,
+    }))
+  }
 
   // La API puede devolver un array directo o { data: [...] }.
   const famList = Array.isArray(familias) ? familias : (familias?.data || [])
@@ -32,6 +49,7 @@ export default function ParisPublicar({ cuenta }) {
         precio: Number(form.precio) || 0,
         oferta: form.oferta ? Number(form.oferta) : null,
         atributos: atributos.filter((a) => a.code && a.value),
+        producto_id: form.producto_id || null,
       }
       const r = await post(`/paris/cuentas/${cuenta.id}/producto`, body)
       setResult(r)
@@ -42,6 +60,12 @@ export default function ParisPublicar({ cuenta }) {
     <form className="stack" style={{ gap: 10 }} onSubmit={publicar}>
       {error && <div className="alert alert-bad">{error}</div>}
       {result && <div className="alert alert-ok">Producto enviado a Paris. <span className="muted sm">Revisa su aprobación en tu Seller Center.</span></div>}
+
+      <label className="sm muted">Producto del hub (opcional — pre-rellena y habilita el sync de stock)</label>
+      <select className="input" value={form.producto_id} onChange={(e) => elegirProducto(e.target.value)}>
+        <option value="">— Manual (sin vincular) —</option>
+        {productos.map((p) => <option key={p.id} value={p.id}>{p.titulo} · {p.ml_item_id || p.sku}</option>)}
+      </select>
 
       <input className="input" placeholder="Nombre del producto" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
       <input className="input" placeholder="SKU / referencia (ej. el id de Mercado Libre)" value={form.ref_product} onChange={(e) => setForm({ ...form, ref_product: e.target.value })} required />

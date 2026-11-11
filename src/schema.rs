@@ -310,6 +310,30 @@ diesel::table! {
 }
 
 diesel::table! {
+    paris_publicaciones (id) {
+        id -> Uuid,
+        producto_id -> Uuid,
+        cuenta_id -> Uuid,
+        #[max_length = 80]
+        sku_seller -> Varchar,
+        #[max_length = 120]
+        paris_sku -> Nullable<Varchar>,
+        ultima_sync_at -> Nullable<Timestamp>,
+        created_at -> Timestamp,
+    }
+}
+
+diesel::table! {
+    paris_ventas (id) {
+        id -> Uuid,
+        cuenta_id -> Uuid,
+        #[max_length = 80]
+        order_number -> Varchar,
+        created_at -> Timestamp,
+    }
+}
+
+diesel::table! {
     falabella_publicaciones (id) {
         id -> Uuid,
         producto_id -> Uuid,

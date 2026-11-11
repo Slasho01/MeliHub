@@ -5,8 +5,10 @@
 use crate::db::{self, DbPool};
 use crate::falabella::FalabellaClient;
 use crate::ml::MlClient;
+use crate::paris::ParisClient;
 use crate::services::ml_services as svc;
 use actix_web::web;
+use std::collections::HashMap;
 use std::time::Duration;
 
 const SYNC_MAX_HORAS: i64 = 6;
@@ -121,7 +123,102 @@ async fn sincronizar_falabella(pool: &web::Data<DbPool>, fala: &web::Data<Falabe
     }
 }
 
-pub fn start(pool: web::Data<DbPool>, client: web::Data<MlClient>, falabella: web::Data<FalabellaClient>, configurado: bool) {
+/// Trae las órdenes nuevas de Paris (últimas 48 h) y DESCUENTA el stock en el hub
+/// (y lo empuja a ML). Las órdenes ya procesadas no se repiten.
+async fn procesar_ventas_paris(pool: &web::Data<DbPool>, ml: &web::Data<MlClient>, paris: &web::Data<ParisClient>, ml_ok: bool) {
+    let cuentas = match db::run(pool, crate::services::paris_services::todas_cuentas).await {
+        Ok(c) => c,
+        Err(_) => return,
+    };
+    for cuenta in cuentas {
+        let api_key = crate::crypto::descifrar(&cuenta.api_key);
+        let desde = (chrono::Utc::now() - chrono::Duration::hours(48)).format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string();
+        let query = format!("gteCreatedAt={desde}");
+        let ordenes = match paris.get_orders(cuenta.sandbox, &api_key, &query).await {
+            Ok(v) => como_lista(v.get("data")),
+            Err(e) => {
+                log::warn!("Paris {}: no se pudieron traer órdenes: {e}", cuenta.id);
+                continue;
+            }
+        };
+        for ord in ordenes {
+            let numero = ord
+                .get("originOrderNumber")
+                .and_then(|v| v.as_str())
+                .or_else(|| ord.get("id").and_then(|v| v.as_str()))
+                .map(|s| s.to_string());
+            let Some(numero) = numero else { continue };
+            let (cid, num2) = (cuenta.id, numero.clone());
+            let nueva = db::run(pool, move |conn| crate::services::paris_services::marcar_venta_si_nueva(conn, &num2, cid)).await.unwrap_or(false);
+            if !nueva {
+                continue;
+            }
+            let detalle = match paris.get_order(cuenta.sandbox, &api_key, &numero).await {
+                Ok(v) => v,
+                Err(_) => continue,
+            };
+            // Ítems en subOrders[].items[]; cada ítem suele ser 1 unidad → agrupamos por sellerSku.
+            let mut conteo: HashMap<String, i32> = HashMap::new();
+            for sub in como_lista(detalle.get("subOrders")) {
+                for it in como_lista(sub.get("items")) {
+                    let sku = it
+                        .get("sellerSku")
+                        .and_then(|v| v.as_str())
+                        .or_else(|| it.get("sku").and_then(|v| v.as_str()))
+                        .filter(|s| !s.is_empty());
+                    if let Some(sku) = sku {
+                        *conteo.entry(sku.to_string()).or_insert(0) += 1;
+                    }
+                }
+            }
+            let vid = cuenta.vendedor_id;
+            let n_items: i32 = conteo.values().sum();
+            let msg = format!("Orden {numero} · {n_items} ítem(s) en Paris.");
+            let _ = db::run(pool, move |conn| {
+                crate::services::saas_services::notificar(conn, vid, "paris_venta", "Nueva venta en Paris", Some(msg));
+                Ok::<_, crate::errors::ApiError>(())
+            })
+            .await;
+            for (sku, qty) in conteo {
+                let (cid, sku2) = (cuenta.id, sku.clone());
+                let pid = db::run(pool, move |conn| crate::services::paris_services::producto_de_sku(conn, cid, &sku2)).await.ok().flatten();
+                let Some(pid) = pid else { continue };
+                if let Ok(venta) = db::run(pool, move |conn| crate::services::pub_services::aplicar_venta_externa(conn, pid, qty, "venta_paris")).await {
+                    log::info!("Paris venta {numero}: {sku} -{qty} → stock {}", venta.nuevo_stock);
+                    if ml_ok {
+                        crate::sync::empujar_stock_ml(pool, ml, &venta).await;
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Empuja el stock ACTUAL del hub a Paris (por sku_seller) para los productos publicados.
+async fn sincronizar_paris(pool: &web::Data<DbPool>, paris: &web::Data<ParisClient>) {
+    let cuentas = match db::run(pool, crate::services::paris_services::todas_cuentas).await {
+        Ok(c) => c,
+        Err(_) => return,
+    };
+    for cuenta in cuentas {
+        let cid = cuenta.id;
+        let items = match db::run(pool, move |conn| crate::services::paris_services::publicaciones_para_sync(conn, cid)).await {
+            Ok(i) if !i.is_empty() => i,
+            _ => continue,
+        };
+        let api_key = crate::crypto::descifrar(&cuenta.api_key);
+        let stock_items: Vec<(String, i32)> = items.iter().map(|i| (i.sku_seller.clone(), i.stock)).collect();
+        for chunk in stock_items.chunks(200) {
+            let body = crate::services::paris_push_services::build_stock(chunk);
+            match paris.update_stock_sku_seller(cuenta.sandbox, &api_key, &body).await {
+                Ok(_) => log::info!("Paris {}: {} productos sincronizados (stock)", cuenta.id, chunk.len()),
+                Err(e) => log::warn!("Paris {}: error sync stock: {e}", cuenta.id),
+            }
+        }
+    }
+}
+
+pub fn start(pool: web::Data<DbPool>, client: web::Data<MlClient>, falabella: web::Data<FalabellaClient>, paris: web::Data<ParisClient>, configurado: bool) {
     if !configurado {
         log::info!("Job de sincronización inactivo (Mercado Libre sin configurar)");
         return;
@@ -164,6 +261,9 @@ pub fn start(pool: web::Data<DbPool>, client: web::Data<MlClient>, falabella: we
             sincronizar_ventas_falabella(&pool, &client, &falabella, true).await;
             // Tras refrescar el hub desde ML, empujamos precio/stock a Falabella.
             sincronizar_falabella(&pool, &falabella).await;
+            // Paris: ventas → descuentan stock (y se empuja a ML), y empujamos stock al canal.
+            procesar_ventas_paris(&pool, &client, &paris, true).await;
+            sincronizar_paris(&pool, &paris).await;
         }
     });
 }

@@ -66,7 +66,7 @@ async fn main() -> std::io::Result<()> {
     let mp_client = web::Data::new(mp::MercadoPago::new(config.mp_access_token.clone()));
     let mailer = web::Data::new(mailer::Mailer::new(config.resend_api_key.clone(), config.mail_from.clone()));
 
-    jobs::start(pool_data.clone(), ml_client.clone(), falabella_client.clone(), config.ml.configurado());
+    jobs::start(pool_data.clone(), ml_client.clone(), falabella_client.clone(), paris_client.clone(), config.ml.configurado());
 
     HttpServer::new(move || {
         // Sin CORS_ORIGINS definido, acotamos al propio origen (APP_URL) en vez de abrir a
