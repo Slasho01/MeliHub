@@ -4,6 +4,27 @@
 
 use serde_json::{json, Value};
 
+/// Id de la tienda (`storePrice`) de `/v2/store-prices` (prefiere "Paris", si no la primera).
+pub fn pick_store(v: &Value) -> Option<String> {
+    let arr = v.as_array()?;
+    arr.iter()
+        .find(|x| x.get("name").and_then(|n| n.as_str()).map(|n| n.to_lowercase().contains("paris")).unwrap_or(false))
+        .or_else(|| arr.first())
+        .and_then(|x| x.get("id").and_then(|i| i.as_str()))
+        .map(|s| s.to_string())
+}
+
+/// Id del tipo de precio (`type`) de `/v2/price-types` (prefiere "Precio" base, si no el primero).
+pub fn pick_price_type(v: &Value) -> Option<String> {
+    let results = v.get("results").and_then(|r| r.as_array())?;
+    results
+        .iter()
+        .find(|x| x.get("name").and_then(|n| n.as_str()).map(|n| n.trim().eq_ignore_ascii_case("precio")).unwrap_or(false))
+        .or_else(|| results.first())
+        .and_then(|x| x.get("id").and_then(|i| i.as_str()))
+        .map(|s| s.to_string())
+}
+
 /// Precios v2: `[{ value, storePrice, type }]`. `store_price_id` = id de `/v2/price-types`;
 /// `tipo` = su nombre (Paris exige `type` como texto).
 pub fn build_precio(precio: i64, store_id: Option<&str>, price_type_id: Option<&str>) -> Value {
@@ -82,6 +103,26 @@ pub fn build_product(name: &str, seller_sku: &str, family_id: &str, categoria_id
             "quantity": stock.max(0),
         } ],
         "prices": build_precio(precio, store_price_id, tipo_precio),
+    })
+}
+
+/// Cuerpo para ACTUALIZAR un producto (`PATCH /v2/products/{id}`): product + variants (sin precios).
+#[allow(clippy::too_many_arguments)]
+pub fn build_update(name: &str, seller_sku: &str, family_id: &str, categoria_id: &str, atributos: &[(String, String)], var_atributos: &[(String, String)], imagenes: &[String]) -> Value {
+    json!({
+        "product": {
+            "name": name,
+            "sellerSku": seller_sku,
+            "familyId": family_id,
+            "category": categoria_id,
+            "attributes": attrs_json(atributos),
+        },
+        "variants": [ {
+            "skuSeller": seller_sku,
+            "status": "ENABLED",
+            "attributes": attrs_json(var_atributos),
+            "medias": medias_json(imagenes),
+        } ],
     })
 }
 

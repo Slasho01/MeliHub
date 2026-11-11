@@ -67,6 +67,10 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(r("/paris/cuentas/{id}/ordenes").route(get().to(paris::ordenes)))
             .service(r("/paris/cuentas/{id}/ordenes/{numero}").route(get().to(paris::orden)))
             .service(r("/paris/cuentas/{id}/sub-ordenes").route(get().to(paris::sub_ordenes)))
+            .service(r("/paris/cuentas/{id}/sub-ordenes/{numero}/envio").route(post().to(paris::crear_envio)))
+            .service(r("/paris/cuentas/{id}/sub-ordenes/{numero}/cancelar").route(post().to(paris::cancelar)))
+            .service(r("/paris/cuentas/{id}/etiqueta/{labelId}").route(get().to(paris::etiqueta)))
+            .service(r("/paris/cuentas/{id}/razones-cancelacion").route(get().to(paris::razones_cancelacion)))
             // Catálogo unificado + gestor de inventario
             .service(r("/productos").route(get().to(prod::listar)))
             .service(r("/productos/inventario-masivo").route(post().to(prod::inventario_masivo)))

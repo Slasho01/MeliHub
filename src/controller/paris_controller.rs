@@ -43,26 +43,7 @@ fn extraer_sku(msg: &str) -> Option<String> {
     Some(rest[..j].to_string())
 }
 
-/// Id de la tienda (`storePrice`) de `/v2/store-prices` (prefiere "Paris", si no la primera).
-fn pick_store(v: &Value) -> Option<String> {
-    let arr = v.as_array()?;
-    arr.iter()
-        .find(|x| x.get("name").and_then(|n| n.as_str()).map(|n| n.to_lowercase().contains("paris")).unwrap_or(false))
-        .or_else(|| arr.first())
-        .and_then(|x| x.get("id").and_then(|i| i.as_str()))
-        .map(|s| s.to_string())
-}
-
-/// Id del tipo de precio (`type`) de `/v2/price-types` (prefiere "Precio" base, si no el primero).
-fn pick_price_type(v: &Value) -> Option<String> {
-    let results = v.get("results").and_then(|r| r.as_array())?;
-    results
-        .iter()
-        .find(|x| x.get("name").and_then(|n| n.as_str()).map(|n| n.trim().eq_ignore_ascii_case("precio")).unwrap_or(false))
-        .or_else(|| results.first())
-        .and_then(|x| x.get("id").and_then(|i| i.as_str()))
-        .map(|s| s.to_string())
-}
+use crate::services::paris_push_services::{pick_price_type, pick_store};
 
 /// Obtiene la cuenta validando que sea del vendedor autenticado.
 async fn cuenta_de(pool: &web::Data<DbPool>, org: Uuid, id: Uuid) -> ApiResult<ParisCuenta> {
@@ -195,6 +176,13 @@ pub async fn publicar(user: AuthVendedor, path: web::Path<Uuid>, body: web::Json
     // La respuesta de creación trae el sku de Paris en "id" (ej. MKWEPBCQ0I); el caso
     // idempotente lo deja en "sku". El endpoint de precio necesita ESE sku (no el sellerSku).
     let paris_sku = resp.get("id").and_then(|v| v.as_str()).or_else(|| resp.get("sku").and_then(|v| v.as_str())).map(|s| s.to_string());
+    // Si ya existía, refrescamos su contenido (nombre/atributos/imágenes) con PATCH.
+    if ya_existia {
+        if let Some(psku) = &paris_sku {
+            let ub = push::build_update(&r.name, &r.ref_product, &r.family_code, &r.categoria_id, &pares(&r.atributos), &pares(&r.variante_atributos), &r.imagenes);
+            let _ = client.product_update(cuenta.sandbox, &key, psku, &ub).await;
+        }
+    }
     // 2) Precio aparte (best-effort: si falla, el producto igual quedó creado).
     let mut precio_ok = false;
     if let Some(psku) = &paris_sku {
@@ -205,12 +193,24 @@ pub async fn publicar(user: AuthVendedor, path: web::Path<Uuid>, body: web::Json
             precio_ok = client.update_price(cuenta.sandbox, &key, psku, &pb).await.is_ok();
         }
     }
+    // 2b) Stock: va por el sku de la VARIANTE (producto-1), no del producto. El `quantity`
+    // inline de la creación NO setea el stock vendible → hay que empujarlo aparte.
+    let mut stock_ok = false;
+    if let Some(psku) = &paris_sku {
+        let var_sku = resp
+            .pointer("/variants/0/sku")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| format!("{psku}-1"));
+        let sb = push::build_stock(&[(var_sku, r.stock.unwrap_or(0))]);
+        stock_ok = client.update_stock_sku_seller(cuenta.sandbox, &key, &sb).await.is_ok();
+    }
     // 3) Mapeo para el sync continuo.
     if let Some(pid) = r.producto_id {
         let (cid, sku, psku) = (cuenta.id, r.ref_product.clone(), paris_sku.clone());
         let _ = db::run(&pool, move |conn| crate::services::paris_services::registrar_publicacion(conn, pid, cid, &sku, psku)).await;
     }
-    Ok(HttpResponse::Ok().json(serde_json::json!({ "producto": resp, "ya_existia": ya_existia, "precio_ok": precio_ok })))
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "producto": resp, "ya_existia": ya_existia, "precio_ok": precio_ok, "stock_ok": stock_ok })))
 }
 
 /// Actualización avanzada (cuerpo JSON crudo, para campos puntuales).
@@ -303,4 +303,43 @@ pub async fn sub_ordenes(user: AuthVendedor, path: web::Path<Uuid>, q: web::Quer
     let key = crate::crypto::descifrar(&cuenta.api_key);
     let query = q.into_inner().query.unwrap_or_default();
     Ok(HttpResponse::Ok().json(client.get_sub_orders(cuenta.sandbox, &key, &query).await?))
+}
+
+// ----------------- Fulfillment -----------------
+
+/// Crea el envío (Envíame) de una sub-orden. Body: `{ shipments: [{ packages, items:[{sku,quantity,description}] }] }`.
+pub async fn crear_envio(user: AuthVendedor, path: web::Path<(Uuid, String)>, body: web::Json<Value>, pool: web::Data<DbPool>, client: web::Data<ParisClient>) -> ApiResult<HttpResponse> {
+    user.exigir_edicion()?;
+    exigir_admin(&user)?;
+    let (id, sub) = path.into_inner();
+    let cuenta = cuenta_de(&pool, user.id, id).await?;
+    let key = crate::crypto::descifrar(&cuenta.api_key);
+    Ok(HttpResponse::Ok().json(client.crear_envio(cuenta.sandbox, &key, &sub, &body.into_inner()).await?))
+}
+
+/// Etiqueta de un labelId.
+pub async fn etiqueta(user: AuthVendedor, path: web::Path<(Uuid, String)>, pool: web::Data<DbPool>, client: web::Data<ParisClient>) -> ApiResult<HttpResponse> {
+    exigir_admin(&user)?;
+    let (id, label) = path.into_inner();
+    let cuenta = cuenta_de(&pool, user.id, id).await?;
+    let key = crate::crypto::descifrar(&cuenta.api_key);
+    Ok(HttpResponse::Ok().json(client.imprimir_etiqueta(cuenta.sandbox, &key, &label).await?))
+}
+
+/// Cancela una sub-orden. Body: `{ status, shipments, cancellationReasonId }`.
+pub async fn cancelar(user: AuthVendedor, path: web::Path<(Uuid, String)>, body: web::Json<Value>, pool: web::Data<DbPool>, client: web::Data<ParisClient>) -> ApiResult<HttpResponse> {
+    user.exigir_edicion()?;
+    exigir_admin(&user)?;
+    let (id, sub) = path.into_inner();
+    let cuenta = cuenta_de(&pool, user.id, id).await?;
+    let key = crate::crypto::descifrar(&cuenta.api_key);
+    Ok(HttpResponse::Ok().json(client.cancelar_suborden(cuenta.sandbox, &key, &sub, &body.into_inner()).await?))
+}
+
+/// Razones de cancelación disponibles.
+pub async fn razones_cancelacion(user: AuthVendedor, path: web::Path<Uuid>, pool: web::Data<DbPool>, client: web::Data<ParisClient>) -> ApiResult<HttpResponse> {
+    exigir_admin(&user)?;
+    let cuenta = cuenta_de(&pool, user.id, path.into_inner()).await?;
+    let key = crate::crypto::descifrar(&cuenta.api_key);
+    Ok(HttpResponse::Ok().json(client.razones_cancelacion(cuenta.sandbox, &key).await?))
 }

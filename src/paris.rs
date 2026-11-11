@@ -150,4 +150,22 @@ impl ParisClient {
         let path = if query.is_empty() { "/v1/sub-orders".to_string() } else { format!("/v1/sub-orders?{query}") };
         self.req(sandbox, api_key, reqwest::Method::GET, &path, None).await
     }
+
+    // ---------------- Fulfillment ----------------
+    /// Crea el/los envío(s) de una sub-orden (Envíame) → genera la etiqueta.
+    pub async fn crear_envio(&self, sandbox: bool, api_key: &str, sub_order: &str, body: &Value) -> ApiResult<Value> {
+        self.req(sandbox, api_key, reqwest::Method::POST, &format!("/v2/enviame/create-multiple-deliveries/{sub_order}"), Some(body)).await
+    }
+    /// Devuelve la etiqueta de un labelId (JSON con URL/base64 según Paris).
+    pub async fn imprimir_etiqueta(&self, sandbox: bool, api_key: &str, label_id: &str) -> ApiResult<Value> {
+        self.req(sandbox, api_key, reqwest::Method::GET, &format!("/v2/label/print-label/{label_id}"), None).await
+    }
+    /// Cancela una sub-orden. `body` = `{ status, shipments, cancellationReasonId }`.
+    pub async fn cancelar_suborden(&self, sandbox: bool, api_key: &str, sub_order: &str, body: &Value) -> ApiResult<Value> {
+        self.req(sandbox, api_key, reqwest::Method::PUT, &format!("/v2/cancel/multiple-deliveries/{sub_order}"), Some(body)).await
+    }
+    /// Razones de cancelación disponibles.
+    pub async fn razones_cancelacion(&self, sandbox: bool, api_key: &str) -> ApiResult<Value> {
+        self.req(sandbox, api_key, reqwest::Method::GET, "/v1/order-item/cancellation-reason", None).await
+    }
 }

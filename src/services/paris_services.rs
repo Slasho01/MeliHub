@@ -64,10 +64,11 @@ pub fn desconectar(conn: &mut PgConnection, cuenta_id: Uuid, vendedor_id: Uuid) 
 
 // ----------------- Mapeo de publicaciones y ventas -----------------
 
-/// Un producto publicado, con su stock actual, para empujar a Paris.
+/// Un producto publicado, con su stock y precio actuales, para empujar a Paris.
 pub struct SyncItem {
     pub sku_seller: String,
     pub stock: i32,
+    pub precio: i64,
     pub paris_sku: Option<String>,
 }
 
@@ -93,14 +94,14 @@ pub fn publicaciones_para_sync(conn: &mut PgConnection, cuenta_id: Uuid) -> ApiR
         return Ok(vec![]);
     }
     let ids: Vec<Uuid> = pubs.iter().map(|(_, pid, _)| *pid).collect();
-    let stocks: Vec<(Uuid, i32)> = productos::table
+    let datos: Vec<(Uuid, i32, i64)> = productos::table
         .filter(productos::id.eq_any(&ids))
-        .select((productos::id, productos::stock))
+        .select((productos::id, productos::stock, productos::precio))
         .load(conn)?;
-    let map: HashMap<Uuid, i32> = stocks.into_iter().collect();
+    let map: HashMap<Uuid, (i32, i64)> = datos.into_iter().map(|(id, st, pr)| (id, (st, pr))).collect();
     Ok(pubs
         .into_iter()
-        .filter_map(|(sku, pid, psku)| map.get(&pid).map(|&st| SyncItem { sku_seller: sku, stock: st, paris_sku: psku }))
+        .filter_map(|(sku, pid, psku)| map.get(&pid).map(|&(st, pr)| SyncItem { sku_seller: sku, stock: st, precio: pr, paris_sku: psku }))
         .collect())
 }
 

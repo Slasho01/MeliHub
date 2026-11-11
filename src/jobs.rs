@@ -207,12 +207,30 @@ async fn sincronizar_paris(pool: &web::Data<DbPool>, paris: &web::Data<ParisClie
             _ => continue,
         };
         let api_key = crate::crypto::descifrar(&cuenta.api_key);
-        let stock_items: Vec<(String, i32)> = items.iter().map(|i| (i.sku_seller.clone(), i.stock)).collect();
+        use crate::services::paris_push_services as pp;
+        // Store + tipo de precio (una vez por cuenta) para el precio.
+        let store = paris.get_store_prices(cuenta.sandbox, &api_key).await.ok().and_then(|v| pp::pick_store(&v));
+        let ptype = paris.get_price_types(cuenta.sandbox, &api_key).await.ok().and_then(|v| pp::pick_price_type(&v));
+        // STOCK: por sku de la VARIANTE (paris_sku + "-1"); omite los que no tengan paris_sku.
+        let stock_items: Vec<(String, i32)> = items
+            .iter()
+            .filter_map(|i| i.paris_sku.as_ref().map(|ps| (format!("{ps}-1"), i.stock)))
+            .collect();
         for chunk in stock_items.chunks(200) {
-            let body = crate::services::paris_push_services::build_stock(chunk);
-            match paris.update_stock_sku_seller(cuenta.sandbox, &api_key, &body).await {
-                Ok(_) => log::info!("Paris {}: {} productos sincronizados (stock)", cuenta.id, chunk.len()),
-                Err(e) => log::warn!("Paris {}: error sync stock: {e}", cuenta.id),
+            let body = pp::build_stock(chunk);
+            if let Err(e) = paris.update_stock_sku_seller(cuenta.sandbox, &api_key, &body).await {
+                log::warn!("Paris {}: error sync stock: {e}", cuenta.id);
+            }
+        }
+        // PRECIO: por sku del PRODUCTO (paris_sku), con store + tipo.
+        if let (Some(st), Some(pt)) = (&store, &ptype) {
+            for i in &items {
+                if let Some(ps) = &i.paris_sku {
+                    let pb = serde_json::json!({ "prices": pp::build_precio(i.precio, Some(st.as_str()), Some(pt.as_str())) });
+                    if let Err(e) = paris.update_price(cuenta.sandbox, &api_key, ps, &pb).await {
+                        log::warn!("Paris {}: error sync precio {ps}: {e}", cuenta.id);
+                    }
+                }
             }
         }
     }
