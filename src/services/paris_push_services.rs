@@ -40,14 +40,21 @@ fn attrs_json(atributos: &[(String, String)]) -> Value {
     )
 }
 
-/// Imágenes v2 (van dentro de la variante): `[{ position, src, name }]`.
+/// Convierte una URL de imagen de ML a .jpg grande (Paris no acepta .webp ni thumbnails `-I`).
+fn img_jpg(url: &str) -> String {
+    url.replace("-I.webp", "-O.jpg")
+        .replace("-I.jpg", "-O.jpg")
+        .replace(".webp", ".jpg")
+}
+
+/// Imágenes v2 (van dentro de la variante): `[{ position, src, name }]`. Fuerza .jpg.
 fn medias_json(imagenes: &[String]) -> Value {
     Value::Array(
         imagenes
             .iter()
             .filter(|u| !u.trim().is_empty())
             .enumerate()
-            .map(|(i, url)| json!({ "position": i + 1, "src": url, "name": format!("img-{}", i + 1) }))
+            .map(|(i, url)| json!({ "position": i + 1, "src": img_jpg(url), "name": format!("img-{}", i + 1) }))
             .collect(),
     )
 }
