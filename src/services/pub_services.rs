@@ -30,6 +30,8 @@ pub struct VariantePublica {
 #[derive(Serialize)]
 pub struct PublicProducto {
     pub id: Uuid,
+    /// SKU estable para los canales (catalog_product_id si existe, si no ml_item_id).
+    pub sku: String,
     pub ml_item_id: String,
     pub titulo: String,
     pub precio: i64,
@@ -288,6 +290,7 @@ pub fn productos(conn: &mut PgConnection, key: &ApiKey) -> ApiResult<Vec<PublicP
     let items = dedup_catalogo(items);
     Ok(items
         .into_iter()
+        .filter(|p| p.stock > 0) // solo se distribuyen productos CON stock
         .map(|p| {
             let precio = precio_canal(&p, &key.canal);
             let (descripcion, especificaciones) = ficha(&p.datos);
@@ -300,9 +303,20 @@ pub fn productos(conn: &mut PgConnection, key: &ApiKey) -> ApiResult<Vec<PublicP
             let imagenes = galeria(&p.datos, &p.thumbnail);
             let video = video_de(&p.datos);
             let variantes = variantes_de(&p, precio, &mapa_imagenes(&p.datos));
+            // SKU ESTABLE: el id de producto de catálogo (compartido por la publicación de
+            // catálogo y la normal) si existe; si no, el item id. Evita duplicados cuando el
+            // representante salta entre la publicación normal y la de catálogo.
+            let sku = p
+                .datos
+                .get("catalog_product_id")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| p.ml_item_id.clone());
             PublicProducto {
                 precio,
                 id: p.id,
+                sku,
                 ml_item_id: p.ml_item_id,
                 titulo: p.titulo,
                 moneda: p.moneda,

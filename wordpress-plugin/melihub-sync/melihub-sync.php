@@ -2,7 +2,7 @@
 /**
  * Plugin Name: MeliHub Sync
  * Description: Sincroniza productos de MeliHub (Mercado Libre) a WooCommerce y reporta las ventas para mantener el stock en dos vías.
- * Version: 0.3.0
+ * Version: 0.4.0
  * Author: Jarstore
  * Requires Plugins: woocommerce
  */
@@ -54,8 +54,19 @@ function melihub_api($method, $path, $body = null, &$headers_out = null) {
 
 /** Crea/actualiza UN producto de MeliHub en WooCommerce. Devuelve [id, nuevo]. */
 function melihub_upsert_producto($it) {
-    $sku = $it['ml_item_id'];
+    // SKU ESTABLE del hub (catalog_product_id o item id): evita duplicar cuando el
+    // representante salta entre la publicación de catálogo y la normal.
+    $sku = !empty($it['sku']) ? $it['sku'] : $it['ml_item_id'];
     $product_id = wc_get_product_id_by_sku($sku);
+    // Migración: si no existe con el SKU nuevo, búscalo por el id del hub (meta) o por el
+    // item id antiguo, y re-apunta su SKU — así no se crea un duplicado.
+    if (!$product_id && !empty($it['id'])) {
+        $prev = wc_get_products(['limit' => 1, 'return' => 'ids', 'meta_key' => MELIHUB_META_ID, 'meta_value' => $it['id']]);
+        if (!empty($prev)) $product_id = (int) $prev[0];
+    }
+    if (!$product_id && !empty($it['ml_item_id']) && $it['ml_item_id'] !== $sku) {
+        $product_id = wc_get_product_id_by_sku($it['ml_item_id']);
+    }
     $product = $product_id ? wc_get_product($product_id) : new WC_Product_Simple();
     $nuevo = !$product_id;
 

@@ -271,8 +271,24 @@ pub async fn cambiar_estado(user: AuthVendedor, body: web::Json<EstadoReq>, pool
 
 /// Webhook de Falabella (PÚBLICO, sin auth): al recibir un evento, procesa en 2º plano las
 /// ventas recientes de esa cuenta (descuenta stock + empuja a ML). La cuenta va en la URL.
+/// Throttle anti-abuso del webhook público: a lo más 1 procesamiento cada 15 s por cuenta.
+fn webhook_throttle() -> &'static std::sync::Mutex<std::collections::HashMap<Uuid, std::time::Instant>> {
+    static T: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<Uuid, std::time::Instant>>> = std::sync::OnceLock::new();
+    T.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()))
+}
+
 pub async fn webhook(path: web::Path<Uuid>, pool: web::Data<DbPool>, client: web::Data<FalabellaClient>, ml: web::Data<crate::ml::MlClient>, cfg: web::Data<Config>) -> ApiResult<HttpResponse> {
     let cuenta_id = path.into_inner();
+    // El endpoint es público (Falabella no firma): limitamos la frecuencia por cuenta para
+    // que no se pueda abusar forzando llamadas al API de Falabella.
+    {
+        let ahora = std::time::Instant::now();
+        let mut m = webhook_throttle().lock().unwrap();
+        if m.get(&cuenta_id).is_some_and(|&last| ahora.duration_since(last) < std::time::Duration::from_secs(15)) {
+            return Ok(HttpResponse::Ok().finish());
+        }
+        m.insert(cuenta_id, ahora);
+    }
     let (pool2, fala2, ml2) = (pool.clone(), client.clone(), ml.clone());
     let ml_ok = cfg.ml.configurado();
     actix_web::rt::spawn(async move {
