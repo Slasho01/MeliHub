@@ -50,7 +50,7 @@ pub async fn sincronizar_cuenta(pool: &web::Data<DbPool>, client: &MlClient, cue
     let mut offset = 0i64;
     let mut total = 0usize;
     // Cachés: nombres de categoría y stock de depósito (varios ítems comparten).
-    let mut cat_cache: std::collections::HashMap<String, Option<String>> = std::collections::HashMap::new();
+    let mut cat_cache: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
     let mut dep_cache: std::collections::HashMap<String, Option<i64>> = std::collections::HashMap::new();
     loop {
         let search = client.list_item_ids(&token, cuenta.ml_user_id, offset).await?;
@@ -64,10 +64,13 @@ pub async fn sincronizar_cuenta(pool: &web::Data<DbPool>, client: &MlClient, cue
                 it.descripcion = client.get_description(&token, &it.id).await;
                 if let Some(cat_id) = it.category_id.clone() {
                     if !cat_cache.contains_key(&cat_id) {
-                        let name = client.get_category(&token, &cat_id).await;
-                        cat_cache.insert(cat_id.clone(), name);
+                        let ruta = client.get_category_ruta(&token, &cat_id).await;
+                        cat_cache.insert(cat_id.clone(), ruta);
                     }
-                    it.categoria_nombre = cat_cache.get(&cat_id).cloned().flatten();
+                    if let Some(ruta) = cat_cache.get(&cat_id) {
+                        it.categoria_nombre = ruta.last().cloned();
+                        it.categoria_ruta = ruta.clone();
+                    }
                 }
                 if let Some(upid) = it.user_product_id.clone() {
                     if !dep_cache.contains_key(&upid) {
@@ -97,7 +100,9 @@ pub async fn refrescar_item(pool: &web::Data<DbPool>, client: &MlClient, cuenta:
     for it in items.iter_mut() {
         it.descripcion = client.get_description(&token, &it.id).await;
         if let Some(cat_id) = it.category_id.clone() {
-            it.categoria_nombre = client.get_category(&token, &cat_id).await;
+            let ruta = client.get_category_ruta(&token, &cat_id).await;
+            it.categoria_nombre = ruta.last().cloned();
+            it.categoria_ruta = ruta;
         }
         if let Some(upid) = it.user_product_id.clone() {
             it.deposito_stock = client.get_deposito_stock(&token, &upid).await;

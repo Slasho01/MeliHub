@@ -54,6 +54,9 @@ pub struct PublicProducto {
     pub variantes: Vec<VariantePublica>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub categoria: Option<String>,
+    /// Ruta completa de categorías (raíz → hoja) para armar jerarquía/submenús en el canal.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub categoria_ruta: Vec<String>,
 }
 
 /// Extrae descripción y ficha técnica del JSON `datos` (el item de ML guardado).
@@ -283,6 +286,10 @@ pub fn productos(conn: &mut PgConnection, key: &ApiKey) -> ApiResult<Vec<PublicP
     use crate::schema::ml_cuentas;
     let mut q = productos::table.inner_join(ml_cuentas::table).into_boxed();
     q = q.filter(ml_cuentas::vendedor_id.eq(key.vendedor_id));
+    // Solo publicaciones ACTIVAS en ML: los pausados/cerrados no se distribuyen (la
+    // mayoría son sin stock). Si se pausa uno después, sale del feed y, con "ocultar
+    // retirados", el canal lo oculta solo.
+    q = q.filter(productos::estado.eq("active"));
     if let Some(cid) = key.ml_cuenta_id {
         q = q.filter(productos::ml_cuenta_id.eq(cid));
     }
@@ -300,6 +307,18 @@ pub fn productos(conn: &mut PgConnection, key: &ApiKey) -> ApiResult<Vec<PublicP
                 .and_then(|c| c.as_str())
                 .map(|s| s.trim().to_string())
                 .filter(|s| !s.is_empty());
+            let categoria_ruta = p
+                .datos
+                .get("categoria_ruta")
+                .and_then(|r| r.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|x| x.as_str())
+                        .map(|s| s.trim().to_string())
+                        .filter(|s| !s.is_empty())
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
             let imagenes = galeria(&p.datos, &p.thumbnail);
             let video = video_de(&p.datos);
             let variantes = variantes_de(&p, precio, &mapa_imagenes(&p.datos));
@@ -330,6 +349,7 @@ pub fn productos(conn: &mut PgConnection, key: &ApiKey) -> ApiResult<Vec<PublicP
                 especificaciones,
                 variantes,
                 categoria,
+                categoria_ruta,
             }
         })
         .collect())

@@ -98,6 +98,10 @@ pub struct MlItem {
     /// sync y se persiste en `datos`.
     #[serde(default, skip_deserializing)]
     pub categoria_nombre: Option<String>,
+    /// Ruta completa de categorías de ML (nombres, de raíz a hoja) desde `path_from_root`;
+    /// la rellena la sync y se persiste en `datos`. Permite jerarquía en los canales.
+    #[serde(default, skip_deserializing)]
+    pub categoria_ruta: Vec<String>,
     /// Id del producto de catálogo de ML. Dos publicaciones (catálogo + normal)
     /// del mismo producto comparten este id → se usa para no duplicar.
     #[serde(default)]
@@ -301,12 +305,31 @@ impl MlClient {
 
     /// Nombre de una categoría de Mercado Libre (p. ej. "MLC1234" -> "Taladros").
     /// Best-effort: None si falla.
-    pub async fn get_category(&self, access_token: &str, cat_id: &str) -> Option<String> {
-        let v: serde_json::Value = self.get(access_token, &format!("/categories/{cat_id}")).await.ok()?;
+    /// Ruta de categoría de ML (nombres, de raíz a hoja) vía `path_from_root`.
+    /// Vacío si falla. La hoja es el último elemento.
+    pub async fn get_category_ruta(&self, access_token: &str, cat_id: &str) -> Vec<String> {
+        let v: serde_json::Value = match self.get(access_token, &format!("/categories/{cat_id}")).await {
+            Ok(v) => v,
+            Err(_) => return vec![],
+        };
+        if let Some(arr) = v.get("path_from_root").and_then(|p| p.as_array()) {
+            let ruta: Vec<String> = arr
+                .iter()
+                .filter_map(|n| n.get("name").and_then(|x| x.as_str()))
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect();
+            if !ruta.is_empty() {
+                return ruta;
+            }
+        }
+        // Fallback: solo el nombre hoja.
         v.get("name")
             .and_then(|n| n.as_str())
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty())
+            .map(|s| vec![s])
+            .unwrap_or_default()
     }
 
     /// Stock en la **bodega propia** del vendedor (suma de ubicaciones que no son
