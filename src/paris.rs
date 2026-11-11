@@ -122,9 +122,13 @@ impl ParisClient {
     }
 
     // ---------------- Precio / stock (v2) ----------------
-    /// Tipos de precio de la cuenta (para `storePrice`): `{ results: [{ id, name }] }`.
+    /// Tipos de precio (para `type`): `{ results: [{ id, name }] }` (Precio, Precio oferta…).
     pub async fn get_price_types(&self, sandbox: bool, api_key: &str) -> ApiResult<Value> {
         self.req(sandbox, api_key, reqwest::Method::GET, "/v2/price-types", None).await
+    }
+    /// Tiendas (para `storePrice`): `[{ id, name, channel }]` (Paris Ecommers…).
+    pub async fn get_store_prices(&self, sandbox: bool, api_key: &str) -> ApiResult<Value> {
+        self.req(sandbox, api_key, reqwest::Method::GET, "/v2/store-prices", None).await
     }
     pub async fn update_price(&self, sandbox: bool, api_key: &str, sku: &str, body: &Value) -> ApiResult<Value> {
         self.req(sandbox, api_key, reqwest::Method::POST, &format!("/v2/prices/product/{sku}"), Some(body)).await

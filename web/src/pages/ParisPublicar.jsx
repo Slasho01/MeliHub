@@ -197,7 +197,13 @@ export default function ParisPublicar({ cuenta }) {
   return (
     <form className="stack" style={{ gap: 10 }} onSubmit={publicar}>
       {error && <div className="alert alert-bad">{error}</div>}
-      {result && <div className="alert alert-ok">Producto enviado a Paris. <span className="muted sm">Revisa su aprobación en tu Seller Center.</span></div>}
+      {result && (
+        <div className="alert alert-ok">
+          {result.ya_existia ? '✅ El producto ya está publicado en Paris.' : '✅ Producto creado en Paris.'}
+          {result.precio_ok ? ' Precio aplicado.' : ' El precio quedó pendiente — ajústalo en el Seller Center.'}
+          {' '}<span className="muted sm">Revisa su aprobación en el Seller Center.</span>
+        </div>
+      )}
 
       <label className="sm muted">Producto del hub (opcional — pre-rellena y habilita el sync de stock)</label>
       <select className="input" value={form.producto_id} onChange={(e) => elegirProducto(e.target.value)}>

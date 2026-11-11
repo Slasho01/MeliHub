@@ -6,12 +6,12 @@ use serde_json::{json, Value};
 
 /// Precios v2: `[{ value, storePrice, type }]`. `store_price_id` = id de `/v2/price-types`;
 /// `tipo` = su nombre (Paris exige `type` como texto).
-pub fn build_precio(precio: i64, store_price_id: Option<&str>, tipo: Option<&str>) -> Value {
-    match store_price_id {
-        Some(sp) if !sp.is_empty() => json!([{
+pub fn build_precio(precio: i64, store_id: Option<&str>, price_type_id: Option<&str>) -> Value {
+    match (store_id, price_type_id) {
+        (Some(st), Some(pt)) if !st.is_empty() && !pt.is_empty() => json!([{
             "value": precio.max(0),
-            "storePrice": sp,
-            "type": tipo.unwrap_or("Normal"),
+            "storePrice": st,     // id de /v2/store-prices (la tienda)
+            "type": pt,           // id de /v2/price-types
             "showFrom": "2020-01-01T00:00:00.000Z",
             "showTo": "2999-12-31T00:00:00.000Z"
         }]),
@@ -89,11 +89,11 @@ mod tests {
 
     #[test]
     fn precio_con_store_price() {
-        let v = build_precio(9990, Some("sp-1"), Some("Normal"));
+        let v = build_precio(9990, Some("store-1"), Some("pt-1"));
         assert_eq!(v[0]["value"], 9990);
-        assert_eq!(v[0]["storePrice"], "sp-1");
-        assert_eq!(v[0]["type"], "Normal");
-        assert_eq!(build_precio(9990, None, None).as_array().unwrap().len(), 0);
+        assert_eq!(v[0]["storePrice"], "store-1");
+        assert_eq!(v[0]["type"], "pt-1");
+        assert_eq!(build_precio(9990, Some("store-1"), None).as_array().unwrap().len(), 0);
     }
 
     #[test]

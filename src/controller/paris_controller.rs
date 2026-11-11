@@ -34,21 +34,34 @@ fn exigir_admin(user: &AuthVendedor) -> ApiResult<()> {
     Ok(())
 }
 
-/// Elige el tipo de precio de `/v2/price-types` (prefiere "normal/lista"): devuelve (id, nombre).
-fn pick_store_price(v: &Value) -> Option<(String, String)> {
+/// Extrae el SKU de Paris del mensaje de error "… y sku \"XXX\" ya existe".
+fn extraer_sku(msg: &str) -> Option<String> {
+    let m = "sku \"";
+    let i = msg.rfind(m)? + m.len();
+    let rest = &msg[i..];
+    let j = rest.find('"')?;
+    Some(rest[..j].to_string())
+}
+
+/// Id de la tienda (`storePrice`) de `/v2/store-prices` (prefiere "Paris", si no la primera).
+fn pick_store(v: &Value) -> Option<String> {
+    let arr = v.as_array()?;
+    arr.iter()
+        .find(|x| x.get("name").and_then(|n| n.as_str()).map(|n| n.to_lowercase().contains("paris")).unwrap_or(false))
+        .or_else(|| arr.first())
+        .and_then(|x| x.get("id").and_then(|i| i.as_str()))
+        .map(|s| s.to_string())
+}
+
+/// Id del tipo de precio (`type`) de `/v2/price-types` (prefiere "Precio" base, si no el primero).
+fn pick_price_type(v: &Value) -> Option<String> {
     let results = v.get("results").and_then(|r| r.as_array())?;
-    let chosen = results
+    results
         .iter()
-        .find(|x| {
-            x.get("name").and_then(|n| n.as_str()).map(|n| {
-                let n = n.to_lowercase();
-                n.contains("normal") || n.contains("lista") || n.contains("list")
-            }).unwrap_or(false)
-        })
-        .or_else(|| results.first())?;
-    let id = chosen.get("id").and_then(|i| i.as_str())?.to_string();
-    let name = chosen.get("name").and_then(|n| n.as_str()).unwrap_or("Normal").to_string();
-    Some((id, name))
+        .find(|x| x.get("name").and_then(|n| n.as_str()).map(|n| n.trim().eq_ignore_ascii_case("precio")).unwrap_or(false))
+        .or_else(|| results.first())
+        .and_then(|x| x.get("id").and_then(|i| i.as_str()))
+        .map(|s| s.to_string())
 }
 
 /// Obtiene la cuenta validando que sea del vendedor autenticado.
@@ -166,16 +179,27 @@ pub async fn publicar(user: AuthVendedor, path: web::Path<Uuid>, body: web::Json
     let r = body.into_inner();
     // 1) Crear el producto SIN precio (el precio inline en v2 crashea en Paris; se setea aparte).
     let b = push::build_product(&r.name, &r.ref_product, &r.family_code, &r.categoria_id, r.precio, r.stock.unwrap_or(0), &pares(&r.atributos), &pares(&r.variante_atributos), &r.imagenes, None, None);
-    let resp = client.product_create(cuenta.sandbox, &key, &b).await?;
+    let (resp, ya_existia) = match client.product_create(cuenta.sandbox, &key, &b).await {
+        Ok(v) => (v, false),
+        Err(e) => {
+            // Si ya existe, lo tratamos como éxito (idempotente) y seguimos a precio/stock.
+            let msg = e.to_string();
+            if msg.contains("ya existe") || msg.to_lowercase().contains("already exist") {
+                (serde_json::json!({ "sku": extraer_sku(&msg), "sellerSku": r.ref_product }), true)
+            } else {
+                return Err(e);
+            }
+        }
+    };
     // SKU que asignó Paris (para el precio y el mapeo).
-    let paris_sku = resp.get("sku").and_then(|v| v.as_str()).or_else(|| resp.get("sellerSku").and_then(|v| v.as_str())).map(|s| s.to_string());
+    let paris_sku = resp.get("sku").and_then(|v| v.as_str()).map(|s| s.to_string());
     // 2) Precio aparte (best-effort: si falla, el producto igual quedó creado).
     let mut precio_ok = false;
     if let Some(psku) = &paris_sku {
-        let store_price = client.get_price_types(cuenta.sandbox, &key).await.ok().and_then(|v| pick_store_price(&v));
-        let (sp_id, sp_type) = match &store_price { Some((i, n)) => (Some(i.as_str()), Some(n.as_str())), None => (None, None) };
-        if sp_id.is_some() {
-            let pb = serde_json::json!({ "prices": push::build_precio(r.precio, sp_id, sp_type) });
+        let store = client.get_store_prices(cuenta.sandbox, &key).await.ok().and_then(|v| pick_store(&v));
+        let ptype = client.get_price_types(cuenta.sandbox, &key).await.ok().and_then(|v| pick_price_type(&v));
+        if store.is_some() && ptype.is_some() {
+            let pb = serde_json::json!({ "prices": push::build_precio(r.precio, store.as_deref(), ptype.as_deref()) });
             precio_ok = client.update_price(cuenta.sandbox, &key, psku, &pb).await.is_ok();
         }
     }
@@ -184,7 +208,7 @@ pub async fn publicar(user: AuthVendedor, path: web::Path<Uuid>, body: web::Json
         let (cid, sku, psku) = (cuenta.id, r.ref_product.clone(), paris_sku.clone());
         let _ = db::run(&pool, move |conn| crate::services::paris_services::registrar_publicacion(conn, pid, cid, &sku, psku)).await;
     }
-    Ok(HttpResponse::Ok().json(serde_json::json!({ "producto": resp, "precio_ok": precio_ok })))
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "producto": resp, "ya_existia": ya_existia, "precio_ok": precio_ok })))
 }
 
 /// Actualización avanzada (cuerpo JSON crudo, para campos puntuales).
@@ -221,9 +245,9 @@ pub async fn precio(user: AuthVendedor, path: web::Path<(Uuid, String)>, body: w
     let cuenta = cuenta_de(&pool, user.id, id).await?;
     let key = crate::crypto::descifrar(&cuenta.api_key);
     let r = body.into_inner();
-    let store_price = client.get_price_types(cuenta.sandbox, &key).await.ok().and_then(|v| pick_store_price(&v));
-    let (sp_id, sp_type) = match &store_price { Some((i, n)) => (Some(i.as_str()), Some(n.as_str())), None => (None, None) };
-    let b = serde_json::json!({ "prices": push::build_precio(r.precio, sp_id, sp_type) });
+    let store = client.get_store_prices(cuenta.sandbox, &key).await.ok().and_then(|v| pick_store(&v));
+    let ptype = client.get_price_types(cuenta.sandbox, &key).await.ok().and_then(|v| pick_price_type(&v));
+    let b = serde_json::json!({ "prices": push::build_precio(r.precio, store.as_deref(), ptype.as_deref()) });
     Ok(HttpResponse::Ok().json(client.update_price(cuenta.sandbox, &key, &sku, &b).await?))
 }
 
