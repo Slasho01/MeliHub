@@ -296,6 +296,20 @@ diesel::table! {
 }
 
 diesel::table! {
+    paris_cuentas (id) {
+        id -> Uuid,
+        vendedor_id -> Uuid,
+        #[max_length = 255]
+        nombre -> Nullable<Varchar>,
+        api_key -> Text,
+        sandbox -> Bool,
+        activa -> Bool,
+        created_at -> Timestamp,
+        updated_at -> Timestamp,
+    }
+}
+
+diesel::table! {
     falabella_publicaciones (id) {
         id -> Uuid,
         producto_id -> Uuid,

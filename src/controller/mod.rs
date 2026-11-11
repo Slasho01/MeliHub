@@ -7,6 +7,7 @@ pub mod facturacion_controller;
 pub mod equipo_controller;
 pub mod falabella_controller;
 pub mod ml_controller;
+pub mod paris_controller;
 pub mod preguntas_controller;
 pub mod producto_controller;
 pub mod pub_controller;

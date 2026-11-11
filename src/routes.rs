@@ -1,4 +1,4 @@
-use crate::controller::{admin_controller as adm, api_key_controller as keys, auth_controller as auth, auditoria_controller as audit, cupon_controller as cupon, equipo_controller as equipo, facturacion_controller as fact, falabella_controller as fala, health, ml_controller as ml, preguntas_controller as preg, producto_controller as prod, pub_controller as pubc, saas_controller as saas, suscripcion_controller as subs, venta_controller as ventas};
+use crate::controller::{admin_controller as adm, api_key_controller as keys, auth_controller as auth, auditoria_controller as audit, cupon_controller as cupon, equipo_controller as equipo, facturacion_controller as fact, falabella_controller as fala, health, ml_controller as ml, paris_controller as paris, preguntas_controller as preg, producto_controller as prod, pub_controller as pubc, saas_controller as saas, suscripcion_controller as subs, venta_controller as ventas};
 use actix_web::web::{self, delete, get, post, put, resource as r};
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
@@ -52,6 +52,20 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(r("/falabella/productos").route(get().to(fala::productos_fala)))
             .service(r("/falabella/feeds").route(get().to(fala::feeds)))
             .service(r("/falabella/feed").route(get().to(fala::feed_estado)))
+            // ---- Paris (Marketplace Cencosud) ----
+            .service(r("/paris/cuentas").route(get().to(paris::listar)).route(post().to(paris::conectar)))
+            .service(r("/paris/cuentas/{id}").route(delete().to(paris::desconectar)))
+            .service(r("/paris/cuentas/{id}/familias").route(get().to(paris::familias)))
+            .service(r("/paris/cuentas/{id}/categorias/{family}").route(get().to(paris::categorias)))
+            .service(r("/paris/cuentas/{id}/atributos/{familyId}").route(get().to(paris::atributos)))
+            .service(r("/paris/cuentas/{id}/producto").route(post().to(paris::publicar)))
+            .service(r("/paris/cuentas/{id}/producto/{sku}").route(put().to(paris::actualizar_producto)))
+            .service(r("/paris/cuentas/{id}/variante").route(post().to(paris::variante)))
+            .service(r("/paris/cuentas/{id}/precio/{sku}").route(put().to(paris::precio)))
+            .service(r("/paris/cuentas/{id}/stock").route(post().to(paris::stock)))
+            .service(r("/paris/cuentas/{id}/ordenes").route(get().to(paris::ordenes)))
+            .service(r("/paris/cuentas/{id}/ordenes/{numero}").route(get().to(paris::orden)))
+            .service(r("/paris/cuentas/{id}/sub-ordenes").route(get().to(paris::sub_ordenes)))
             // Catálogo unificado + gestor de inventario
             .service(r("/productos").route(get().to(prod::listar)))
             .service(r("/productos/inventario-masivo").route(post().to(prod::inventario_masivo)))
