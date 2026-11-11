@@ -4,10 +4,11 @@
 
 use serde_json::{json, Value};
 
-/// Precios v2: `[{ value, storePrice }]`. `store_price_id` = id de un tipo de precio (`/v2/price-types`).
-pub fn build_precio(precio: i64, store_price_id: Option<&str>) -> Value {
+/// Precios v2: `[{ value, storePrice, type }]`. `store_price_id` = id de `/v2/price-types`;
+/// `tipo` = su nombre (Paris exige `type` como texto).
+pub fn build_precio(precio: i64, store_price_id: Option<&str>, tipo: Option<&str>) -> Value {
     match store_price_id {
-        Some(sp) if !sp.is_empty() => json!([{ "value": precio.max(0), "storePrice": sp }]),
+        Some(sp) if !sp.is_empty() => json!([{ "value": precio.max(0), "storePrice": sp, "type": tipo.unwrap_or("Normal") }]),
         _ => json!([]),
     }
 }
@@ -47,7 +48,7 @@ fn medias_json(imagenes: &[String]) -> Value {
 
 /// Cuerpo completo para `POST /v2/products`.
 #[allow(clippy::too_many_arguments)]
-pub fn build_product(name: &str, seller_sku: &str, family_id: &str, categoria_id: &str, precio: i64, stock: i32, atributos: &[(String, String)], imagenes: &[String], store_price_id: Option<&str>) -> Value {
+pub fn build_product(name: &str, seller_sku: &str, family_id: &str, categoria_id: &str, precio: i64, stock: i32, atributos: &[(String, String)], imagenes: &[String], store_price_id: Option<&str>, tipo_precio: Option<&str>) -> Value {
     json!({
         "product": {
             "name": name,
@@ -58,11 +59,12 @@ pub fn build_product(name: &str, seller_sku: &str, family_id: &str, categoria_id
         },
         "variants": [ {
             "skuSeller": seller_sku,
-            "attributes": [],
+            // La variante exige ≥1 atributo; reusamos los del producto.
+            "attributes": attrs_json(atributos),
             "medias": medias_json(imagenes),
             "quantity": stock.max(0),
         } ],
-        "prices": build_precio(precio, store_price_id),
+        "prices": build_precio(precio, store_price_id, tipo_precio),
     })
 }
 
@@ -81,10 +83,11 @@ mod tests {
 
     #[test]
     fn precio_con_store_price() {
-        let v = build_precio(9990, Some("sp-1"));
+        let v = build_precio(9990, Some("sp-1"), Some("Normal"));
         assert_eq!(v[0]["value"], 9990);
         assert_eq!(v[0]["storePrice"], "sp-1");
-        assert_eq!(build_precio(9990, None).as_array().unwrap().len(), 0);
+        assert_eq!(v[0]["type"], "Normal");
+        assert_eq!(build_precio(9990, None, None).as_array().unwrap().len(), 0);
     }
 
     #[test]
@@ -93,8 +96,10 @@ mod tests {
             "Polera", "MLC123", "fam-1", "cat-1", 9990, 5,
             &[("attr-color".into(), "Rojo".into()), ("".into(), "x".into())],
             &["https://img/1.jpg".into(), "".into()],
-            Some("sp-1"),
+            Some("sp-1"), Some("Normal"),
         );
+        // la variante también lleva atributos (Paris lo exige)
+        assert_eq!(v["variants"][0]["attributes"].as_array().unwrap().len(), 1);
         assert_eq!(v["product"]["name"], "Polera");
         assert_eq!(v["product"]["sellerSku"], "MLC123");
         assert_eq!(v["product"]["familyId"], "fam-1");

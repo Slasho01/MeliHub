@@ -34,10 +34,10 @@ fn exigir_admin(user: &AuthVendedor) -> ApiResult<()> {
     Ok(())
 }
 
-/// Elige el `storePrice` (tipo de precio) de `/v2/price-types`: prefiere "normal/lista".
-fn pick_store_price(v: &Value) -> Option<String> {
+/// Elige el tipo de precio de `/v2/price-types` (prefiere "normal/lista"): devuelve (id, nombre).
+fn pick_store_price(v: &Value) -> Option<(String, String)> {
     let results = v.get("results").and_then(|r| r.as_array())?;
-    results
+    let chosen = results
         .iter()
         .find(|x| {
             x.get("name").and_then(|n| n.as_str()).map(|n| {
@@ -45,9 +45,10 @@ fn pick_store_price(v: &Value) -> Option<String> {
                 n.contains("normal") || n.contains("lista") || n.contains("list")
             }).unwrap_or(false)
         })
-        .or_else(|| results.first())
-        .and_then(|x| x.get("id").and_then(|i| i.as_str()))
-        .map(|s| s.to_string())
+        .or_else(|| results.first())?;
+    let id = chosen.get("id").and_then(|i| i.as_str())?.to_string();
+    let name = chosen.get("name").and_then(|n| n.as_str()).unwrap_or("Normal").to_string();
+    Some((id, name))
 }
 
 /// Obtiene la cuenta validando que sea del vendedor autenticado.
@@ -154,7 +155,8 @@ pub async fn publicar(user: AuthVendedor, path: web::Path<Uuid>, body: web::Json
     let r = body.into_inner();
     // storePrice: tipo de precio de la cuenta (preferimos "normal/lista").
     let store_price = client.get_price_types(cuenta.sandbox, &key).await.ok().and_then(|v| pick_store_price(&v));
-    let b = push::build_product(&r.name, &r.ref_product, &r.family_code, &r.categoria_id, r.precio, r.stock.unwrap_or(0), &pares(&r.atributos), &r.imagenes, store_price.as_deref());
+    let (sp_id, sp_type) = match &store_price { Some((i, n)) => (Some(i.as_str()), Some(n.as_str())), None => (None, None) };
+    let b = push::build_product(&r.name, &r.ref_product, &r.family_code, &r.categoria_id, r.precio, r.stock.unwrap_or(0), &pares(&r.atributos), &r.imagenes, sp_id, sp_type);
     let resp = client.product_create(cuenta.sandbox, &key, &b).await?;
     // Guarda el mapeo (producto hub ↔ cuenta/sku) para que el job sincronice el stock.
     if let Some(pid) = r.producto_id {
@@ -204,7 +206,8 @@ pub async fn precio(user: AuthVendedor, path: web::Path<(Uuid, String)>, body: w
     let key = crate::crypto::descifrar(&cuenta.api_key);
     let r = body.into_inner();
     let store_price = client.get_price_types(cuenta.sandbox, &key).await.ok().and_then(|v| pick_store_price(&v));
-    let b = serde_json::json!({ "prices": push::build_precio(r.precio, store_price.as_deref()) });
+    let (sp_id, sp_type) = match &store_price { Some((i, n)) => (Some(i.as_str()), Some(n.as_str())), None => (None, None) };
+    let b = serde_json::json!({ "prices": push::build_precio(r.precio, sp_id, sp_type) });
     Ok(HttpResponse::Ok().json(client.update_price(cuenta.sandbox, &key, &sku, &b).await?))
 }
 
