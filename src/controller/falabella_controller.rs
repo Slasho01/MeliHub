@@ -64,6 +64,22 @@ pub async fn productos_fala(user: AuthVendedor, q: web::Query<CuentaQuery>, pool
     Ok(HttpResponse::Ok().json(client.get_products(&cuenta.user_id, &api_key, None).await?))
 }
 
+#[derive(Deserialize)]
+pub struct OrdenesQuery {
+    pub cuenta: Uuid,
+    #[serde(default)]
+    pub dias: Option<i64>,
+}
+
+/// Órdenes (ventas) de Falabella de los últimos `dias` (por defecto 30).
+pub async fn ordenes(user: AuthVendedor, q: web::Query<OrdenesQuery>, pool: web::Data<DbPool>, client: web::Data<FalabellaClient>) -> ApiResult<HttpResponse> {
+    let (vid, cid, dias) = (user.id, q.cuenta, q.dias.unwrap_or(30).clamp(1, 365));
+    let cuenta = db::run(&pool, move |conn| svc::get(conn, cid, vid)).await?;
+    let api_key = crate::crypto::descifrar(&cuenta.api_key);
+    let created_after = (chrono::Utc::now() - chrono::Duration::days(dias)).format("%Y-%m-%dT%H:%M:%S%:z").to_string();
+    Ok(HttpResponse::Ok().json(client.get_orders(&cuenta.user_id, &api_key, &created_after).await?))
+}
+
 /// Marcas válidas de Falabella (para elegir una que exista; texto libre falla).
 pub async fn marcas(user: AuthVendedor, q: web::Query<CuentaQuery>, pool: web::Data<DbPool>, client: web::Data<FalabellaClient>) -> ApiResult<HttpResponse> {
     let (vid, cid) = (user.id, q.cuenta);
@@ -171,7 +187,17 @@ pub async fn publicar(user: AuthVendedor, body: web::Json<PublicarReq>, pool: we
     })
     .await?;
     let api_key = crate::crypto::descifrar(&cuenta.api_key);
-    let atributos: Vec<(String, String)> = atributos.into_iter().map(|a| (a.nombre, a.valor)).collect();
+    let mut atributos: Vec<(String, String)> = atributos
+        .into_iter()
+        .map(|a| (a.nombre, a.valor.trim().to_string()))
+        .filter(|(_, v)| !v.is_empty())
+        .collect();
+    // Autollenar dimensiones/peso del paquete desde ML si el vendedor no las proporcionó.
+    for (feed, val) in crate::services::falabella_push_services::dimensiones_ml(&producto) {
+        if !atributos.iter().any(|(k, _)| k == &feed) {
+            atributos.push((feed, val));
+        }
+    }
     let xml = crate::services::falabella_push_services::build_product_xml(
         &producto,
         &categoria,
@@ -181,29 +207,36 @@ pub async fn publicar(user: AuthVendedor, body: web::Json<PublicarReq>, pool: we
         &atributos,
     );
     let creado = client.product_create(&cuenta.user_id, &api_key, xml).await?;
-    // Imágenes: van en una acción `Image` aparte, PERO el producto debe estar ya registrado
-    // (ProductCreate es asíncrono). Esperamos a que aparezca en GetProducts y recién subimos.
-    let imagenes = match crate::services::falabella_push_services::build_image_xml(&producto) {
-        Some(img_xml) => {
-            let sku = producto.ml_item_id.clone();
-            let mut listo = false;
-            for _ in 0..8 {
-                actix_web::rt::time::sleep(std::time::Duration::from_secs(3)).await;
-                if let Ok(v) = client.get_products(&cuenta.user_id, &api_key, Some(&sku)).await {
-                    let hay = v.get("SuccessResponse").and_then(|s| s.get("Body")).and_then(|b| b.get("Products")).map(|p| !p.is_string()).unwrap_or(false);
-                    if hay {
-                        listo = true;
-                        break;
+    // Registrar la publicación para la sincronización continua de precio/stock.
+    let op = operador.clone().unwrap_or_default();
+    let op = if op.trim().is_empty() { "facl".to_string() } else { op };
+    let (pid, caid, sku) = (producto.id, cuenta.id, producto.ml_item_id.clone());
+    let _ = db::run(&pool, move |conn| svc::registrar_publicacion(conn, pid, caid, &sku, &op)).await;
+    // Imágenes: acción `Image` aparte, PERO el producto debe estar ya registrado (ProductCreate
+    // es asíncrono y puede tardar >1 min). Lo subimos EN SEGUNDO PLANO con reintentos, para no
+    // colgar la respuesta: cuando el SKU aparece en GetProducts, mandamos las imágenes.
+    if let Some(img_xml) = crate::services::falabella_push_services::build_image_xml(&producto) {
+        let client2 = client.get_ref().clone();
+        let (uid, key, sku) = (cuenta.user_id.clone(), api_key.clone(), producto.ml_item_id.clone());
+        actix_web::rt::spawn(async move {
+            for intento in 0..15 {
+                actix_web::rt::time::sleep(std::time::Duration::from_secs(8)).await;
+                let existe = client2
+                    .get_products(&uid, &key, Some(&sku))
+                    .await
+                    .ok()
+                    .and_then(|v| v.get("SuccessResponse")?.get("Body")?.get("Products").map(|p| !p.is_string()))
+                    .unwrap_or(false);
+                if existe {
+                    match client2.product_image(&uid, &key, img_xml.clone()).await {
+                        Ok(_) => log::info!("Falabella: imágenes de {sku} enviadas (intento {intento})"),
+                        Err(e) => log::warn!("Falabella: imágenes de {sku} fallaron: {e}"),
                     }
+                    return;
                 }
             }
-            if listo {
-                Some(client.product_image(&cuenta.user_id, &api_key, img_xml).await?)
-            } else {
-                Some(serde_json::json!({ "pendiente": "El producto aún se está creando; usa 'Subir imágenes' en unos minutos." }))
-            }
-        }
-        None => None,
-    };
-    Ok(HttpResponse::Ok().json(serde_json::json!({ "producto": creado, "imagenes": imagenes })))
+            log::warn!("Falabella: {sku} no se registró a tiempo; las imágenes quedan para 'Subir imágenes'.");
+        });
+    }
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "producto": creado, "imagenes": "en_proceso" })))
 }

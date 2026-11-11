@@ -117,12 +117,15 @@ impl FalabellaClient {
     }
 
     /// Productos del vendedor (opcionalmente filtrados por SellerSku) — para ver estado/stock/imágenes.
+    /// `SkuSellerList` debe ir como array JSON: `["SKU"]`.
     pub async fn get_products(&self, user_id: &str, api_key: &str, sku: Option<&str>) -> ApiResult<serde_json::Value> {
-        let extra: Vec<(&str, &str)> = match sku {
-            Some(s) => vec![("SkuSellerList", s)],
-            None => vec![("Limit", "10")],
-        };
-        self.request(user_id, api_key, "GetProducts", &extra, None).await
+        match sku {
+            Some(s) => {
+                let filtro = format!("[\"{s}\"]");
+                self.request(user_id, api_key, "GetProducts", &[("SkuSellerList", &filtro)], None).await
+            }
+            None => self.request(user_id, api_key, "GetProducts", &[("Limit", "10")], None).await,
+        }
     }
 
     /// Atributos (obligatorios y opcionales) de una categoría.
@@ -155,6 +158,23 @@ impl FalabellaClient {
     /// Lista los feeds recientes (últimos ~30 días) con su estado y nº de errores.
     pub async fn feed_list(&self, user_id: &str, api_key: &str) -> ApiResult<serde_json::Value> {
         self.request(user_id, api_key, "FeedList", &[], None).await
+    }
+
+    /// Órdenes creadas después de `created_after` (ISO-8601), más recientes primero.
+    pub async fn get_orders(&self, user_id: &str, api_key: &str, created_after: &str) -> ApiResult<serde_json::Value> {
+        self.request(
+            user_id,
+            api_key,
+            "GetOrders",
+            &[("CreatedAfter", created_after), ("SortBy", "created_at"), ("SortDirection", "DESC"), ("Limit", "100")],
+            None,
+        )
+        .await
+    }
+
+    /// Ítems de una orden (productos vendidos).
+    pub async fn get_order_items(&self, user_id: &str, api_key: &str, order_id: &str) -> ApiResult<serde_json::Value> {
+        self.request(user_id, api_key, "GetOrderItems", &[("OrderId", order_id)], None).await
     }
 }
 

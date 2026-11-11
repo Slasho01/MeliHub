@@ -64,7 +64,7 @@ async fn main() -> std::io::Result<()> {
     let mp_client = web::Data::new(mp::MercadoPago::new(config.mp_access_token.clone()));
     let mailer = web::Data::new(mailer::Mailer::new(config.resend_api_key.clone(), config.mail_from.clone()));
 
-    jobs::start(pool_data.clone(), ml_client.clone(), config.ml.configurado());
+    jobs::start(pool_data.clone(), ml_client.clone(), falabella_client.clone(), config.ml.configurado());
 
     HttpServer::new(move || {
         let cors = if config_data.cors_origins.is_empty() {

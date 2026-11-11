@@ -187,7 +187,7 @@ export default function FalabellaPublicar({ cuentas }) {
       )}
       {attrs && attrs.length === 0 && <div className="muted sm">Esta categoría no pide atributos extra. Puedes publicar.</div>}
 
-      {resultado && feedErrores === null && <div className="alert alert-ok">Enviado a Falabella. Verificando el estado del feed…</div>}
+      {resultado && <div className="alert alert-ok">Producto enviado a Falabella. Las <b>imágenes se suben en segundo plano</b> (1-2 min, cuando el producto queda registrado). Revisa el estado en tu Seller Center; recuerda elegir la <b>categoría correcta</b> o Falabella lo rechaza en control de calidad.</div>}
       {feedErrores !== null && (feedErrores.length === 0
         ? <div className="alert alert-ok">✓ Feed procesado sin errores. El producto puede tardar en aparecer o requerir aprobación de Falabella.</div>
         : <div className="alert alert-bad"><b>Falabella rechazó el producto:</b><ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>{feedErrores.map((e, i) => <li key={i}>{e}</li>)}</ul></div>)}

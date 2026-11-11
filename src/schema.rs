@@ -294,6 +294,22 @@ diesel::table! {
     }
 }
 
+diesel::table! {
+    falabella_publicaciones (id) {
+        id -> Uuid,
+        producto_id -> Uuid,
+        cuenta_id -> Uuid,
+        #[max_length = 60]
+        seller_sku -> Varchar,
+        #[max_length = 10]
+        operador -> Varchar,
+        ultima_sync_at -> Nullable<Timestamp>,
+        created_at -> Timestamp,
+    }
+}
+
+diesel::joinable!(falabella_publicaciones -> falabella_cuentas (cuenta_id));
+diesel::joinable!(falabella_publicaciones -> productos (producto_id));
 diesel::joinable!(falabella_cuentas -> vendedores (vendedor_id));
 diesel::joinable!(ml_cuentas -> vendedores (vendedor_id));
 diesel::joinable!(ml_oauth_estados -> vendedores (vendedor_id));
@@ -313,6 +329,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     cupones,
     facturacion,
     falabella_cuentas,
+    falabella_publicaciones,
     historial_producto,
     miembros,
     ml_cuentas,

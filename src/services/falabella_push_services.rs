@@ -68,6 +68,98 @@ fn imagenes_de(p: &Producto) -> Vec<String> {
     urls
 }
 
+/// Extrae dimensiones/peso del paquete desde los `attributes` de ML y los convierte a los
+/// FeedNames obligatorios de Falabella (peso en **kg**, medidas en **cm**). Prefiere
+/// `PACKAGE_*` (medido por ML) y cae a `SELLER_PACKAGE_*`.
+pub fn dimensiones_ml(p: &Producto) -> Vec<(String, String)> {
+    let arr = match p.datos.get("attributes").and_then(|a| a.as_array()) {
+        Some(a) => a,
+        None => return Vec::new(),
+    };
+    // Devuelve (número, unidad) del primer id que exista.
+    let buscar = |ids: &[&str]| -> Option<(f64, String)> {
+        for id in ids {
+            if let Some(vn) = arr
+                .iter()
+                .find(|a| a.get("id").and_then(|v| v.as_str()) == Some(*id))
+                .and_then(|a| a.get("value_name").and_then(|v| v.as_str()))
+            {
+                let num: String = vn.trim().chars().take_while(|c| c.is_ascii_digit() || *c == '.' || *c == ',').collect();
+                if let Ok(n) = num.replace(',', ".").parse::<f64>() {
+                    let unidad = vn.trim().trim_start_matches(|c: char| c.is_ascii_digit() || c == '.' || c == ',' || c == ' ').to_lowercase();
+                    return Some((n, unidad));
+                }
+            }
+        }
+        None
+    };
+    let mut out = Vec::new();
+    if let Some((n, u)) = buscar(&["PACKAGE_WEIGHT", "SELLER_PACKAGE_WEIGHT"]) {
+        let kg = match u.as_str() {
+            "g" | "gr" | "grs" | "gramos" => n / 1000.0,
+            "mg" => n / 1_000_000.0,
+            _ => n, // kg
+        };
+        out.push(("PackageWeight".to_string(), format!("{:.3}", kg.max(0.001))));
+    }
+    for (ids, feed) in [
+        (["PACKAGE_WIDTH", "SELLER_PACKAGE_WIDTH"], "PackageWidth"),
+        (["PACKAGE_LENGTH", "SELLER_PACKAGE_LENGTH"], "PackageLength"),
+        (["PACKAGE_HEIGHT", "SELLER_PACKAGE_HEIGHT"], "PackageHeight"),
+    ] {
+        if let Some((n, u)) = buscar(&ids) {
+            let cm = match u.as_str() {
+                "m" | "mt" | "mts" | "metros" => n * 100.0,
+                "mm" => n / 10.0,
+                _ => n, // cm
+            };
+            out.push((feed.to_string(), format!("{}", (cm * 10.0).round() / 10.0)));
+        }
+    }
+    out
+}
+
+/// XML de ProductUpdate con SOLO precio y stock (para la sincronización continua).
+pub fn build_stock_precio_xml(sku: &str, precio: i64, stock: i32, operador: &str) -> String {
+    let op = if operador.trim().is_empty() { "facl" } else { operador.trim() };
+    format!(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Request><Product>\
+<SellerSku>{}</SellerSku>\
+<BusinessUnits><BusinessUnit>\
+<OperatorCode>{}</OperatorCode>\
+<Price>{}</Price>\
+<Stock>{}</Stock>\
+<Status>active</Status>\
+<IsPublished>1</IsPublished>\
+</BusinessUnit></BusinessUnits>\
+</Product></Request>",
+        xml_escape(sku),
+        xml_escape(op),
+        precio.max(0),
+        stock.max(0),
+    )
+}
+
+/// XML de `ProductUpdate` en lote con precio/stock de varios productos (sync continuo).
+/// Items: (seller_sku, precio, stock, operador).
+pub fn build_stock_precio_batch_xml(items: &[(String, i64, i32, String)]) -> String {
+    let mut products = String::new();
+    for (sku, precio, stock, op) in items {
+        let op = if op.trim().is_empty() { "facl" } else { op.trim() };
+        products.push_str(&format!(
+            "<Product><SellerSku>{}</SellerSku><BusinessUnits><BusinessUnit>\
+<OperatorCode>{}</OperatorCode><Price>{}</Price><Stock>{}</Stock>\
+<Status>active</Status><IsPublished>1</IsPublished>\
+</BusinessUnit></BusinessUnits></Product>",
+            xml_escape(sku),
+            xml_escape(op),
+            (*precio).max(0),
+            (*stock).max(0),
+        ));
+    }
+    format!("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Request>{products}</Request>")
+}
+
 /// XML de la acción `Image` (asocia las imágenes a un producto ya creado). `None` si no hay.
 pub fn build_image_xml(p: &Producto) -> Option<String> {
     let imagenes = imagenes_de(p);
