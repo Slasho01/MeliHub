@@ -192,7 +192,9 @@ pub async fn publicar(user: AuthVendedor, path: web::Path<Uuid>, body: web::Json
         }
     };
     // SKU que asignó Paris (para el precio y el mapeo).
-    let paris_sku = resp.get("sku").and_then(|v| v.as_str()).map(|s| s.to_string());
+    // La respuesta de creación trae el sku de Paris en "id" (ej. MKWEPBCQ0I); el caso
+    // idempotente lo deja en "sku". El endpoint de precio necesita ESE sku (no el sellerSku).
+    let paris_sku = resp.get("id").and_then(|v| v.as_str()).or_else(|| resp.get("sku").and_then(|v| v.as_str())).map(|s| s.to_string());
     // 2) Precio aparte (best-effort: si falla, el producto igual quedó creado).
     let mut precio_ok = false;
     if let Some(psku) = &paris_sku {
