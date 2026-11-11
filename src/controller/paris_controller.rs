@@ -98,10 +98,15 @@ pub struct PublicarReq {
     pub ref_product: String,
     pub family_code: String,
     pub precio: i64,
+    /// Categoría (subcategoría) de la familia — obligatoria en Paris.
+    pub categoria_id: String,
     #[serde(default)]
     pub oferta: Option<i64>,
     #[serde(default)]
     pub atributos: Vec<AttrReq>,
+    /// URLs de imágenes (Paris exige al menos una).
+    #[serde(default)]
+    pub imagenes: Vec<String>,
     /// Producto del hub (opcional): si viene, se guarda el mapeo para el sync continuo.
     #[serde(default)]
     pub producto_id: Option<Uuid>,
@@ -113,7 +118,7 @@ pub async fn publicar(user: AuthVendedor, path: web::Path<Uuid>, body: web::Json
     let cuenta = cuenta_de(&pool, user.id, path.into_inner()).await?;
     let key = crate::crypto::descifrar(&cuenta.api_key);
     let r = body.into_inner();
-    let b = push::build_product(&r.name, &r.ref_product, &r.family_code, r.precio, r.oferta, &pares(&r.atributos));
+    let b = push::build_product(&r.name, &r.ref_product, &r.family_code, &r.categoria_id, r.precio, r.oferta, &pares(&r.atributos), &r.imagenes);
     let resp = client.product_create(cuenta.sandbox, &key, &b).await?;
     // Guarda el mapeo (producto hub ↔ cuenta/sku) para que el job sincronice el stock.
     if let Some(pid) = r.producto_id {

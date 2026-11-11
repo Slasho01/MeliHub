@@ -44,14 +44,33 @@ fn attrs_json(atributos: &[(String, String)]) -> Value {
     )
 }
 
-/// Cuerpo para crear un producto. `ref_product` = nuestro SKU/identificador estable.
-pub fn build_product(name: &str, ref_product: &str, family_code: &str, precio: i64, oferta: Option<i64>, atributos: &[(String, String)]) -> Value {
+/// Cuerpo para crear un producto. Incluye TODOS los campos requeridos por Paris:
+/// family, productPrices, attributeDetails, **productCategories** (categoría primaria),
+/// **variants** (una variante base) y **medias** (imágenes).
+/// `ref_product` = nuestro SKU/identificador estable; `categoria_id` = categoría de la familia.
+#[allow(clippy::too_many_arguments)]
+pub fn build_product(name: &str, ref_product: &str, family_code: &str, categoria_id: &str, precio: i64, oferta: Option<i64>, atributos: &[(String, String)], imagenes: &[String]) -> Value {
+    let medias: Vec<Value> = imagenes
+        .iter()
+        .filter(|u| !u.trim().is_empty())
+        .enumerate()
+        .map(|(i, url)| json!({ "type": "image", "position": i + 1, "name": format!("img-{}", i + 1), "path": url }))
+        .collect();
     json!({
         "name": name,
         "refProduct": ref_product,
         "family": { "code": family_code },
         "productPrices": build_precio(precio, oferta),
         "attributeDetails": attrs_json(atributos),
+        "productCategories": [ { "category": { "id": categoria_id }, "isPrimary": true } ],
+        "variants": [ {
+            "name": name,
+            "refVariant": ref_product,
+            "sku": ref_product,
+            "status": "Enabled",
+            "attributeDetails": []
+        } ],
+        "medias": medias,
     })
 }
 
@@ -96,13 +115,27 @@ mod tests {
     }
 
     #[test]
-    fn producto_con_atributos() {
-        let v = build_product("Polera", "MLC123", "fam-poleras", 9990, None, &[("color".into(), "Rojo".into()), ("".into(), "x".into())]);
+    fn producto_completo() {
+        let v = build_product(
+            "Polera", "MLC123", "fam-poleras", "cat-1", 9990, None,
+            &[("color".into(), "Rojo".into()), ("".into(), "x".into())],
+            &["https://img/1.jpg".into(), "".into()],
+        );
         assert_eq!(v["name"], "Polera");
         assert_eq!(v["refProduct"], "MLC123");
         assert_eq!(v["family"]["code"], "fam-poleras");
+        // categoría primaria
+        assert_eq!(v["productCategories"][0]["category"]["id"], "cat-1");
+        assert_eq!(v["productCategories"][0]["isPrimary"], true);
+        // una variante base habilitada
+        assert_eq!(v["variants"][0]["sku"], "MLC123");
+        assert_eq!(v["variants"][0]["status"], "Enabled");
+        // media (la url vacía se filtra)
+        assert_eq!(v["medias"].as_array().unwrap().len(), 1);
+        assert_eq!(v["medias"][0]["path"], "https://img/1.jpg");
+        // atributos (el de code vacío se filtra)
         let attrs = v["attributeDetails"].as_array().unwrap();
-        assert_eq!(attrs.len(), 1); // el de code vacío se filtra
+        assert_eq!(attrs.len(), 1);
         assert_eq!(attrs[0]["attribute"]["code"], "color");
         assert_eq!(attrs[0]["value"], "Rojo");
     }
