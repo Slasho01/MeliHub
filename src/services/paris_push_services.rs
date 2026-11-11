@@ -40,11 +40,15 @@ fn attrs_json(atributos: &[(String, String)]) -> Value {
     )
 }
 
-/// Convierte una URL de imagen de ML a .jpg grande (Paris no acepta .webp ni thumbnails `-I`).
+/// Convierte una URL de imagen de ML a su variante `-F` en `.jpg` (la más grande, 755px;
+/// Paris no acepta `.webp` ni imágenes chicas como `-O`/`-I`).
 fn img_jpg(url: &str) -> String {
-    url.replace("-I.webp", "-O.jpg")
-        .replace("-I.jpg", "-O.jpg")
-        .replace(".webp", ".jpg")
+    if url.contains("mlstatic.com") {
+        if let Some((base, _)) = url.rsplit_once('-') {
+            return format!("{base}-F.jpg");
+        }
+    }
+    url.replace(".webp", ".jpg")
 }
 
 /// Imágenes v2 (van dentro de la variante): `[{ position, src, name }]`. Fuerza .jpg.
@@ -84,6 +88,13 @@ pub fn build_product(name: &str, seller_sku: &str, family_id: &str, categoria_id
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn imagen_ml_a_f_jpg() {
+        assert_eq!(img_jpg("https://http2.mlstatic.com/D_971195-MLC109_042026-I.webp"), "https://http2.mlstatic.com/D_971195-MLC109_042026-F.jpg");
+        assert_eq!(img_jpg("https://http2.mlstatic.com/D_1-O.jpg"), "https://http2.mlstatic.com/D_1-F.jpg");
+        assert_eq!(img_jpg("https://otro.com/foto.webp"), "https://otro.com/foto.jpg");
+    }
 
     #[test]
     fn stock_v2_usa_sku() {

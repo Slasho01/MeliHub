@@ -62,6 +62,10 @@ function autoFill(product, parisAttrs) {
     else if (pn.includes('modelo')) v = byId('MODEL') || byName('modelo')
     else if (pn.includes('color')) v = byId('COLOR') || byName('color')
     else if (pn.includes('talla') || pn.includes('talle') || pn.includes('tamano')) v = byId('SIZE') || byName('talla') || byName('talle')
+    else if (pn.includes('descripcion')) {
+      const desc = (product && product.datos && product.datos.descripcion) || ''
+      v = pn.includes('corta') ? ((product && product.titulo) || desc).slice(0, 200) : desc
+    }
     else v = byName(pn)
     if (!v) continue
     const opts = pa.attributeOptions || pa.options || []
@@ -108,8 +112,9 @@ export default function ParisPublicar({ cuenta }) {
     const p = productos.find((x) => x.id === id)
     if (!p) { setForm((f) => ({ ...f, producto_id: '' })); return }
     setForm((f) => ({ ...f, producto_id: p.id, name: p.titulo || f.name, ref_product: p.ml_item_id || p.sku || f.ref_product, precio: p.precio != null ? String(p.precio) : f.precio, stock: p.stock != null ? String(p.stock) : f.stock }))
-    // Trae TODAS las imágenes de ML (galería) y las fuerza a .jpg grande (Paris no acepta webp).
-    const mlJpg = (u) => String(u || '').replace(/-[A-Z]\.webp/i, '-O.jpg').replace(/\.webp(\?.*)?$/i, '.jpg')
+    // Trae TODAS las imágenes de ML (galería) y las fuerza a la variante -F (755px) en .jpg
+    // (Paris no acepta .webp ni imágenes chicas).
+    const mlJpg = (u) => { u = String(u || ''); return u.includes('mlstatic.com') ? u.replace(/-[A-Za-z]{1,3}\.(webp|jpg|jpeg|png)(\?.*)?$/i, '-F.jpg') : u.replace(/\.webp(\?.*)?$/i, '.jpg') }
     const pics = (p.datos && p.datos.pictures) || []
     let imgs = pics.map((x) => x.secure_url || x.url).filter(Boolean)
     if (!imgs.length && p.thumbnail) imgs = [p.thumbnail]
