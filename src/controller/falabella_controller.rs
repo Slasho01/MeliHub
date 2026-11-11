@@ -56,6 +56,18 @@ pub struct CuentaQuery {
     pub cuenta: Uuid,
 }
 
+/// Publicaciones locales (producto_id, sku, título) de una cuenta — la UI las cruza con GetProducts.
+pub async fn publicaciones(user: AuthVendedor, q: web::Query<CuentaQuery>, pool: web::Data<DbPool>) -> ApiResult<HttpResponse> {
+    let (vid, cid) = (user.id, q.cuenta);
+    let rows = db::run(&pool, move |conn| {
+        svc::get(conn, cid, vid)?; // valida pertenencia de la cuenta
+        svc::listar_publicaciones(conn, cid)
+    })
+    .await?;
+    let out: Vec<_> = rows.into_iter().map(|(pid, sku, titulo)| serde_json::json!({ "producto_id": pid, "seller_sku": sku, "titulo": titulo })).collect();
+    Ok(HttpResponse::Ok().json(out))
+}
+
 /// Productos ya publicados en Falabella (para ver su estado/stock/imágenes).
 pub async fn productos_fala(user: AuthVendedor, q: web::Query<CuentaQuery>, pool: web::Data<DbPool>, client: web::Data<FalabellaClient>) -> ApiResult<HttpResponse> {
     let (vid, cid) = (user.id, q.cuenta);
@@ -151,6 +163,30 @@ pub async fn subir_imagenes(user: AuthVendedor, body: web::Json<ImagenesReq>, po
     let xml = crate::services::falabella_push_services::build_image_xml(&producto)
         .ok_or_else(|| ApiError::bad_request("Este producto no tiene imágenes para subir."))?;
     Ok(HttpResponse::Ok().json(client.product_image(&cuenta.user_id, &api_key, xml).await?))
+}
+
+#[derive(Deserialize)]
+pub struct EstadoReq {
+    pub producto_id: Uuid,
+    pub cuenta_id: Uuid,
+    pub activo: bool,
+}
+
+/// Pausa o reactiva un producto en Falabella (ProductUpdate con Status active/inactive).
+pub async fn cambiar_estado(user: AuthVendedor, body: web::Json<EstadoReq>, pool: web::Data<DbPool>, client: web::Data<FalabellaClient>) -> ApiResult<HttpResponse> {
+    user.exigir_edicion()?;
+    let EstadoReq { producto_id, cuenta_id, activo } = body.into_inner();
+    let (vid, admin) = (user.id, user.es_admin());
+    let (producto, cuenta, operador) = db::run(&pool, move |conn| {
+        let (p, _) = crate::services::producto_services::get_con_cuenta(conn, producto_id, vid, admin)?;
+        let c = svc::get(conn, cuenta_id, vid)?;
+        let op = svc::operador_de(conn, producto_id, cuenta_id);
+        Ok::<_, ApiError>((p, c, op))
+    })
+    .await?;
+    let api_key = crate::crypto::descifrar(&cuenta.api_key);
+    let xml = crate::services::falabella_push_services::build_estado_xml(&producto.ml_item_id, activo, &operador);
+    Ok(HttpResponse::Ok().json(client.product_update(&cuenta.user_id, &api_key, xml).await?))
 }
 
 /// Feeds recientes (ProductCreate/Update son asíncronos): estado y nº de errores.

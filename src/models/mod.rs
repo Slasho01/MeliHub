@@ -201,6 +201,7 @@ pub struct Producto {
     /// Datos del gestor de inventario (no vienen de ML)
     pub costo: Option<i64>,
     pub precio_jarstore: Option<i64>,
+    pub precio_falabella: Option<i64>,
 }
 
 #[derive(Insertable, AsChangeset)]

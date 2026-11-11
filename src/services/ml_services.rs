@@ -141,6 +141,11 @@ pub fn marcar_sync(conn: &mut PgConnection, cuenta_id: Uuid) -> ApiResult<()> {
     Ok(())
 }
 
+/// Cuenta ML por id, sin filtrar por vendedor (uso interno de jobs).
+pub fn cuenta_por_id(conn: &mut PgConnection, id: Uuid) -> ApiResult<Option<MlCuenta>> {
+    ml_cuentas::table.find(id).select(MlCuenta::as_select()).first(conn).optional().map_err(ApiError::from)
+}
+
 pub fn desconectar(conn: &mut PgConnection, cuenta_id: Uuid, vendedor_id: Uuid, es_admin: bool) -> ApiResult<()> {
     let c = get_cuenta(conn, cuenta_id, vendedor_id, es_admin)?;
     diesel::delete(ml_cuentas::table.find(c.id)).execute(conn)?;

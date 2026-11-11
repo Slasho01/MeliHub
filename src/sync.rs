@@ -11,6 +11,24 @@ use actix_web::web;
 use chrono::Duration;
 
 /// Devuelve un access_token válido, renovándolo (y persistiéndolo) si expira pronto.
+/// Empuja a Mercado Libre el nuevo stock tras una venta externa (p. ej. Falabella),
+/// para mantener sincronizados todos los canales. Best-effort.
+pub async fn empujar_stock_ml(pool: &web::Data<DbPool>, client: &MlClient, venta: &crate::services::pub_services::VentaAplicada) {
+    let cid = venta.ml_cuenta_id;
+    let cuenta = match db::run(pool, move |conn| svc::cuenta_por_id(conn, cid)).await {
+        Ok(Some(c)) => c,
+        _ => return,
+    };
+    let Ok(token) = access_token_valido(pool, client, &cuenta).await else { return };
+    let res = match &venta.user_product_id {
+        Some(upid) => client.update_deposito_stock(&token, upid, venta.nuevo_stock).await,
+        None => client.update_stock(&token, &venta.ml_item_id, venta.nuevo_stock).await,
+    };
+    if let Err(e) = res {
+        log::warn!("No se pudo empujar stock a ML ({}): {e}", venta.ml_item_id);
+    }
+}
+
 pub async fn access_token_valido(pool: &web::Data<DbPool>, client: &MlClient, cuenta: &MlCuenta) -> ApiResult<String> {
     if cuenta.token_expira_at > now() + Duration::seconds(60) {
         return Ok(crate::crypto::descifrar(&cuenta.access_token));

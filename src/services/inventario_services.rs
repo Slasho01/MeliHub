@@ -66,6 +66,8 @@ pub fn set_config(conn: &mut PgConnection, vendedor_id: Uuid, u: ConfigUpdate) -
 pub struct InventarioUpdate {
     pub costo: Option<i64>,
     pub precio_jarstore: Option<i64>,
+    #[serde(default)]
+    pub precio_falabella: Option<i64>,
 }
 
 /// Fija el costo y/o el precio JarStore de un producto (verifica propiedad).
@@ -85,6 +87,7 @@ pub fn set_inventario(conn: &mut PgConnection, producto_id: Uuid, vendedor_id: U
         .set((
             productos::costo.eq(u.costo.filter(|c| *c >= 0)),
             productos::precio_jarstore.eq(u.precio_jarstore.filter(|p| *p >= 0)),
+            productos::precio_falabella.eq(u.precio_falabella.filter(|p| *p >= 0)),
         ))
         .returning(Producto::as_returning())
         .get_result(conn)

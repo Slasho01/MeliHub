@@ -11,6 +11,67 @@ use std::time::Duration;
 
 const SYNC_MAX_HORAS: i64 = 6;
 
+fn como_lista(v: Option<&serde_json::Value>) -> Vec<serde_json::Value> {
+    match v {
+        Some(serde_json::Value::Array(a)) => a.clone(),
+        Some(o) if o.is_object() => vec![o.clone()],
+        _ => Vec::new(),
+    }
+}
+
+/// Trae las órdenes nuevas de Falabella (últimas 48 h) y DESCUENTA el stock en el hub
+/// (y lo empuja a ML) para evitar sobreventa. Las órdenes ya procesadas no se repiten.
+async fn sincronizar_ventas_falabella(pool: &web::Data<DbPool>, ml: &web::Data<MlClient>, fala: &web::Data<FalabellaClient>, ml_ok: bool) {
+    let cuentas = match db::run(pool, crate::services::falabella_services::todas_cuentas).await {
+        Ok(c) => c,
+        Err(_) => return,
+    };
+    for cuenta in cuentas {
+        let api_key = crate::crypto::descifrar(&cuenta.api_key);
+        let desde = (chrono::Utc::now() - chrono::Duration::hours(48)).format("%Y-%m-%dT%H:%M:%S%:z").to_string();
+        let ordenes = match fala.get_orders(&cuenta.user_id, &api_key, &desde).await {
+            Ok(v) => como_lista(v.pointer("/SuccessResponse/Body/Orders/Order")),
+            Err(e) => {
+                log::warn!("Falabella {}: no se pudieron traer órdenes: {e}", cuenta.user_id);
+                continue;
+            }
+        };
+        for ord in ordenes {
+            let order_id = ord
+                .get("OrderId")
+                .and_then(|v| v.as_i64().map(|n| n.to_string()).or_else(|| v.as_str().map(|s| s.to_string())));
+            let Some(order_id) = order_id else { continue };
+            let (cid, oid) = (cuenta.id, order_id.clone());
+            let nueva = db::run(pool, move |conn| crate::services::falabella_services::marcar_venta_si_nueva(conn, &oid, cid)).await.unwrap_or(false);
+            if !nueva {
+                continue;
+            }
+            let items = match fala.get_order_items(&cuenta.user_id, &api_key, &order_id).await {
+                Ok(v) => como_lista(v.pointer("/SuccessResponse/Body/OrderItems/OrderItem")),
+                Err(_) => continue,
+            };
+            // Cada OrderItem suele ser 1 unidad; agrupamos por SKU.
+            let mut conteo: std::collections::HashMap<String, i32> = std::collections::HashMap::new();
+            for it in &items {
+                if let Some(sku) = it.get("SellerSku").and_then(|v| v.as_str()).filter(|s| !s.is_empty()) {
+                    *conteo.entry(sku.to_string()).or_insert(0) += 1;
+                }
+            }
+            for (sku, qty) in conteo {
+                let (cid, sku2) = (cuenta.id, sku.clone());
+                let pid = db::run(pool, move |conn| crate::services::falabella_services::producto_de_sku(conn, cid, &sku2)).await.ok().flatten();
+                let Some(pid) = pid else { continue };
+                if let Ok(venta) = db::run(pool, move |conn| crate::services::pub_services::aplicar_venta_externa(conn, pid, qty, "venta_falabella")).await {
+                    log::info!("Falabella venta {order_id}: {sku} -{qty} → stock {}", venta.nuevo_stock);
+                    if ml_ok {
+                        crate::sync::empujar_stock_ml(pool, ml, &venta).await;
+                    }
+                }
+            }
+        }
+    }
+}
+
 /// Empuja el precio/stock ACTUAL del hub a Falabella para todos los productos publicados
 /// (sincronización continua). Best-effort: errores solo al log.
 async fn sincronizar_falabella(pool: &web::Data<DbPool>, fala: &web::Data<FalabellaClient>) {
@@ -75,6 +136,8 @@ pub fn start(pool: web::Data<DbPool>, client: web::Data<MlClient>, falabella: we
                     Err(e) => log::warn!("Error sincronizando órdenes de {}: {e}", cuenta.ml_user_id),
                 }
             }
+            // Ventas de Falabella → descuentan stock en el hub (y se empuja a ML).
+            sincronizar_ventas_falabella(&pool, &client, &falabella, true).await;
             // Tras refrescar el hub desde ML, empujamos precio/stock a Falabella.
             sincronizar_falabella(&pool, &falabella).await;
         }

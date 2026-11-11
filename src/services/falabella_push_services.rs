@@ -160,6 +160,24 @@ pub fn build_stock_precio_batch_xml(items: &[(String, i64, i32, String)]) -> Str
     format!("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Request>{products}</Request>")
 }
 
+/// XML de `ProductUpdate` para pausar/reactivar un producto en Falabella.
+pub fn build_estado_xml(sku: &str, activo: bool, operador: &str) -> String {
+    let op = if operador.trim().is_empty() { "facl" } else { operador.trim() };
+    let (status, pub_) = if activo { ("active", "1") } else { ("inactive", "0") };
+    format!(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Request><Product>\
+<SellerSku>{}</SellerSku>\
+<BusinessUnits><BusinessUnit>\
+<OperatorCode>{}</OperatorCode><Status>{}</Status><IsPublished>{}</IsPublished>\
+</BusinessUnit></BusinessUnits>\
+</Product></Request>",
+        xml_escape(sku),
+        xml_escape(op),
+        status,
+        pub_,
+    )
+}
+
 /// XML de la acción `Image` (asocia las imágenes a un producto ya creado). `None` si no hay.
 pub fn build_image_xml(p: &Producto) -> Option<String> {
     let imagenes = imagenes_de(p);
@@ -237,11 +255,12 @@ pub fn build_product_xml(p: &Producto, category_id: &str, brand: &str, variation
     let desc = p.datos.get("descripcion").and_then(|d| d.as_str()).unwrap_or(&p.titulo);
     let variation = if variation.trim().is_empty() { "No aplica" } else { variation.trim() };
     let operador = if operador.trim().is_empty() { "facl" } else { operador.trim() };
+    let precio = p.precio_falabella.filter(|&x| x > 0).unwrap_or(p.precio); // precio propio de Falabella o el de ML
     product_xml(
         &p.ml_item_id,
         &p.titulo,
         desc,
-        p.precio.max(0),
+        precio.max(0),
         p.stock.max(0),
         category_id,
         brand,

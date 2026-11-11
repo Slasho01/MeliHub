@@ -58,12 +58,10 @@ export default function Inventario({ me }) {
   const onChange = (p, campo, v) => setEdit({ ...edit, [p.id]: { ...edit[p.id], [campo]: v } })
 
   const guardar = async (p) => {
-    const e = edit[p.id]
-    if (!e) return
-    const body = {}
-    if ('costo' in e) body.costo = e.costo === '' ? null : Number(e.costo)
-    if ('precio_jarstore' in e) body.precio_jarstore = e.precio_jarstore === '' ? null : Number(e.precio_jarstore)
-    if (!Object.keys(body).length) return
+    if (!edit[p.id]) return
+    // Mandamos los 3 valores actuales (con fallback al guardado) para no borrar los otros.
+    const num = (c) => { const v = val(p, c); return v === '' || v == null ? null : Number(v) }
+    const body = { costo: num('costo'), precio_jarstore: num('precio_jarstore'), precio_falabella: num('precio_falabella') }
     try { await put(`/productos/${p.id}/inventario`, body); cargar() } catch (err) { setError(err.message) }
   }
 
@@ -212,6 +210,12 @@ export default function Inventario({ me }) {
                           sug. {money(p.precio_sugerido)} {!soloLectura && <button className="link-btn" onClick={() => usarSugerido(p)}>usar</button>}
                         </div>
                       )}
+                      <div className="row" style={{ gap: 4, marginTop: 4, alignItems: 'center' }}>
+                        <span className="muted xs" style={{ whiteSpace: 'nowrap' }}>Falabella</span>
+                        <input className="input" style={{ width: 86 }} type="number" min="0" placeholder="= ML" disabled={soloLectura}
+                          title="Precio para Falabella (vacío = usa el de Mercado Libre)"
+                          value={val(p, 'precio_falabella')} onChange={(e) => onChange(p, 'precio_falabella', e.target.value)} onBlur={() => guardar(p)} />
+                      </div>
                     </td>
                     <td><GanCell g={p.ml} /></td>
                     <td><GanCell g={p.jarstore} /></td>

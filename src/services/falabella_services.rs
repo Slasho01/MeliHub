@@ -3,7 +3,7 @@
 
 use crate::errors::{ApiError, ApiResult};
 use crate::models::{FalabellaCuenta, NewFalabellaCuenta, NewFalabellaPublicacion};
-use crate::schema::{falabella_cuentas, falabella_publicaciones, productos};
+use crate::schema::{falabella_cuentas, falabella_publicaciones, falabella_ventas, productos};
 use crate::services::common::now;
 use diesel::prelude::*;
 use uuid::Uuid;
@@ -28,11 +28,57 @@ pub fn registrar_publicacion(conn: &mut PgConnection, producto_id: Uuid, cuenta_
 /// Para una cuenta Falabella, los productos publicados con su precio/stock ACTUAL del hub
 /// (para empujar `ProductUpdate`). Devuelve (seller_sku, precio, stock, operador).
 pub fn publicaciones_para_sync(conn: &mut PgConnection, cuenta_id: Uuid) -> ApiResult<Vec<(String, i64, i32, String)>> {
+    let rows = falabella_publicaciones::table
+        .inner_join(productos::table)
+        .filter(falabella_publicaciones::cuenta_id.eq(cuenta_id))
+        .select((falabella_publicaciones::seller_sku, productos::precio, productos::precio_falabella, productos::stock, falabella_publicaciones::operador))
+        .load::<(String, i64, Option<i64>, i32, String)>(conn)?;
+    // Usa el precio propio de Falabella si está; si no, el de ML.
+    Ok(rows.into_iter().map(|(sku, precio, pf, stock, op)| (sku, pf.filter(|&x| x > 0).unwrap_or(precio), stock, op)).collect())
+}
+
+/// Marca una orden de Falabella como procesada. Devuelve `true` si era NUEVA (hay que
+/// descontar stock) y `false` si ya estaba (evita descontar dos veces).
+pub fn marcar_venta_si_nueva(conn: &mut PgConnection, order_id: &str, cuenta_id: Uuid) -> ApiResult<bool> {
+    let n = diesel::insert_into(falabella_ventas::table)
+        .values((falabella_ventas::order_id.eq(order_id), falabella_ventas::cuenta_id.eq(cuenta_id)))
+        .on_conflict_do_nothing()
+        .execute(conn)?;
+    Ok(n > 0)
+}
+
+/// Operador (facl/fape/faco) con que se publicó un producto en una cuenta (default facl).
+pub fn operador_de(conn: &mut PgConnection, producto_id: Uuid, cuenta_id: Uuid) -> String {
+    falabella_publicaciones::table
+        .filter(falabella_publicaciones::producto_id.eq(producto_id))
+        .filter(falabella_publicaciones::cuenta_id.eq(cuenta_id))
+        .select(falabella_publicaciones::operador)
+        .first::<String>(conn)
+        .optional()
+        .ok()
+        .flatten()
+        .unwrap_or_else(|| "facl".to_string())
+}
+
+/// Producto del hub que corresponde a un SellerSku publicado en una cuenta Falabella.
+pub fn producto_de_sku(conn: &mut PgConnection, cuenta_id: Uuid, seller_sku: &str) -> ApiResult<Option<Uuid>> {
+    falabella_publicaciones::table
+        .filter(falabella_publicaciones::cuenta_id.eq(cuenta_id))
+        .filter(falabella_publicaciones::seller_sku.eq(seller_sku))
+        .select(falabella_publicaciones::producto_id)
+        .first(conn)
+        .optional()
+        .map_err(ApiError::from)
+}
+
+/// Publicaciones locales de una cuenta: (producto_id, seller_sku, título) — para la vista
+/// de estado (se cruza con GetProducts para el QC).
+pub fn listar_publicaciones(conn: &mut PgConnection, cuenta_id: Uuid) -> ApiResult<Vec<(Uuid, String, String)>> {
     falabella_publicaciones::table
         .inner_join(productos::table)
         .filter(falabella_publicaciones::cuenta_id.eq(cuenta_id))
-        .select((falabella_publicaciones::seller_sku, productos::precio, productos::stock, falabella_publicaciones::operador))
-        .load::<(String, i64, i32, String)>(conn)
+        .select((falabella_publicaciones::producto_id, falabella_publicaciones::seller_sku, productos::titulo))
+        .load::<(Uuid, String, String)>(conn)
         .map_err(ApiError::from)
 }
 

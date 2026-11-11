@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { get, post, del } from '../api'
 import FalabellaPublicar from './FalabellaPublicar'
 import FalabellaOrdenes from './FalabellaOrdenes'
+import FalabellaEstado from './FalabellaEstado'
 
 export default function Falabella({ me }) {
   const owner = me?.es_owner
@@ -59,6 +60,8 @@ export default function Falabella({ me }) {
           )}
         </div>
       )}
+
+      {cuentas && cuentas.length > 0 && <FalabellaEstado cuenta={cuentas[0]} />}
 
       {cuentas && cuentas.length > 0 && <FalabellaOrdenes cuenta={cuentas[0]} />}
 

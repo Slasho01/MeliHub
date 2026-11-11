@@ -91,6 +91,7 @@ diesel::table! {
         created_at -> Timestamp,
         costo -> Nullable<Int8>,
         precio_jarstore -> Nullable<Int8>,
+        precio_falabella -> Nullable<Int8>,
     }
 }
 
@@ -308,6 +309,16 @@ diesel::table! {
     }
 }
 
+diesel::table! {
+    falabella_ventas (order_id) {
+        #[max_length = 40]
+        order_id -> Varchar,
+        cuenta_id -> Uuid,
+        procesada_at -> Timestamp,
+    }
+}
+
+diesel::joinable!(falabella_ventas -> falabella_cuentas (cuenta_id));
 diesel::joinable!(falabella_publicaciones -> falabella_cuentas (cuenta_id));
 diesel::joinable!(falabella_publicaciones -> productos (producto_id));
 diesel::joinable!(falabella_cuentas -> vendedores (vendedor_id));
@@ -330,6 +341,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     facturacion,
     falabella_cuentas,
     falabella_publicaciones,
+    falabella_ventas,
     historial_producto,
     miembros,
     ml_cuentas,

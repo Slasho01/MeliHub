@@ -370,6 +370,32 @@ pub fn reportar_venta(conn: &mut PgConnection, key: &ApiKey, producto_id: Uuid, 
 
 /// Devuelve stock a un producto (cancelación/devolución en la plataforma): lo SUMA y lo
 /// deja listo para empujarlo de vuelta a Mercado Libre. Mismas validaciones de pertenencia.
+/// Descuenta stock por una venta EXTERNA (p. ej. una orden de Falabella) y deja la info
+/// para empujar el nuevo stock a Mercado Libre. Uso interno (sin API key). Nunca baja de 0.
+pub fn aplicar_venta_externa(conn: &mut PgConnection, producto_id: Uuid, cantidad: i32, motivo: &str) -> ApiResult<VentaAplicada> {
+    conn.transaction(|conn| {
+        let p: Producto = productos::table
+            .find(producto_id)
+            .select(Producto::as_select())
+            .for_update()
+            .first(conn)
+            .optional()?
+            .or_not_found("Producto")?;
+        let nuevo = (p.stock - cantidad.max(0)).max(0);
+        diesel::update(productos::table.find(producto_id))
+            .set((productos::stock.eq(nuevo), productos::sincronizado_at.eq(now())))
+            .execute(conn)?;
+        crate::services::producto_services::registrar_cambio(conn, producto_id, "stock", Some(p.stock.to_string()), nuevo.to_string(), motivo);
+        let user_product_id = p
+            .datos
+            .get("user_product_id")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string());
+        Ok(VentaAplicada { nuevo_stock: nuevo, ml_cuenta_id: p.ml_cuenta_id, ml_item_id: p.ml_item_id, user_product_id })
+    })
+}
+
 pub fn reportar_devolucion(conn: &mut PgConnection, key: &ApiKey, producto_id: Uuid, cantidad: i32) -> ApiResult<VentaAplicada> {
     if cantidad <= 0 {
         return Err(ApiError::bad_request("La cantidad debe ser mayor que 0"));
