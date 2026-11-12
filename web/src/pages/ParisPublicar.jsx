@@ -173,10 +173,14 @@ export default function ParisPublicar({ cuenta }) {
       <div key={a.id} className="row" style={{ gap: 6, alignItems: 'center' }}>
         <label className="sm" style={{ minWidth: 180 }}>{a.name || a.id}{req && <span style={{ color: 'var(--accent)' }}> *</span>}</label>
         {opts.length > 0 ? (
-          <select className="input" value={vals[a.id] || ''} onChange={(e) => setter(a.id, e.target.value)}>
-            <option value="">—</option>
-            {opts.map((o) => <option key={o.id || o.name} value={o.id || o.name}>{o.name || o.id}</option>)}
-          </select>
+          <div style={{ flex: 1 }}>
+            <Combo
+              placeholder="Escribe para buscar…"
+              options={opts.map((o) => ({ value: o.id || o.name, label: o.name || o.id }))}
+              value={vals[a.id] || ''}
+              onChange={(v) => setter(a.id, v)}
+            />
+          </div>
         ) : (
           <input className="input" value={vals[a.id] || ''} onChange={(e) => setter(a.id, e.target.value)} placeholder="valor" />
         )}
@@ -263,10 +267,12 @@ export default function ParisPublicar({ cuenta }) {
       )}
 
       <label className="sm muted">Producto del hub (opcional — pre-rellena y habilita el sync de stock)</label>
-      <select className="input" value={form.producto_id} onChange={(e) => elegirProducto(e.target.value)}>
-        <option value="">— Manual (sin vincular) —</option>
-        {productos.map((p) => <option key={p.id} value={p.id}>{p.titulo} · {p.ml_item_id || p.sku}</option>)}
-      </select>
+      <Combo
+        placeholder="Escribe para buscar un producto…"
+        options={[{ value: '', label: '— Manual (sin vincular) —' }, ...productos.map((p) => ({ value: p.id, label: `${p.titulo} · ${p.ml_item_id || p.sku}` }))]}
+        value={form.producto_id}
+        onChange={elegirProducto}
+      />
 
       <input className="input" placeholder="Nombre del producto" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
       <input className="input" placeholder="SKU / referencia (ej. el id de Mercado Libre)" value={form.ref_product} onChange={(e) => setForm({ ...form, ref_product: e.target.value })} required />
