@@ -1,4 +1,4 @@
-use crate::schema::{auditoria, config_correo, cupones, dte_cuentas, facturacion, falabella_cuentas, falabella_publicaciones, historial_producto, miembros, ml_cuentas, notificaciones, ordenes_ml, paris_cuentas, paris_publicaciones, paris_ventas, productos, suscripciones, vendedores};
+use crate::schema::{auditoria, config_correo, cupones, dte_cuentas, facturacion, falabella_cuentas, falabella_publicaciones, historial_producto, miembros, ml_cuentas, notificaciones, ordenes_ml, paris_cuentas, paris_publicaciones, paris_ventas, productos, shopify_cuentas, shopify_publicaciones, suscripciones, vendedores};
 use chrono::NaiveDateTime;
 use diesel::prelude::*;
 use serde::Serialize;
@@ -178,6 +178,52 @@ pub struct NewParisCuenta {
     pub nombre: Option<String>,
     pub api_key: String,
     pub sandbox: bool,
+}
+
+#[derive(Queryable, Selectable, Serialize, Debug, Clone)]
+#[diesel(table_name = shopify_cuentas, check_for_backend(diesel::pg::Pg))]
+pub struct ShopifyCuenta {
+    pub id: Uuid,
+    pub vendedor_id: Uuid,
+    pub nombre: Option<String>,
+    pub shop_domain: String,
+    #[serde(skip_serializing)]
+    pub access_token: String,
+    pub activa: bool,
+    pub created_at: NaiveDateTime,
+    pub updated_at: NaiveDateTime,
+}
+
+#[derive(Insertable)]
+#[diesel(table_name = shopify_cuentas)]
+pub struct NewShopifyCuenta {
+    pub vendedor_id: Uuid,
+    pub nombre: Option<String>,
+    pub shop_domain: String,
+    pub access_token: String,
+}
+
+#[derive(Queryable, Selectable, Serialize, Debug, Clone)]
+#[diesel(table_name = shopify_publicaciones, check_for_backend(diesel::pg::Pg))]
+pub struct ShopifyPublicacion {
+    pub id: Uuid,
+    pub producto_id: Uuid,
+    pub cuenta_id: Uuid,
+    pub shopify_product_id: String,
+    pub variant_id: Option<String>,
+    pub inventory_item_id: Option<String>,
+    pub ultima_sync_at: Option<NaiveDateTime>,
+    pub created_at: NaiveDateTime,
+}
+
+#[derive(Insertable)]
+#[diesel(table_name = shopify_publicaciones)]
+pub struct NewShopifyPublicacion {
+    pub producto_id: Uuid,
+    pub cuenta_id: Uuid,
+    pub shopify_product_id: String,
+    pub variant_id: Option<String>,
+    pub inventory_item_id: Option<String>,
 }
 
 #[derive(Queryable, Selectable, Serialize, Debug, Clone)]

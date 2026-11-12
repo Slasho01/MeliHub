@@ -12,6 +12,7 @@ mod email;
 mod ml;
 mod paris;
 mod repricing;
+mod shopify;
 mod twofa;
 mod models;
 mod mp;

@@ -13,6 +13,7 @@ pub mod ml_controller;
 pub mod paris_controller;
 pub mod reclamo_controller;
 pub mod salud_controller;
+pub mod shopify_controller;
 pub mod preguntas_controller;
 pub mod producto_controller;
 pub mod pub_controller;

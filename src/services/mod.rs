@@ -14,6 +14,7 @@ pub mod paris_push_services;
 pub mod correo_services;
 pub mod dte_services;
 pub mod paris_services;
+pub mod shopify_services;
 pub mod pub_services;
 pub mod producto_services;
 pub mod saas_services;

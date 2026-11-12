@@ -1,4 +1,4 @@
-use crate::controller::{admin_controller as adm, api_key_controller as keys, auth_controller as auth, auditoria_controller as audit, catalogo_controller as catalogo, correo_controller as correo, cupon_controller as cupon, dte_controller as dte, equipo_controller as equipo, facturacion_controller as fact, falabella_controller as fala, health, ml_controller as ml, paris_controller as paris, preguntas_controller as preg, reclamo_controller as reclamo, salud_controller as salud, producto_controller as prod, pub_controller as pubc, saas_controller as saas, suscripcion_controller as subs, venta_controller as ventas};
+use crate::controller::{admin_controller as adm, api_key_controller as keys, auth_controller as auth, auditoria_controller as audit, catalogo_controller as catalogo, correo_controller as correo, cupon_controller as cupon, dte_controller as dte, equipo_controller as equipo, facturacion_controller as fact, falabella_controller as fala, health, ml_controller as ml, paris_controller as paris, preguntas_controller as preg, reclamo_controller as reclamo, salud_controller as salud, shopify_controller as shopify, producto_controller as prod, pub_controller as pubc, saas_controller as saas, suscripcion_controller as subs, venta_controller as ventas};
 use actix_web::web::{self, delete, get, post, put, resource as r};
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
@@ -83,6 +83,10 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(r("/paris/cuentas/{id}/sub-ordenes/{numero}/cancelar").route(post().to(paris::cancelar)))
             .service(r("/paris/cuentas/{id}/etiqueta/{labelId}").route(get().to(paris::etiqueta)))
             .service(r("/paris/cuentas/{id}/razones-cancelacion").route(get().to(paris::razones_cancelacion)))
+            // ---- Shopify (tienda propia) ----
+            .service(r("/shopify/cuentas").route(get().to(shopify::listar)).route(post().to(shopify::conectar)))
+            .service(r("/shopify/cuentas/{id}").route(delete().to(shopify::desconectar)))
+            .service(r("/shopify/publicar").route(post().to(shopify::publicar)))
             // Catálogo unificado + gestor de inventario
             .service(r("/salud/conexiones").route(get().to(salud::conexiones)))
             .service(r("/onboarding").route(get().to(salud::onboarding)))

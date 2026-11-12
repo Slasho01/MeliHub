@@ -236,6 +236,29 @@ async fn sincronizar_paris(pool: &web::Data<DbPool>, paris: &web::Data<ParisClie
     }
 }
 
+/// Empuja stock/precio del hub a Shopify para las publicaciones mapeadas (best-effort).
+async fn sincronizar_shopify(pool: &web::Data<DbPool>) {
+    let client = crate::shopify::ShopifyClient::new();
+    let cuentas = match db::run(pool, crate::services::shopify_services::todas_cuentas).await {
+        Ok(c) => c,
+        Err(_) => return,
+    };
+    for cuenta in cuentas {
+        let token = crate::crypto::descifrar(&cuenta.access_token);
+        let loc = client.ubicacion_principal(&cuenta.shop_domain, &token).await.ok().flatten();
+        let cid = cuenta.id;
+        let items = db::run(pool, move |conn| crate::services::shopify_services::items_cuenta(conn, cid)).await.unwrap_or_default();
+        for it in items {
+            if let Some(vid) = &it.variant_id {
+                let _ = client.actualizar_variante_precio(&cuenta.shop_domain, &token, vid, it.precio).await;
+            }
+            if let (Some(inv), Some(l)) = (&it.inventory_item_id, loc) {
+                let _ = client.set_inventario(&cuenta.shop_domain, &token, inv, l, it.stock).await;
+            }
+        }
+    }
+}
+
 pub fn start(pool: web::Data<DbPool>, client: web::Data<MlClient>, falabella: web::Data<FalabellaClient>, paris: web::Data<ParisClient>, configurado: bool) {
     if !configurado {
         log::info!("Job de sincronización inactivo (Mercado Libre sin configurar)");
@@ -300,6 +323,8 @@ pub fn start(pool: web::Data<DbPool>, client: web::Data<MlClient>, falabella: we
             // Paris: ventas → descuentan stock (y se empuja a ML), y empujamos stock al canal.
             procesar_ventas_paris(&pool, &client, &paris, true).await;
             sincronizar_paris(&pool, &paris).await;
+            // Shopify: empujar stock/precio del hub a las tiendas conectadas.
+            sincronizar_shopify(&pool).await;
             // Repricing automático de Buy Box (solo vendedores que lo activaron).
             if let Ok(vends) = db::run(&pool, |conn| crate::services::inventario_services::vendedores_con_repricing(conn)).await {
                 for vid in vends {

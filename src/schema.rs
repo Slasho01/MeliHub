@@ -337,6 +337,37 @@ diesel::table! {
 }
 
 diesel::table! {
+    shopify_cuentas (id) {
+        id -> Uuid,
+        vendedor_id -> Uuid,
+        #[max_length = 255]
+        nombre -> Nullable<Varchar>,
+        #[max_length = 255]
+        shop_domain -> Varchar,
+        access_token -> Text,
+        activa -> Bool,
+        created_at -> Timestamp,
+        updated_at -> Timestamp,
+    }
+}
+
+diesel::table! {
+    shopify_publicaciones (id) {
+        id -> Uuid,
+        producto_id -> Uuid,
+        cuenta_id -> Uuid,
+        #[max_length = 40]
+        shopify_product_id -> Varchar,
+        #[max_length = 40]
+        variant_id -> Nullable<Varchar>,
+        #[max_length = 40]
+        inventory_item_id -> Nullable<Varchar>,
+        ultima_sync_at -> Nullable<Timestamp>,
+        created_at -> Timestamp,
+    }
+}
+
+diesel::table! {
     config_correo (id) {
         id -> Uuid,
         #[max_length = 10]
