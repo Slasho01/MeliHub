@@ -89,6 +89,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(r("/productos/{id}/ml/precio").route(put().to(prod::set_precio_ml)))
             .service(r("/productos/{id}/historial").route(get().to(prod::historial)))
             .service(r("/config/ganancias").route(get().to(prod::get_config)).route(put().to(prod::set_config)))
+            .service(r("/cotizador/logo").route(get().to(prod::get_logo)).route(put().to(prod::set_logo)))
             // Ventas centralizadas (órdenes de ML) + dashboard con ganancia real
             .service(r("/ventas/sincronizar").route(post().to(ventas::sincronizar)))
             .service(r("/ventas/dashboard").route(get().to(ventas::dashboard)))

@@ -124,6 +124,7 @@ diesel::table! {
         updated_at -> Timestamp,
         margen_objetivo -> Float8,
         redondeo -> Int8,
+        cotizador_logo -> Nullable<Text>,
     }
 }
 

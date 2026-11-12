@@ -163,3 +163,29 @@ pub async fn set_config(
     let _ = db::run(&pool, move |conn| crate::services::auditoria_services::log(conn, vid, actor, "config_ganancias".into(), String::new())).await;
     Ok(HttpResponse::Ok().json(c))
 }
+
+/// Logo de la empresa para el cotizador (compartido por la cuenta/vendedor).
+pub async fn get_logo(user: AuthVendedor, pool: web::Data<DbPool>) -> ApiResult<HttpResponse> {
+    let vid = user.id;
+    let logo = db::run(&pool, move |conn| inv::get_logo(conn, vid)).await?;
+    Ok(HttpResponse::Ok().json(json!({ "logo": logo })))
+}
+
+#[derive(Deserialize)]
+pub struct LogoBody {
+    /// data URL (base64) de la imagen, o null para quitar el logo.
+    pub logo: Option<String>,
+}
+
+pub async fn set_logo(user: AuthVendedor, body: web::Json<LogoBody>, pool: web::Data<DbPool>) -> ApiResult<HttpResponse> {
+    user.exigir_edicion()?;
+    let vid = user.id;
+    let logo = body.into_inner().logo.filter(|s| !s.trim().is_empty());
+    if let Some(l) = &logo {
+        if l.len() > 1_400_000 {
+            return Err(ApiError::bad_request("El logo es muy grande (máx ~1 MB). Usa una imagen más liviana."));
+        }
+    }
+    db::run(&pool, move |conn| inv::set_logo(conn, vid, logo)).await?;
+    Ok(HttpResponse::Ok().json(json!({ "ok": true })))
+}

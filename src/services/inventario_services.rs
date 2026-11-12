@@ -60,6 +60,27 @@ pub fn set_config(conn: &mut PgConnection, vendedor_id: Uuid, u: ConfigUpdate) -
     Ok(c)
 }
 
+// ----------------------------- Logo del cotizador -----------------------------
+
+/// Logo (data URL base64) del vendedor para sus cotizaciones. None si no tiene.
+pub fn get_logo(conn: &mut PgConnection, vendedor_id: Uuid) -> ApiResult<Option<String>> {
+    let v = config_ganancias::table
+        .find(vendedor_id)
+        .select(config_ganancias::cotizador_logo)
+        .first::<Option<String>>(conn)
+        .optional()?;
+    Ok(v.flatten())
+}
+
+/// Guarda (o borra, con None) el logo del cotizador del vendedor.
+pub fn set_logo(conn: &mut PgConnection, vendedor_id: Uuid, logo: Option<String>) -> ApiResult<()> {
+    config(conn, vendedor_id)?; // asegura que exista la fila
+    diesel::update(config_ganancias::table.find(vendedor_id))
+        .set(config_ganancias::cotizador_logo.eq(logo))
+        .execute(conn)?;
+    Ok(())
+}
+
 // ----------------------------- Editar inventario -----------------------------
 
 #[derive(Deserialize)]
