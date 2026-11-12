@@ -137,6 +137,11 @@ export default function Inventario({ me }) {
           <label className="row sm muted" style={{ gap: 6, whiteSpace: 'nowrap' }} title="Mostrar publicaciones pausadas">
             <input type="checkbox" checked={verPausadas} onChange={(e) => setVerPausadas(e.target.checked)} /> Pausadas
           </label>
+          {items && (
+            <span className="badge" title="Productos que coinciden con el filtro" style={{ whiteSpace: 'nowrap' }}>
+              {visibles.length} {visibles.length === 1 ? 'producto' : 'productos'}{soloPausadas ? ' pausados' : verActivas && !verPausadas ? ' activos' : ''}
+            </span>
+          )}
           <select className="input" value={cuenta} onChange={(e) => setCuenta(e.target.value)}>
             <option value="">Todas las cuentas</option>
             {cuentas.map((c) => <option key={c.id} value={c.id}>{c.nickname || `Usuario ${c.ml_user_id}`}</option>)}
