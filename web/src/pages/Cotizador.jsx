@@ -15,6 +15,7 @@ export default function Cotizador() {
   const [numero, setNumero] = useState(nroDefault())
   const [lineas, setLineas] = useState([])
   const [descuentoPct, setDescuentoPct] = useState('')
+  const [validez, setValidez] = useState('15')
   const [iva, setIva] = useState(false)
   const [notas, setNotas] = useState('')
   const [buscar, setBuscar] = useState('')
@@ -148,7 +149,7 @@ export default function Cotizador() {
   </table>
   <div class="totwrap"><table class="tot">${totales}</table></div>
   ${notas.trim() ? `<div class="notas">${esc(notas)}</div>` : ''}
-  <div class="foot"><span>${esc(empresa.razon_social)}</span><span>Precios en CLP · Validez 15 días salvo indicación contraria.</span></div>
+  <div class="foot"><span>${esc(empresa.razon_social)}</span><span>Precios en CLP${String(validez).trim() ? ' · Validez ' + esc(validez) + ' días' : ''} salvo indicación contraria.</span></div>
 </div></body></html>`
     const win = window.open('', '_blank')
     if (!win) { setError('El navegador bloqueó la ventana. Permite pop-ups para descargar el PDF.'); return }
@@ -250,6 +251,10 @@ export default function Cotizador() {
           <label className="row" style={{ gap: 8, alignItems: 'center' }}>
             <span className="sm muted" style={{ width: 90 }}>Descuento %</span>
             <input className="input" style={{ width: 90 }} type="number" min="0" max="100" value={descuentoPct} onChange={(e) => setDescuentoPct(e.target.value)} placeholder="0" />
+          </label>
+          <label className="row" style={{ gap: 8, alignItems: 'center' }}>
+            <span className="sm muted" style={{ width: 90 }}>Validez (días)</span>
+            <input className="input" style={{ width: 90 }} type="number" min="0" value={validez} onChange={(e) => setValidez(e.target.value)} placeholder="15" />
           </label>
           <label className="row" style={{ gap: 8, alignItems: 'center' }}>
             <input type="checkbox" checked={iva} onChange={(e) => setIva(e.target.checked)} /> <span className="sm">Agregar IVA (19%)</span>
