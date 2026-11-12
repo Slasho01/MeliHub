@@ -117,7 +117,7 @@ export default function Resumen() {
 
       <Onboarding />
 
-      <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
+      <div className="row" style={{ gap: 10, flexWrap: 'wrap', alignItems: 'stretch' }}>
         <StatTile label="Ventas" value={dash ? money(dash.venta_total) : '—'}>
           {dash && <Trend cur={dash.venta_total} prev={prev?.venta_total} />}
         </StatTile>
@@ -130,7 +130,7 @@ export default function Resumen() {
         <StatTile label="Ticket promedio" value={dash ? money(dash.ticket_promedio) : '—'} />
       </div>
 
-      <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
+      <div className="row" style={{ gap: 10, flexWrap: 'wrap', alignItems: 'stretch' }}>
         <AccionCard to="/preguntas" label="Preguntas sin responder" value={preguntas.length} sub={preguntas.length ? `la más antigua hace ${edad(pregMax)}` : 'todo respondido 🎉'} color={pregMax >= 24 ? 'var(--bad, #d93025)' : preguntas.length ? 'var(--warn)' : 'var(--ok)'} />
         <AccionCard to="/inventario" label="Stock bajo (≤ 5)" value={alertas.length} sub={alertas.length ? 'revisa tu inventario' : 'stock sano 🎉'} color={alertas.length ? 'var(--warn)' : 'var(--ok)'} />
         <AccionCard to="/conexiones" label="Conexiones con atención" value={conexProblema} sub={conexProblema ? 'revisa tus integraciones' : `${conex.length} operativas`} color={conexProblema ? 'var(--bad, #d93025)' : 'var(--ok)'} />
