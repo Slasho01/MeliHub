@@ -282,6 +282,16 @@ pub fn start(pool: web::Data<DbPool>, client: web::Data<MlClient>, falabella: we
             // Paris: ventas → descuentan stock (y se empuja a ML), y empujamos stock al canal.
             procesar_ventas_paris(&pool, &client, &paris, true).await;
             sincronizar_paris(&pool, &paris).await;
+            // Repricing automático de Buy Box (solo vendedores que lo activaron).
+            if let Ok(vends) = db::run(&pool, |conn| crate::services::inventario_services::vendedores_con_repricing(conn)).await {
+                for vid in vends {
+                    if let Ok(r) = crate::repricing::reprice_vendedor(&pool, &client, vid).await {
+                        if r.repriced > 0 {
+                            log::info!("Repricing vendedor {vid}: {} repreciados, {} omitidos por margen", r.repriced, r.omitidos_margen);
+                        }
+                    }
+                }
+            }
         }
     });
 }

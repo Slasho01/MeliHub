@@ -40,6 +40,8 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             // Publicaciones de catálogo (competencia / Buy Box)
             .service(r("/ml/catalogo").route(get().to(catalogo::listar)))
             .service(r("/ml/catalogo/igualar").route(post().to(catalogo::igualar_precio)))
+            .service(r("/ml/catalogo/reprice").route(post().to(catalogo::reprice)))
+            .service(r("/ml/catalogo/reprice-config").route(get().to(catalogo::reprice_config_get)).route(put().to(catalogo::reprice_config_set)))
             // Falabella Seller Center (cuentas)
             .service(r("/falabella/cuentas").route(get().to(fala::listar)).route(post().to(fala::conectar)))
             .service(r("/falabella/cuentas/{id}").route(delete().to(fala::desconectar)))
@@ -82,6 +84,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(r("/paris/cuentas/{id}/razones-cancelacion").route(get().to(paris::razones_cancelacion)))
             // Catálogo unificado + gestor de inventario
             .service(r("/salud/conexiones").route(get().to(salud::conexiones)))
+            .service(r("/onboarding").route(get().to(salud::onboarding)))
             .service(r("/productos").route(get().to(prod::listar)))
             .service(r("/productos/inventario-masivo").route(post().to(prod::inventario_masivo)))
             .service(r("/productos/alertas").route(get().to(prod::alertas)))

@@ -8,6 +8,10 @@ function fechaCorta(iso) {
   return d.toLocaleString('es-CL', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
 }
 
+const horasDesde = (iso) => { const d = new Date(iso); return isNaN(d) ? null : Math.floor((Date.now() - d.getTime()) / 3.6e6) }
+const edadTxt = (h) => (h == null ? '' : h < 1 ? 'hace <1 h' : h < 24 ? `hace ${h} h` : `hace ${Math.floor(h / 24)} d`)
+const edadColor = (h) => (h == null ? 'var(--muted)' : h >= 24 ? 'var(--bad, #d93025)' : h >= 8 ? 'var(--warn)' : 'var(--muted)')
+
 export default function Preguntas() {
   const [cuenta, setCuenta] = useState('') // '' = todas
   const [cuentas, setCuentas] = useState([])
@@ -64,6 +68,17 @@ export default function Preguntas() {
 
       {error && <div className="alert alert-bad">{error}</div>}
 
+      {rows && rows.length > 0 && (() => {
+        const hs = rows.map((q) => horasDesde(q.fecha)).filter((h) => h != null)
+        const max = hs.length ? Math.max(...hs) : 0
+        const viejas = hs.filter((h) => h >= 24).length
+        return (
+          <div className="alert" style={{ borderLeft: `3px solid ${max >= 24 ? 'var(--bad, #d93025)' : 'var(--warn)'}` }}>
+            <b>{rows.length}</b> sin responder{max > 0 ? ` · la más antigua ${edadTxt(max)}` : ''}{viejas > 0 ? ` · ${viejas} llevan +24 h ⚠️` : ''}
+          </div>
+        )
+      })()}
+
       {rows == null ? (
         <div className="muted">Cargando…</div>
       ) : rows.length === 0 ? (
@@ -77,7 +92,7 @@ export default function Preguntas() {
                 <span className="tag">{q.cuenta || 'cuenta'}</span>
               </div>
               <p style={{ margin: 0 }}>{q.texto}</p>
-              <div className="muted xs">{fechaCorta(q.fecha)}{q.comprador_id ? ` · Comprador #${q.comprador_id}` : ''}</div>
+              <div className="muted xs">{fechaCorta(q.fecha)} · <span style={{ color: edadColor(horasDesde(q.fecha)), fontWeight: 600 }}>{edadTxt(horasDesde(q.fecha))}</span>{q.comprador_id ? ` · Comprador #${q.comprador_id}` : ''}</div>
               <textarea
                 className="input"
                 rows={2}

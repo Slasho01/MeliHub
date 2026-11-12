@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { del, get, post } from '../api'
+import Onboarding from './Onboarding'
 
 export default function Dashboard({ me }) {
   const owner = me?.es_owner
@@ -46,6 +47,7 @@ export default function Dashboard({ me }) {
       </div>
       {msg && <div className="alert alert-ok">{msg}</div>}
       {error && <div className="alert alert-bad">{error}</div>}
+      <Onboarding />
       <div className="card" style={{ padding: 0 }}>
         {!cuentas ? <div className="empty">Cargando…</div> : cuentas.length === 0 ? (
           <div className="empty">Aún no hay cuentas conectadas.<br />Pulsa <b>“Conectar cuenta”</b> para empezar.</div>

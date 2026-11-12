@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { get, post, money } from '../api'
+import { get, post, put, money } from '../api'
 
 const estadoInfo = (s) => ({
   winning: ['Ganando', 'var(--ok)'],
@@ -26,8 +26,26 @@ export default function Catalogo() {
   const [cargando, setCargando] = useState(false)
   const [busy, setBusy] = useState('')
   const [msg, setMsg] = useState('')
+  const [rep, setRep] = useState({ activo: false, margen_min: 15 })
+  const [repBusy, setRepBusy] = useState(false)
 
-  useEffect(() => { get('/ml/cuentas').then(setCuentas).catch(() => {}) }, [])
+  useEffect(() => {
+    get('/ml/cuentas').then(setCuentas).catch(() => {})
+    get('/ml/catalogo/reprice-config').then((r) => setRep({ activo: !!r.activo, margen_min: r.margen_min ?? 15 })).catch(() => {})
+  }, [])
+
+  const guardarRep = async (next) => {
+    setRep(next); setError(''); setMsg('')
+    try { await put('/ml/catalogo/reprice-config', next) } catch (e) { setError(e.message) }
+  }
+  const aplicarRep = async () => {
+    setRepBusy(true); setError(''); setMsg('')
+    try {
+      const r = await post('/ml/catalogo/reprice', {})
+      setMsg(`Repricing aplicado: ${r.repriced} repreciada(s), ${r.omitidos_margen} omitida(s) por margen, de ${r.revisados} revisada(s).`)
+      setTimeout(cargar, 1500)
+    } catch (e) { setError(e.message) } finally { setRepBusy(false) }
+  }
 
   const cargar = () => {
     setCargando(true); setError(''); setMsg('')
@@ -68,6 +86,29 @@ export default function Catalogo() {
 
       {error && <div className="alert alert-bad">{error}</div>}
       {msg && <div className="alert alert-ok">{msg}</div>}
+
+      <div className="card" style={{ borderLeft: '4px solid var(--accent)' }}>
+        <div className="row between" style={{ flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
+          <div>
+            <b className="sm">Repricing automático (Buy Box)</b>
+            <div className="muted xs">Mantiene tus publicaciones ganando la Buy Box, pero nunca baja de tu margen mínimo.</div>
+          </div>
+          <div className="row" style={{ gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+            <label className="row" style={{ gap: 6, alignItems: 'center' }}>
+              <span className="sm muted">Margen mín.</span>
+              <input className="input" style={{ width: 72 }} type="number" min="0" max="95" value={rep.margen_min}
+                onChange={(e) => setRep({ ...rep, margen_min: e.target.value })}
+                onBlur={() => guardarRep({ ...rep, margen_min: Number(rep.margen_min) || 0 })} />
+              <span className="sm muted">%</span>
+            </label>
+            <label className="row" style={{ gap: 6, alignItems: 'center' }} title="Reprecea en cada sincronización del sistema">
+              <input type="checkbox" checked={rep.activo} onChange={(e) => guardarRep({ ...rep, activo: e.target.checked, margen_min: Number(rep.margen_min) || 0 })} />
+              <span className="sm">Automático</span>
+            </label>
+            <button className="btn btn-sm btn-dark" disabled={repBusy} onClick={aplicarRep}>{repBusy ? 'Aplicando…' : 'Aplicar ahora'}</button>
+          </div>
+        </div>
+      </div>
 
       {rows == null ? (
         <div className="muted">Consultando competencia en Mercado Libre…</div>

@@ -81,6 +81,48 @@ pub fn set_logo(conn: &mut PgConnection, vendedor_id: Uuid, logo: Option<String>
     Ok(())
 }
 
+// ----------------------------- Repricing (Buy Box) -----------------------------
+
+/// Config de repricing del vendedor: (activo, margen_min_%).
+pub fn repricing_cfg(conn: &mut PgConnection, vendedor_id: Uuid) -> ApiResult<(bool, f64)> {
+    config(conn, vendedor_id)?;
+    config_ganancias::table
+        .find(vendedor_id)
+        .select((config_ganancias::repricing_activo, config_ganancias::repricing_margen_min))
+        .first::<(bool, f64)>(conn)
+        .map_err(ApiError::from)
+}
+
+pub fn set_repricing(conn: &mut PgConnection, vendedor_id: Uuid, activo: Option<bool>, margen_min: Option<f64>) -> ApiResult<(bool, f64)> {
+    config(conn, vendedor_id)?;
+    if let Some(a) = activo {
+        diesel::update(config_ganancias::table.find(vendedor_id)).set(config_ganancias::repricing_activo.eq(a)).execute(conn)?;
+    }
+    if let Some(m) = margen_min {
+        diesel::update(config_ganancias::table.find(vendedor_id)).set(config_ganancias::repricing_margen_min.eq(m.clamp(0.0, 95.0))).execute(conn)?;
+    }
+    repricing_cfg(conn, vendedor_id)
+}
+
+/// Vendedores con repricing activado (para el job automático).
+pub fn vendedores_con_repricing(conn: &mut PgConnection) -> ApiResult<Vec<Uuid>> {
+    config_ganancias::table
+        .filter(config_ganancias::repricing_activo.eq(true))
+        .select(config_ganancias::vendedor_id)
+        .load::<Uuid>(conn)
+        .map_err(ApiError::from)
+}
+
+/// Costo cargado por `ml_item_id` del vendedor (0 si no tiene). Para calcular margen al reprecear.
+pub fn costos_por_item(conn: &mut PgConnection, vendedor_id: Uuid) -> ApiResult<std::collections::HashMap<String, i64>> {
+    let rows: Vec<(String, Option<i64>)> = productos::table
+        .inner_join(ml_cuentas::table)
+        .filter(ml_cuentas::vendedor_id.eq(vendedor_id))
+        .select((productos::ml_item_id, productos::costo))
+        .load(conn)?;
+    Ok(rows.into_iter().map(|(id, c)| (id, c.unwrap_or(0))).collect())
+}
+
 // ----------------------------- Editar inventario -----------------------------
 
 #[derive(Deserialize)]

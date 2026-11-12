@@ -10,6 +10,7 @@ mod mailer;
 mod dte;
 mod ml;
 mod paris;
+mod repricing;
 mod twofa;
 mod models;
 mod mp;

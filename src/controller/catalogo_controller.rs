@@ -6,7 +6,7 @@ use crate::config::Config;
 use crate::db::{self, DbPool};
 use crate::errors::{ApiError, ApiResult};
 use crate::ml::MlClient;
-use crate::services::{ml_services, producto_services};
+use crate::services::{inventario_services as inv, ml_services, producto_services};
 use actix_web::{web, HttpResponse};
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -112,4 +112,36 @@ pub async fn igualar_precio(
     let token = crate::sync::access_token_valido(&pool, &client, &cuenta).await?;
     client.update_price(&token, &item_id, precio).await?;
     Ok(HttpResponse::Ok().json(json!({ "ok": true })))
+}
+
+// ----------------- Repricing automático (Buy Box) -----------------
+
+/// Corre una pasada de repricing ahora (manual) para el vendedor.
+pub async fn reprice(user: AuthVendedor, pool: web::Data<DbPool>, client: web::Data<MlClient>, cfg: web::Data<Config>) -> ApiResult<HttpResponse> {
+    user.exigir_edicion()?;
+    if !cfg.ml.configurado() {
+        return Err(ApiError::bad_request("Mercado Libre no está configurado."));
+    }
+    let res = crate::repricing::reprice_vendedor(&pool, &client, user.id).await?;
+    Ok(HttpResponse::Ok().json(res))
+}
+
+pub async fn reprice_config_get(user: AuthVendedor, pool: web::Data<DbPool>) -> ApiResult<HttpResponse> {
+    let vid = user.id;
+    let (activo, margen_min) = db::run(&pool, move |conn| inv::repricing_cfg(conn, vid)).await?;
+    Ok(HttpResponse::Ok().json(json!({ "activo": activo, "margen_min": margen_min })))
+}
+
+#[derive(Deserialize)]
+pub struct RepriceCfg {
+    pub activo: Option<bool>,
+    pub margen_min: Option<f64>,
+}
+
+pub async fn reprice_config_set(user: AuthVendedor, body: web::Json<RepriceCfg>, pool: web::Data<DbPool>) -> ApiResult<HttpResponse> {
+    user.exigir_owner()?;
+    let vid = user.id;
+    let b = body.into_inner();
+    let (activo, margen_min) = db::run(&pool, move |conn| inv::set_repricing(conn, vid, b.activo, b.margen_min)).await?;
+    Ok(HttpResponse::Ok().json(json!({ "activo": activo, "margen_min": margen_min })))
 }

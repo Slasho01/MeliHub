@@ -25,6 +25,7 @@ import Catalogo from './pages/Catalogo'
 import Cotizador from './pages/Cotizador'
 import Conexiones from './pages/Conexiones'
 import Dte from './pages/Dte'
+import Reportes from './pages/Reportes'
 import Falabella from './pages/Falabella'
 import Paris from './pages/Paris'
 import Landing from './pages/Landing'
@@ -67,6 +68,7 @@ export default function App() {
           <NavLink to="/" end className={cls}>Cuentas</NavLink>
           <NavLink to="/conexiones" className={cls}>Conexiones</NavLink>
           <NavLink to="/ventas" className={cls}>Ventas</NavLink>
+          <NavLink to="/reportes" className={cls}>Reportes</NavLink>
           <NavLink to="/envios" className={cls}>Envíos</NavLink>
           <NavLink to="/preguntas" className={cls}>Preguntas</NavLink>
           <NavLink to="/reclamos" className={cls}>Reclamos</NavLink>
@@ -113,6 +115,7 @@ export default function App() {
           <Route path="/cotizador" element={<Cotizador />} />
           <Route path="/ganancias" element={<Ganancias me={me} />} />
           <Route path="/ventas" element={<Ventas />} />
+          <Route path="/reportes" element={<Reportes />} />
           <Route path="/envios" element={<Envios />} />
           <Route path="/preguntas" element={<Preguntas />} />
           <Route path="/reclamos" element={<Reclamos />} />

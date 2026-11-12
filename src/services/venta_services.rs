@@ -141,6 +141,14 @@ pub struct TopProducto {
 }
 
 #[derive(Serialize)]
+pub struct VentaCuenta {
+    pub cuenta: String,
+    pub ventas: i64,
+    pub ganancia: i64,
+    pub ordenes: i64,
+}
+
+#[derive(Serialize)]
 pub struct Dashboard {
     pub dias: i64,
     pub ordenes: i64,
@@ -152,6 +160,8 @@ pub struct Dashboard {
     pub margen_pct: f64,
     pub serie: Vec<DiaVenta>,
     pub top_productos: Vec<TopProducto>,
+    /// Ventas/ganancia por cuenta de Mercado Libre (para reportes).
+    pub por_cuenta: Vec<VentaCuenta>,
     /// Productos activos con stock que NO vendieron en el período (hasta 10).
     pub sin_rotacion: Vec<ProductoSimple>,
     pub sin_rotacion_total: i64,
@@ -223,6 +233,27 @@ pub fn dashboard(conn: &mut PgConnection, vendedor_id: Uuid, dias: i64) -> ApiRe
     top.sort_by(|a, b| b.venta.cmp(&a.venta));
     top.truncate(10);
 
+    // Ventas por cuenta de ML.
+    let cuentas_map: HashMap<Uuid, String> = ml_cuentas::table
+        .filter(ml_cuentas::vendedor_id.eq(vendedor_id))
+        .select((ml_cuentas::id, ml_cuentas::nickname, ml_cuentas::ml_user_id))
+        .load::<(Uuid, Option<String>, i64)>(conn)?
+        .into_iter()
+        .map(|(id, nick, uid)| (id, nick.unwrap_or_else(|| format!("Usuario {uid}"))))
+        .collect();
+    let mut porc: HashMap<Uuid, (i64, i64, i64)> = HashMap::new();
+    for o in &ordenes {
+        let e = porc.entry(o.ml_cuenta_id).or_insert((0, 0, 0));
+        e.0 += o.venta_total;
+        e.1 += o.ganancia;
+        e.2 += 1;
+    }
+    let mut por_cuenta: Vec<VentaCuenta> = porc
+        .into_iter()
+        .map(|(id, (v, g, c))| VentaCuenta { cuenta: cuentas_map.get(&id).cloned().unwrap_or_else(|| "—".into()), ventas: v, ganancia: g, ordenes: c })
+        .collect();
+    por_cuenta.sort_by(|a, b| b.ventas.cmp(&a.ventas));
+
     // Insights de inventario: sin rotación (activos con stock que no vendieron) y sin costo.
     let prods: Vec<Producto> = productos::table
         .inner_join(ml_cuentas::table)
@@ -250,6 +281,7 @@ pub fn dashboard(conn: &mut PgConnection, vendedor_id: Uuid, dias: i64) -> ApiRe
         margen_pct: if venta > 0 { (ganancia as f64 / venta as f64) * 100.0 } else { 0.0 },
         serie,
         top_productos: top,
+        por_cuenta,
         sin_rotacion: sin_rot,
         sin_rotacion_total,
         sin_costo,

@@ -125,6 +125,8 @@ diesel::table! {
         margen_objetivo -> Float8,
         redondeo -> Int8,
         cotizador_logo -> Nullable<Text>,
+        repricing_activo -> Bool,
+        repricing_margen_min -> Float8,
     }
 }
 

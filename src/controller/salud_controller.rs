@@ -11,6 +11,33 @@ use actix_web::{web, HttpResponse};
 use diesel::prelude::*;
 use serde_json::{json, Value};
 
+/// Checklist de puesta en marcha: qué pasos de configuración ya completó el vendedor.
+pub async fn onboarding(user: AuthVendedor, pool: web::Data<DbPool>) -> ApiResult<HttpResponse> {
+    let vid = user.id;
+    let r = db::run(&pool, move |conn| {
+        use crate::schema::ml_cuentas;
+        let ml: i64 = ml_cuentas::table.filter(ml_cuentas::vendedor_id.eq(vid)).count().get_result(conn).unwrap_or(0);
+        let prods: i64 = productos::table.inner_join(ml_cuentas::table).filter(ml_cuentas::vendedor_id.eq(vid)).count().get_result(conn).unwrap_or(0);
+        let con_costo: i64 = productos::table
+            .inner_join(ml_cuentas::table)
+            .filter(ml_cuentas::vendedor_id.eq(vid))
+            .filter(productos::costo.gt(0))
+            .count()
+            .get_result(conn)
+            .unwrap_or(0);
+        let fala = falabella_services::listar(conn, vid).map(|v| v.len()).unwrap_or(0);
+        let paris = paris_services::listar(conn, vid).map(|v| v.len()).unwrap_or(0);
+        Ok::<_, ApiError>(json!({
+            "ml_conectado": ml > 0,
+            "productos_sincronizados": prods > 0,
+            "costos_cargados": con_costo > 0,
+            "otro_canal": (fala + paris) > 0,
+        }))
+    })
+    .await?;
+    Ok(HttpResponse::Ok().json(r))
+}
+
 fn humano(horas: i64) -> String {
     if horas < 1 {
         "menos de 1 h".into()
