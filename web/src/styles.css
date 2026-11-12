@@ -70,7 +70,7 @@ button { font: inherit; cursor: pointer; }
   .app-shell.nav-open .sidebar-backdrop { display: block; position: fixed; inset: 0; background: rgb(0 0 0 / 45%); z-index: 20; }
   .main-top .brand { display: block; }
 }
-.container { max-width: 1040px; margin: 0 auto; padding: 24px; }
+.container { max-width: 1320px; margin: 0 auto; padding: 24px; }
 .row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .between { justify-content: space-between; }
 h1 { font-size: 22px; letter-spacing: -.02em; margin: 0 0 4px; }

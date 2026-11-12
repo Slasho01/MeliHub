@@ -23,7 +23,8 @@ export default function Inventario({ me }) {
   const [msg, setMsg] = useState(null)
   const [q, setQ] = useState('')
   const [cuenta, setCuenta] = useState('')
-  const [estado, setEstado] = useState('')
+  const [verActivas, setVerActivas] = useState(true)
+  const [verPausadas, setVerPausadas] = useState(true)
   const [edit, setEdit] = useState({})        // { [id]: {costo, precio_jarstore} }
   const [precioMl, setPrecioMl] = useState({}) // { [id]: valor editado del precio ML }
   const [sel, setSel] = useState(() => new Set())
@@ -46,7 +47,9 @@ export default function Inventario({ me }) {
     const params = new URLSearchParams()
     if (q.trim()) params.set('q', q.trim())
     if (cuenta) params.set('cuenta_id', cuenta)
-    if (estado) params.set('estado', estado)
+    // Dos checkboxes: ambos (o ninguno) = todo; solo uno = ese estado.
+    const ef = verActivas === verPausadas ? '' : verActivas ? 'active' : 'paused'
+    if (ef) params.set('estado', ef)
     const s = params.toString()
     get(`/productos${s ? `?${s}` : ''}`).then((d) => { setItems(d); setEdit({}); setPrecioMl({}); setSel(new Set()) }).catch((e) => setError(e.message))
   }
@@ -54,7 +57,7 @@ export default function Inventario({ me }) {
     get('/ml/cuentas').then(setCuentas).catch(() => {})
     get('/productos/alertas?umbral=5').then(setAlertas).catch(() => {})
   }, [])
-  useEffect(() => { cargar() }, [q, cuenta, estado]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { cargar() }, [q, cuenta, verActivas, verPausadas]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const val = (p, campo) => edit[p.id]?.[campo] ?? (p[campo] ?? '')
   const onChange = (p, campo, v) => setEdit({ ...edit, [p.id]: { ...edit[p.id], [campo]: v } })
@@ -96,7 +99,8 @@ export default function Inventario({ me }) {
   const toggleSel = (id) => setSel((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
   // Oculta (opcional) las publicaciones sin stock en Mercado Libre. Al filtrar "Pausadas"
   // se muestran igual aunque no tengan stock (suelen estar en 0, es justo lo que se busca ver).
-  const visibles = (items || []).filter((p) => !ocultarSinStock || estado === 'paused' || (p.stock || 0) > 0)
+  const soloPausadas = verPausadas && !verActivas
+  const visibles = (items || []).filter((p) => !ocultarSinStock || soloPausadas || (p.stock || 0) > 0)
   const allIds = visibles.map((p) => p.id)
   const allSel = allIds.length > 0 && allIds.every((id) => sel.has(id))
   const toggleAll = () => setSel((s) => { const n = new Set(s); allSel ? allIds.forEach((id) => n.delete(id)) : allIds.forEach((id) => n.add(id)); return n })
@@ -127,8 +131,11 @@ export default function Inventario({ me }) {
         <div><h1>Inventario</h1><p className="muted sm" style={{ margin: 0 }}>Costo/precio propio, y control de la publicación en Mercado Libre.</p></div>
         <div className="row">
           <input className="input" style={{ width: 200 }} placeholder="Buscar por título o SKU…" value={q} onChange={(e) => setQ(e.target.value)} />
-          <label className="row sm muted" style={{ gap: 6, whiteSpace: 'nowrap' }} title="Muestra solo las publicaciones pausadas">
-            <input type="checkbox" checked={estado === 'paused'} onChange={(e) => setEstado(e.target.checked ? 'paused' : '')} /> Solo pausadas
+          <label className="row sm muted" style={{ gap: 6, whiteSpace: 'nowrap' }} title="Mostrar publicaciones activas">
+            <input type="checkbox" checked={verActivas} onChange={(e) => setVerActivas(e.target.checked)} /> Activas
+          </label>
+          <label className="row sm muted" style={{ gap: 6, whiteSpace: 'nowrap' }} title="Mostrar publicaciones pausadas">
+            <input type="checkbox" checked={verPausadas} onChange={(e) => setVerPausadas(e.target.checked)} /> Pausadas
           </label>
           <select className="input" value={cuenta} onChange={(e) => setCuenta(e.target.value)}>
             <option value="">Todas las cuentas</option>
@@ -178,10 +185,10 @@ export default function Inventario({ me }) {
         ) : visibles.length === 0 ? (
           <div className="empty">Todas las publicaciones están sin stock. <button className="link-btn" onClick={() => setOcultarSinStock(false)}>Mostrarlas</button></div>
         ) : (
-          <table style={{ minWidth: 1000 }}>
+          <table style={{ minWidth: 1080 }}>
             <thead><tr>
               <th><input type="checkbox" checked={allSel} onChange={toggleAll} disabled={soloLectura} /></th>
-              <th>Publicación</th><th>Precio ML</th><th>Costo</th><th>Mi precio</th>
+              <th>Publicación</th><th>Precio ML</th><th>Costo</th><th>Mi precio</th><th>Falabella</th>
               <th>Ganancia ML</th><th>Ganancia (mi precio)</th><th>Stock</th><th>Estado</th>
             </tr></thead>
             <tbody>
@@ -216,12 +223,11 @@ export default function Inventario({ me }) {
                           sug. {money(p.precio_sugerido)} {!soloLectura && <button className="link-btn" onClick={() => usarSugerido(p)}>usar</button>}
                         </div>
                       )}
-                      <div className="row" style={{ gap: 4, marginTop: 4, alignItems: 'center' }}>
-                        <span className="muted xs" style={{ whiteSpace: 'nowrap' }}>Falabella</span>
-                        <input className="input" style={{ width: 86 }} type="number" min="0" placeholder="= ML" disabled={soloLectura}
-                          title="Precio para Falabella (vacío = usa el de Mercado Libre)"
-                          value={val(p, 'precio_falabella')} onChange={(e) => onChange(p, 'precio_falabella', e.target.value)} onBlur={() => guardar(p)} />
-                      </div>
+                    </td>
+                    <td>
+                      <input className="input" style={{ width: 92 }} type="number" min="0" placeholder="= ML" disabled={soloLectura}
+                        title="Precio para Falabella (vacío = usa el de Mercado Libre)"
+                        value={val(p, 'precio_falabella')} onChange={(e) => onChange(p, 'precio_falabella', e.target.value)} onBlur={() => guardar(p)} />
                     </td>
                     <td><GanCell g={p.ml} /></td>
                     <td><GanCell g={p.jarstore} /></td>
@@ -238,7 +244,7 @@ export default function Inventario({ me }) {
                   </tr>
                   {histId === p.id && (
                     <tr>
-                      <td colSpan={9} style={{ background: 'var(--bg)' }}>
+                      <td colSpan={10} style={{ background: 'var(--bg)' }}>
                         <b className="sm">Historial de cambios</b>
                         {(hist[p.id] || []).length === 0 ? (
                           <div className="muted sm">Sin cambios registrados todavía.</div>
