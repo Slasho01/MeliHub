@@ -138,6 +138,48 @@ impl ParisClient {
         self.req(sandbox, api_key, reqwest::Method::POST, "/v2/stock", Some(body)).await
     }
 
+    /// Cambia el estado de la variante de un producto (ENABLED/DISABLED/DELETED) — Paris no
+    /// tiene DELETE: se "elimina"/pausa por status. Requiere reenviar el body completo, así que
+    /// trae el producto, cambia el status y hace PATCH.
+    pub async fn cambiar_estado_producto(&self, sandbox: bool, api_key: &str, sku: &str, status: &str) -> ApiResult<Value> {
+        let g = self.req(sandbox, api_key, reqwest::Method::GET, &format!("/v2/products/{sku}"), None).await?;
+        let attrs_from = |v: &Value| -> Value {
+            let arr = v
+                .as_array()
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|x| {
+                            let id = x.get("id")?.as_str()?;
+                            let val = x
+                                .get("value")
+                                .and_then(|y| y.as_str())
+                                .or_else(|| x.get("attributeOption").and_then(|o| o.get("id")).and_then(|y| y.as_str()))?;
+                            Some(serde_json::json!({ "id": id, "value": val }))
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+            Value::Array(arr)
+        };
+        let var = g.pointer("/variants/0").cloned().unwrap_or(Value::Null);
+        let body = serde_json::json!({
+            "product": {
+                "name": g.get("name"),
+                "sellerSku": g.get("sellerSku"),
+                "familyId": g.pointer("/family/id"),
+                "category": g.pointer("/category/id"),
+                "attributes": attrs_from(g.get("attributes").unwrap_or(&Value::Null)),
+            },
+            "variants": [ {
+                "skuSeller": var.get("skuSeller"),
+                "status": status,
+                "attributes": attrs_from(var.get("attributes").unwrap_or(&Value::Null)),
+                "medias": var.get("medias").cloned().unwrap_or(serde_json::json!([])),
+            } ],
+        });
+        self.req(sandbox, api_key, reqwest::Method::PATCH, &format!("/v2/products/{sku}"), Some(&body)).await
+    }
+
     /// Lista los productos del seller en Paris (con su estado de aprobación).
     pub async fn buscar_productos(&self, sandbox: bool, api_key: &str, query: &str) -> ApiResult<Value> {
         let q = if query.is_empty() { "limit=100&offset=0".to_string() } else { query.to_string() };

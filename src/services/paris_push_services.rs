@@ -25,6 +25,32 @@ pub fn pick_price_type(v: &Value) -> Option<String> {
         .map(|s| s.to_string())
 }
 
+/// Id del tipo "Precio oferta" de `/v2/price-types` (para publicar un precio rebajado).
+pub fn pick_price_type_oferta(v: &Value) -> Option<String> {
+    let results = v.get("results").and_then(|r| r.as_array())?;
+    results
+        .iter()
+        .find(|x| x.get("name").and_then(|n| n.as_str()).map(|n| n.to_lowercase().contains("oferta")).unwrap_or(false))
+        .and_then(|x| x.get("id").and_then(|i| i.as_str()))
+        .map(|s| s.to_string())
+}
+
+/// Precios v2 con precio **normal** + **oferta** opcional (dos entradas, misma tienda, tipos distintos).
+pub fn build_precios(precio: i64, oferta: Option<i64>, store_id: Option<&str>, tipo_normal: Option<&str>, tipo_oferta: Option<&str>) -> Value {
+    let mut arr: Vec<Value> = Vec::new();
+    if let Value::Array(base) = build_precio(precio, store_id, tipo_normal) {
+        arr.extend(base);
+    }
+    if let Some(of) = oferta {
+        if of > 0 && of < precio {
+            if let Value::Array(o) = build_precio(of, store_id, tipo_oferta) {
+                arr.extend(o);
+            }
+        }
+    }
+    Value::Array(arr)
+}
+
 /// Precios v2: `[{ value, storePrice, type }]`. `store_price_id` = id de `/v2/price-types`;
 /// `tipo` = su nombre (Paris exige `type` como texto).
 pub fn build_precio(precio: i64, store_id: Option<&str>, price_type_id: Option<&str>) -> Value {
@@ -86,7 +112,38 @@ fn medias_json(imagenes: &[String]) -> Value {
 
 /// Cuerpo completo para `POST /v2/products`.
 #[allow(clippy::too_many_arguments)]
-pub fn build_product(name: &str, seller_sku: &str, family_id: &str, categoria_id: &str, precio: i64, stock: i32, atributos: &[(String, String)], var_atributos: &[(String, String)], imagenes: &[String], store_price_id: Option<&str>, tipo_precio: Option<&str>) -> Value {
+/// Una variante a publicar (color/talla…). Para productos de ML con variaciones reales se
+/// manda una por cada combinación; para productos simples, una sola.
+pub struct VariantIn {
+    pub sku_seller: String,
+    pub atributos: Vec<(String, String)>,
+    pub imagenes: Vec<String>,
+    pub stock: i32,
+}
+
+fn variants_json(variantes: &[VariantIn], con_status: bool, con_cantidad: bool) -> Value {
+    Value::Array(
+        variantes
+            .iter()
+            .map(|v| {
+                let mut m = serde_json::Map::new();
+                m.insert("skuSeller".into(), json!(v.sku_seller));
+                if con_status {
+                    m.insert("status".into(), json!("ENABLED"));
+                }
+                m.insert("attributes".into(), attrs_json(&v.atributos));
+                m.insert("medias".into(), medias_json(&v.imagenes));
+                if con_cantidad {
+                    m.insert("quantity".into(), json!(v.stock.max(0)));
+                }
+                Value::Object(m)
+            })
+            .collect(),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn build_product(name: &str, seller_sku: &str, family_id: &str, categoria_id: &str, precio: i64, atributos: &[(String, String)], variantes: &[VariantIn], store_price_id: Option<&str>, tipo_precio: Option<&str>) -> Value {
     json!({
         "product": {
             "name": name,
@@ -95,20 +152,14 @@ pub fn build_product(name: &str, seller_sku: &str, family_id: &str, categoria_id
             "category": categoria_id,
             "attributes": attrs_json(atributos),
         },
-        "variants": [ {
-            "skuSeller": seller_sku,
-            // Atributos PROPIOS de la variante (color/talla…), de la familia.
-            "attributes": attrs_json(var_atributos),
-            "medias": medias_json(imagenes),
-            "quantity": stock.max(0),
-        } ],
+        "variants": variants_json(variantes, false, true),
         "prices": build_precio(precio, store_price_id, tipo_precio),
     })
 }
 
 /// Cuerpo para ACTUALIZAR un producto (`PATCH /v2/products/{id}`): product + variants (sin precios).
 #[allow(clippy::too_many_arguments)]
-pub fn build_update(name: &str, seller_sku: &str, family_id: &str, categoria_id: &str, atributos: &[(String, String)], var_atributos: &[(String, String)], imagenes: &[String]) -> Value {
+pub fn build_update(name: &str, seller_sku: &str, family_id: &str, categoria_id: &str, atributos: &[(String, String)], variantes: &[VariantIn]) -> Value {
     json!({
         "product": {
             "name": name,
@@ -117,12 +168,7 @@ pub fn build_update(name: &str, seller_sku: &str, family_id: &str, categoria_id:
             "category": categoria_id,
             "attributes": attrs_json(atributos),
         },
-        "variants": [ {
-            "skuSeller": seller_sku,
-            "status": "ENABLED",
-            "attributes": attrs_json(var_atributos),
-            "medias": medias_json(imagenes),
-        } ],
+        "variants": variants_json(variantes, true, false),
     })
 }
 
@@ -158,10 +204,14 @@ mod tests {
     #[test]
     fn producto_v2_completo() {
         let v = build_product(
-            "Polera", "MLC123", "fam-1", "cat-1", 9990, 5,
+            "Polera", "MLC123", "fam-1", "cat-1", 9990,
             &[("attr-marca".into(), "opt-m".into()), ("".into(), "x".into())],
-            &[("attr-color".into(), "opt-rojo".into())],
-            &["https://img/1.jpg".into(), "".into()],
+            &[VariantIn {
+                sku_seller: "MLC123".into(),
+                atributos: vec![("attr-color".into(), "opt-rojo".into())],
+                imagenes: vec!["https://img/1.jpg".into(), "".into()],
+                stock: 5,
+            }],
             Some("sp-1"), Some("Normal"),
         );
         // la variante lleva SUS atributos (color/talla), distintos a los del producto

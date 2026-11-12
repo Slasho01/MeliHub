@@ -41,6 +41,14 @@ function Combo({ options, value, onChange, placeholder }) {
 const norm = (s) => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\([^)]*\)/g, '').trim()
 const numOf = (v) => { const m = String(v || '').match(/[\d.,]+/); return m ? m[0].replace(',', '.') : '' }
 
+// Fuerza una URL de imagen de ML a su variante -F (755px) en .jpg (Paris rechaza .webp / chicas).
+const mlJpg = (u) => { u = String(u || ''); return u.includes('mlstatic.com') ? u.replace(/-[A-Za-z]{1,3}\.(webp|jpg|jpeg|png)(\?.*)?$/i, '-F.jpg') : u.replace(/\.webp(\?.*)?$/i, '.jpg') }
+
+// ¿el atributo de ML `cn` (color/talla) corresponde al atributo de variante de Paris `pn`?
+const mismaDim = (pn, cn) => pn === cn
+  || (pn.includes('color') && cn.includes('color'))
+  || ((pn.includes('talla') || pn.includes('talle') || pn.includes('tamano')) && (cn.includes('talla') || cn.includes('talle') || cn.includes('tamano')))
+
 // ¿atributo obligatorio? Paris mete "OBLIGATORIO" en el nombre (o trae un flag).
 const esReq = (a) => /obligatorio/i.test(a.name || '') || a.isRequired || a.required || a.mandatory || a.isMandatory
 const tieneOpciones = (a) => (a.attributeOptions || a.options || []).length > 0
@@ -87,6 +95,8 @@ export default function ParisPublicar({ cuenta }) {
   const [attrVals, setAttrVals] = useState({}) // { [attrId]: valor }
   const [varAttrDefs, setVarAttrDefs] = useState([]) // atributos de VARIANTE (color/talla)
   const [varAttrVals, setVarAttrVals] = useState({})
+  const [variantesML, setVariantesML] = useState([]) // variaciones reales del producto de ML
+  const [usarVariantes, setUsarVariantes] = useState(true) // publicar cada variación como variante de Paris
   const [imagenes, setImagenes] = useState([''])
   const [loadingFam, setLoadingFam] = useState(false)
   const [showOpc, setShowOpc] = useState(false)
@@ -112,14 +122,16 @@ export default function ParisPublicar({ cuenta }) {
     const p = productos.find((x) => x.id === id)
     if (!p) { setForm((f) => ({ ...f, producto_id: '' })); return }
     setForm((f) => ({ ...f, producto_id: p.id, name: p.titulo || f.name, ref_product: p.ml_item_id || p.sku || f.ref_product, precio: p.precio != null ? String(p.precio) : f.precio, stock: p.stock != null ? String(p.stock) : f.stock }))
-    // Trae TODAS las imágenes de ML (galería) y las fuerza a la variante -F (755px) en .jpg
-    // (Paris no acepta .webp ni imágenes chicas).
-    const mlJpg = (u) => { u = String(u || ''); return u.includes('mlstatic.com') ? u.replace(/-[A-Za-z]{1,3}\.(webp|jpg|jpeg|png)(\?.*)?$/i, '-F.jpg') : u.replace(/\.webp(\?.*)?$/i, '.jpg') }
+    // Trae TODAS las imágenes de ML (galería) y las fuerza a la variante -F (755px) en .jpg.
     const pics = (p.datos && p.datos.pictures) || []
     let imgs = pics.map((x) => x.secure_url || x.url).filter(Boolean)
     if (!imgs.length && p.thumbnail) imgs = [p.thumbnail]
     imgs = imgs.map(mlJpg)
     setImagenes(imgs.length ? imgs : [''])
+    // Variaciones reales de ML (color/talla): si hay más de una, se publicarán como variantes de Paris.
+    const vs = Array.isArray(p.variantes) ? p.variantes.filter((v) => v && (v.attribute_combinations || v.attributeCombinations)) : []
+    setVariantesML(vs.length > 1 ? vs : [])
+    setUsarVariantes(vs.length > 1)
     // Si ya hay una familia con atributos cargados, autorrellena desde ML.
     if (attrDefs.length) setAttrVals(autoFill(p, attrDefs))
     if (varAttrDefs.length) setVarAttrVals(autoFill(p, varAttrDefs))
@@ -175,6 +187,42 @@ export default function ParisPublicar({ cuenta }) {
   const importantes = attrDefs.filter((a) => esReq(a) || tieneOpciones(a))
   const opcionales = attrDefs.filter((a) => !(esReq(a) || tieneOpciones(a)))
 
+  // Mapea los atributos (color/talla) de una variación de ML a los ids de opción de Paris.
+  const mapVarAttrs = (combos) => {
+    const out = []
+    for (const vad of varAttrDefs) {
+      const pn = norm(vad.name)
+      const combo = (combos || []).find((c) => mismaDim(pn, norm(c.name)))
+      const val = combo && (combo.value_name || combo.valueName || '')
+      if (!val) continue
+      const opts = vad.attributeOptions || vad.options || []
+      if (opts.length) { const m = opts.find((o) => norm(o.name) === norm(val)); if (m) out.push({ code: vad.id, value: m.id }) }
+      else out.push({ code: vad.id, value: String(val) })
+    }
+    return out
+  }
+  // Construye el array de variantes de Paris desde las variaciones de ML del producto elegido.
+  const construirVariantes = () => {
+    const prod = productos.find((x) => x.id === form.producto_id)
+    const picMap = {}
+    ;((prod && prod.datos && prod.datos.pictures) || []).forEach((x) => { if (x.id) picMap[x.id] = mlJpg(x.secure_url || x.url) })
+    const base = imagenes.filter((u) => u && u.trim())
+    return variantesML.map((v) => {
+      const combos = v.attribute_combinations || v.attributeCombinations || []
+      let imgs = (v.picture_ids || v.pictureIds || []).map((pid) => picMap[pid]).filter(Boolean)
+      if (!imgs.length) imgs = base
+      return {
+        sku_seller: `${form.ref_product}-${v.id}`,
+        atributos: mapVarAttrs(combos),
+        imagenes: imgs,
+        stock: Number(v.available_quantity ?? v.availableQuantity ?? v.quantity ?? 0),
+      }
+    })
+  }
+  // Etiqueta legible de una variación ML: "Rojo · M".
+  const etiquetaVar = (v) => ((v.attribute_combinations || v.attributeCombinations || []).map((c) => c.value_name || c.valueName).filter(Boolean).join(' · ') || `#${v.id}`)
+  const usandoVariantes = usarVariantes && variantesML.length > 1 && varAttrDefs.length > 0
+
   const publicar = async (e) => {
     e.preventDefault()
     if (!form.family_code) { setError('Elige una familia'); return }
@@ -190,9 +238,11 @@ export default function ParisPublicar({ cuenta }) {
         family_code: form.family_code,
         categoria_id: form.categoria_id,
         precio: Number(form.precio) || 0,
+        oferta: Number(form.oferta) || null,
         stock: Number(form.stock) || 0,
         atributos,
         variante_atributos,
+        variantes: usandoVariantes ? construirVariantes() : [],
         imagenes: imagenes.filter((u) => u && u.trim()),
         producto_id: form.producto_id || null,
       }
@@ -243,6 +293,7 @@ export default function ParisPublicar({ cuenta }) {
 
       <div className="row" style={{ gap: 8 }}>
         <input className="input" type="number" placeholder="Precio (CLP)" value={form.precio} onChange={(e) => setForm({ ...form, precio: e.target.value })} required />
+        <input className="input" type="number" placeholder="Precio oferta (opcional)" value={form.oferta} onChange={(e) => setForm({ ...form, oferta: e.target.value })} />
         <input className="input" type="number" placeholder="Stock" value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} />
       </div>
 
@@ -279,14 +330,43 @@ export default function ParisPublicar({ cuenta }) {
         </div>
       )}
 
-      {form.family_code && varAttrDefs.length > 0 && (
+      {form.family_code && varAttrDefs.length > 0 && !usandoVariantes && (
         <div className="stack" style={{ gap: 6 }}>
           <span className="sm muted">Atributos de la variante (requeridos){form.producto_id ? ' · autocompletados desde ML donde se pudo' : ''}</span>
           {varAttrDefs.map((a) => renderAttr(a, varAttrVals, setVarAttr, true))}
         </div>
       )}
 
-      <button className="btn btn-dark" disabled={busy}>{busy ? 'Publicando…' : 'Publicar en Paris'}</button>
+      {variantesML.length > 1 && (
+        <div className="stack" style={{ gap: 6 }}>
+          <label className="row" style={{ gap: 8, alignItems: 'center' }}>
+            <input type="checkbox" checked={usarVariantes} onChange={(e) => setUsarVariantes(e.target.checked)} />
+            <span className="sm">Publicar las <strong>{variantesML.length} variantes</strong> de este producto (color/talla)</span>
+          </label>
+          {usarVariantes && varAttrDefs.length === 0 && (
+            <div className="alert alert-bad sm">Esta familia de Paris no tiene atributos de variante (color/talla); no se pueden mapear. Elige otra familia o desmarca para publicar como producto simple.</div>
+          )}
+          {usandoVariantes && (
+            <div className="card table-wrap" style={{ padding: 0 }}>
+              <table className="table">
+                <thead><tr><th>Variante</th><th>SKU</th><th>Stock</th><th>Atributos</th></tr></thead>
+                <tbody>
+                  {construirVariantes().map((cv, i) => (
+                    <tr key={cv.sku_seller}>
+                      <td className="sm">{etiquetaVar(variantesML[i])}</td>
+                      <td className="sm muted">{cv.sku_seller}</td>
+                      <td className="sm">{cv.stock}</td>
+                      <td className="sm">{cv.atributos.length ? `✓ ${cv.atributos.length}` : <span style={{ color: 'var(--bad,#d93025)' }}>sin mapear</span>}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      <button className="btn btn-dark" disabled={busy}>{busy ? 'Publicando…' : (usandoVariantes ? `Publicar ${variantesML.length} variantes en Paris` : 'Publicar en Paris')}</button>
     </form>
   )
 }

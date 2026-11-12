@@ -65,6 +65,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(r("/paris/cuentas/{id}/precio/{sku}").route(put().to(paris::precio)))
             .service(r("/paris/cuentas/{id}/stock").route(post().to(paris::stock)))
             .service(r("/paris/cuentas/{id}/productos").route(get().to(paris::productos_paris)))
+            .service(r("/paris/cuentas/{id}/producto-estado").route(post().to(paris::estado_producto)))
             .service(r("/paris/cuentas/{id}/ordenes").route(get().to(paris::ordenes)))
             .service(r("/paris/cuentas/{id}/ordenes/{numero}").route(get().to(paris::orden)))
             .service(r("/paris/cuentas/{id}/sub-ordenes").route(get().to(paris::sub_ordenes)))

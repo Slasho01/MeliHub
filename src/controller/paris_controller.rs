@@ -43,7 +43,7 @@ fn extraer_sku(msg: &str) -> Option<String> {
     Some(rest[..j].to_string())
 }
 
-use crate::services::paris_push_services::{pick_price_type, pick_store};
+use crate::services::paris_push_services::{pick_price_type, pick_price_type_oferta, pick_store, VariantIn};
 
 /// Obtiene la cuenta validando que sea del vendedor autenticado.
 async fn cuenta_de(pool: &web::Data<DbPool>, org: Uuid, id: Uuid) -> ApiResult<ParisCuenta> {
@@ -140,15 +140,32 @@ pub struct PublicarReq {
     pub stock: Option<i32>,
     #[serde(default)]
     pub atributos: Vec<AttrReq>,
-    /// Atributos de la VARIANTE (color/talla…), requeridos por la familia.
+    /// Atributos de la VARIANTE (color/talla…), requeridos por la familia. Se usa como la
+    /// variante base cuando el producto NO tiene variaciones reales (`variantes` vacío).
     #[serde(default)]
     pub variante_atributos: Vec<AttrReq>,
     /// URLs de imágenes (Paris exige al menos una).
     #[serde(default)]
     pub imagenes: Vec<String>,
+    /// Variantes REALES (color/talla múltiples) de ML. Si viene con elementos, se publica una
+    /// variante de Paris por cada una; si viene vacío, se usa la variante base de arriba.
+    #[serde(default)]
+    pub variantes: Vec<VarianteReq>,
     /// Producto del hub (opcional): si viene, se guarda el mapeo para el sync continuo.
     #[serde(default)]
     pub producto_id: Option<Uuid>,
+}
+
+#[derive(Deserialize)]
+pub struct VarianteReq {
+    /// SKU único de la variante (ej. `{sku_base}-{idVariacionML}`).
+    pub sku_seller: String,
+    #[serde(default)]
+    pub atributos: Vec<AttrReq>,
+    #[serde(default)]
+    pub imagenes: Vec<String>,
+    #[serde(default)]
+    pub stock: i32,
 }
 
 /// Crea un producto en Paris armando el cuerpo con el builder.
@@ -158,8 +175,17 @@ pub async fn publicar(user: AuthVendedor, path: web::Path<Uuid>, body: web::Json
     let cuenta = cuenta_de(&pool, user.id, path.into_inner()).await?;
     let key = crate::crypto::descifrar(&cuenta.api_key);
     let r = body.into_inner();
+    // Variantes: reales (color/talla múltiples de ML) o una sola base si el producto es simple.
+    let variantes_in: Vec<VariantIn> = if !r.variantes.is_empty() {
+        r.variantes
+            .iter()
+            .map(|v| VariantIn { sku_seller: v.sku_seller.clone(), atributos: pares(&v.atributos), imagenes: v.imagenes.clone(), stock: v.stock })
+            .collect()
+    } else {
+        vec![VariantIn { sku_seller: r.ref_product.clone(), atributos: pares(&r.variante_atributos), imagenes: r.imagenes.clone(), stock: r.stock.unwrap_or(0) }]
+    };
     // 1) Crear el producto SIN precio (el precio inline en v2 crashea en Paris; se setea aparte).
-    let b = push::build_product(&r.name, &r.ref_product, &r.family_code, &r.categoria_id, r.precio, r.stock.unwrap_or(0), &pares(&r.atributos), &pares(&r.variante_atributos), &r.imagenes, None, None);
+    let b = push::build_product(&r.name, &r.ref_product, &r.family_code, &r.categoria_id, r.precio, &pares(&r.atributos), &variantes_in, None, None);
     let (resp, ya_existia) = match client.product_create(cuenta.sandbox, &key, &b).await {
         Ok(v) => (v, false),
         Err(e) => {
@@ -179,7 +205,7 @@ pub async fn publicar(user: AuthVendedor, path: web::Path<Uuid>, body: web::Json
     // Si ya existía, refrescamos su contenido (nombre/atributos/imágenes) con PATCH.
     if ya_existia {
         if let Some(psku) = &paris_sku {
-            let ub = push::build_update(&r.name, &r.ref_product, &r.family_code, &r.categoria_id, &pares(&r.atributos), &pares(&r.variante_atributos), &r.imagenes);
+            let ub = push::build_update(&r.name, &r.ref_product, &r.family_code, &r.categoria_id, &pares(&r.atributos), &variantes_in);
             let _ = client.product_update(cuenta.sandbox, &key, psku, &ub).await;
         }
     }
@@ -187,9 +213,11 @@ pub async fn publicar(user: AuthVendedor, path: web::Path<Uuid>, body: web::Json
     let mut precio_ok = false;
     if let Some(psku) = &paris_sku {
         let store = client.get_store_prices(cuenta.sandbox, &key).await.ok().and_then(|v| pick_store(&v));
-        let ptype = client.get_price_types(cuenta.sandbox, &key).await.ok().and_then(|v| pick_price_type(&v));
+        let pt = client.get_price_types(cuenta.sandbox, &key).await.ok();
+        let ptype = pt.as_ref().and_then(pick_price_type);
+        let ptype_of = pt.as_ref().and_then(pick_price_type_oferta);
         if store.is_some() && ptype.is_some() {
-            let pb = serde_json::json!({ "prices": push::build_precio(r.precio, store.as_deref(), ptype.as_deref()) });
+            let pb = serde_json::json!({ "prices": push::build_precios(r.precio, r.oferta, store.as_deref(), ptype.as_deref(), ptype_of.as_deref()) });
             precio_ok = client.update_price(cuenta.sandbox, &key, psku, &pb).await.is_ok();
         }
     }
@@ -197,12 +225,26 @@ pub async fn publicar(user: AuthVendedor, path: web::Path<Uuid>, body: web::Json
     // inline de la creación NO setea el stock vendible → hay que empujarlo aparte.
     let mut stock_ok = false;
     if let Some(psku) = &paris_sku {
-        let var_sku = resp
-            .pointer("/variants/0/sku")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string())
-            .unwrap_or_else(|| format!("{psku}-1"));
-        let sb = push::build_stock(&[(var_sku, r.stock.unwrap_or(0))]);
+        let items: Vec<(String, i32)> = match resp.get("variants").and_then(|v| v.as_array()) {
+            // Create normal: Paris devuelve las variantes con su sku real → stock por cada una.
+            Some(vars) if !vars.is_empty() => vars
+                .iter()
+                .filter_map(|v| {
+                    let vsku = v.get("sku").and_then(|x| x.as_str())?.to_string();
+                    let vseller = v.get("skuSeller").and_then(|x| x.as_str()).unwrap_or("");
+                    let st = variantes_in
+                        .iter()
+                        .find(|iv| iv.sku_seller == vseller)
+                        .or_else(|| variantes_in.first())
+                        .map(|iv| iv.stock)
+                        .unwrap_or(0);
+                    Some((vsku, st))
+                })
+                .collect(),
+            // Idempotente (la respuesta no trae variantes): asumimos la variante base {sku}-1.
+            _ => vec![(format!("{psku}-1"), variantes_in.first().map(|iv| iv.stock).unwrap_or(0))],
+        };
+        let sb = push::build_stock(&items);
         stock_ok = client.update_stock_sku_seller(cuenta.sandbox, &key, &sb).await.is_ok();
     }
     // 3) Mapeo para el sync continuo.
@@ -280,6 +322,23 @@ pub async fn productos_paris(user: AuthVendedor, path: web::Path<Uuid>, q: web::
     let key = crate::crypto::descifrar(&cuenta.api_key);
     let query = q.into_inner().query.unwrap_or_else(|| "limit=100&offset=0".to_string());
     Ok(HttpResponse::Ok().json(client.buscar_productos(cuenta.sandbox, &key, &query).await?))
+}
+
+#[derive(Deserialize)]
+pub struct EstadoProductoReq {
+    pub sku: String,
+    /// ENABLED (activar) · DISABLED (pausar) · DELETED (eliminar).
+    pub status: String,
+}
+
+/// Cambia el estado de un producto en Paris (Paris no tiene DELETE → se pausa/elimina por status).
+pub async fn estado_producto(user: AuthVendedor, path: web::Path<Uuid>, body: web::Json<EstadoProductoReq>, pool: web::Data<DbPool>, client: web::Data<ParisClient>) -> ApiResult<HttpResponse> {
+    user.exigir_edicion()?;
+    exigir_admin(&user)?;
+    let cuenta = cuenta_de(&pool, user.id, path.into_inner()).await?;
+    let key = crate::crypto::descifrar(&cuenta.api_key);
+    let r = body.into_inner();
+    Ok(HttpResponse::Ok().json(client.cambiar_estado_producto(cuenta.sandbox, &key, &r.sku, &r.status).await?))
 }
 
 // ----------------- Órdenes -----------------
