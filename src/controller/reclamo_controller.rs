@@ -70,6 +70,59 @@ pub async fn listar(
     Ok(HttpResponse::Ok().json(salida))
 }
 
+/// Lista las DEVOLUCIONES/cambios (reclamos cuyo `type` es return/change) de todas las cuentas.
+pub async fn devoluciones(
+    user: AuthVendedor,
+    q: web::Query<ReclamosQuery>,
+    pool: web::Data<DbPool>,
+    client: web::Data<MlClient>,
+    cfg: web::Data<Config>,
+) -> ApiResult<HttpResponse> {
+    if !cfg.ml.configurado() {
+        return Ok(HttpResponse::Ok().json(json!([])));
+    }
+    let (vid, admin, filtro) = (user.id, user.es_admin(), q.cuenta);
+    let cuentas = db::run(&pool, move |conn| ml_services::listar_cuentas(conn, vid, admin)).await?;
+    let cuentas: Vec<_> = cuentas.into_iter().filter(|c| filtro.map_or(true, |f| c.id == f)).collect();
+
+    let mut salida: Vec<Value> = Vec::new();
+    for cuenta in &cuentas {
+        let Ok(token) = crate::sync::access_token_valido(&pool, &client, cuenta).await else { continue };
+        let Ok(v) = client.claims_search(&token, 0).await else { continue };
+        let arr = v.get("data").or_else(|| v.get("results")).and_then(|x| x.as_array());
+        let Some(arr) = arr else { continue };
+        for c in arr {
+            let id = c.get("id").and_then(|x| x.as_i64()).unwrap_or(0);
+            if id == 0 {
+                continue;
+            }
+            let tipo = c.get("type").and_then(|x| x.as_str()).unwrap_or("");
+            // Nos quedamos solo con devoluciones y cambios.
+            if !(tipo.contains("return") || tipo.contains("change")) {
+                continue;
+            }
+            let comprador = c
+                .get("players")
+                .and_then(|p| p.as_array())
+                .and_then(|pl| pl.iter().find(|x| x.get("role").and_then(|r| r.as_str()) == Some("complainant")))
+                .and_then(|x| x.get("user_id").and_then(|u| u.as_i64()));
+            salida.push(json!({
+                "id": id,
+                "cuenta_id": cuenta.id,
+                "cuenta": cuenta.nickname.clone(),
+                "tipo": tipo,
+                "etapa": c.get("stage").and_then(|x| x.as_str()).unwrap_or(""),
+                "estado": c.get("status").and_then(|x| x.as_str()).unwrap_or(""),
+                "recurso_id": c.get("resource_id").and_then(|x| x.as_i64()).or_else(|| c.get("resource_id").and_then(|x| x.as_str()).and_then(|s| s.parse().ok())),
+                "motivo": c.get("reason_id").and_then(|x| x.as_str()).unwrap_or(""),
+                "fecha": c.get("date_created").and_then(|x| x.as_str()).unwrap_or(""),
+                "comprador_id": comprador,
+            }));
+        }
+    }
+    Ok(HttpResponse::Ok().json(salida))
+}
+
 /// Detalle de un reclamo + su conversación (mensajes).
 pub async fn detalle(
     user: AuthVendedor,

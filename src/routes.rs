@@ -35,6 +35,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(r("/ml/preguntas/responder").route(post().to(preg::responder)))
             // Reclamos (post-venta) de Mercado Libre
             .service(r("/ml/reclamos").route(get().to(reclamo::listar)))
+            .service(r("/ml/devoluciones").route(get().to(reclamo::devoluciones)))
             .service(r("/ml/reclamos/responder").route(post().to(reclamo::responder)))
             .service(r("/ml/reclamos/{cuenta}/{claim}").route(get().to(reclamo::detalle)))
             // Publicaciones de catálogo (competencia / Buy Box)

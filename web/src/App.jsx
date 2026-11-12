@@ -28,6 +28,8 @@ import Dte from './pages/Dte'
 import Reportes from './pages/Reportes'
 import Resumen from './pages/Resumen'
 import Correo from './pages/Correo'
+import Despachos from './pages/Despachos'
+import Devoluciones from './pages/Devoluciones'
 import Falabella from './pages/Falabella'
 import Paris from './pages/Paris'
 import Landing from './pages/Landing'
@@ -73,8 +75,10 @@ export default function App() {
           <NavLink to="/ventas" className={cls}>Ventas</NavLink>
           <NavLink to="/reportes" className={cls}>Reportes</NavLink>
           <NavLink to="/envios" className={cls}>Envíos</NavLink>
+          <NavLink to="/despachos" className={cls}>Despachos</NavLink>
           <NavLink to="/preguntas" className={cls}>Preguntas</NavLink>
           <NavLink to="/reclamos" className={cls}>Reclamos</NavLink>
+          <NavLink to="/devoluciones" className={cls}>Devoluciones</NavLink>
           <NavLink to="/catalogo" className={cls}>Catálogo (Buy Box)</NavLink>
           <div className="sidebar-section">Falabella</div>
           <NavLink to="/falabella" className={cls}>Cuentas</NavLink>
@@ -122,8 +126,10 @@ export default function App() {
           <Route path="/ventas" element={<Ventas />} />
           <Route path="/reportes" element={<Reportes />} />
           <Route path="/envios" element={<Envios />} />
+          <Route path="/despachos" element={<Despachos />} />
           <Route path="/preguntas" element={<Preguntas />} />
           <Route path="/reclamos" element={<Reclamos />} />
+          <Route path="/devoluciones" element={<Devoluciones />} />
           <Route path="/catalogo" element={<Catalogo />} />
           <Route path="/falabella" element={<Falabella me={me} />} />
           <Route path="/paris" element={me && !me.es_admin ? <Navigate to="/" replace /> : <Paris me={me} />} />
