@@ -1,4 +1,4 @@
-use crate::schema::{auditoria, cupones, facturacion, falabella_cuentas, falabella_publicaciones, historial_producto, miembros, ml_cuentas, notificaciones, ordenes_ml, paris_cuentas, paris_publicaciones, paris_ventas, productos, suscripciones, vendedores};
+use crate::schema::{auditoria, cupones, dte_cuentas, facturacion, falabella_cuentas, falabella_publicaciones, historial_producto, miembros, ml_cuentas, notificaciones, ordenes_ml, paris_cuentas, paris_publicaciones, paris_ventas, productos, suscripciones, vendedores};
 use chrono::NaiveDateTime;
 use diesel::prelude::*;
 use serde::Serialize;
@@ -178,6 +178,33 @@ pub struct NewParisCuenta {
     pub nombre: Option<String>,
     pub api_key: String,
     pub sandbox: bool,
+}
+
+#[derive(Queryable, Selectable, Serialize, Debug, Clone)]
+#[diesel(table_name = dte_cuentas, check_for_backend(diesel::pg::Pg))]
+pub struct DteCuenta {
+    pub id: Uuid,
+    pub vendedor_id: Uuid,
+    pub proveedor: String,
+    #[serde(skip_serializing)]
+    pub api_token: String,
+    pub rut_emisor: String,
+    pub razon_social: Option<String>,
+    pub certificacion: bool,
+    pub activa: bool,
+    pub created_at: NaiveDateTime,
+    pub updated_at: NaiveDateTime,
+}
+
+#[derive(Insertable)]
+#[diesel(table_name = dte_cuentas)]
+pub struct NewDteCuenta {
+    pub vendedor_id: Uuid,
+    pub proveedor: String,
+    pub api_token: String,
+    pub rut_emisor: String,
+    pub razon_social: Option<String>,
+    pub certificacion: bool,
 }
 
 #[derive(Insertable)]

@@ -23,6 +23,8 @@ import Preguntas from './pages/Preguntas'
 import Reclamos from './pages/Reclamos'
 import Catalogo from './pages/Catalogo'
 import Cotizador from './pages/Cotizador'
+import Conexiones from './pages/Conexiones'
+import Dte from './pages/Dte'
 import Falabella from './pages/Falabella'
 import Paris from './pages/Paris'
 import Landing from './pages/Landing'
@@ -63,6 +65,7 @@ export default function App() {
         <nav className="sidebar-nav" onClick={closeNavMobile}>
           <div className="sidebar-section">Mercado Libre</div>
           <NavLink to="/" end className={cls}>Cuentas</NavLink>
+          <NavLink to="/conexiones" className={cls}>Conexiones</NavLink>
           <NavLink to="/ventas" className={cls}>Ventas</NavLink>
           <NavLink to="/envios" className={cls}>Envíos</NavLink>
           <NavLink to="/preguntas" className={cls}>Preguntas</NavLink>
@@ -84,6 +87,7 @@ export default function App() {
           {me?.es_owner && <NavLink to="/plan" className={cls}>Plan</NavLink>}
           {me?.es_owner && <NavLink to="/suscripcion" className={cls}>Suscripción</NavLink>}
           {me?.es_owner && <NavLink to="/facturacion" className={cls}>Facturación</NavLink>}
+          {me?.es_owner && <NavLink to="/dte" className={cls}>Facturación SII</NavLink>}
           <NavLink to="/perfil" className={cls}>Mi cuenta</NavLink>
           {me?.es_admin && <NavLink to="/admin" className={cls}>Admin</NavLink>}
         </nav>
@@ -104,6 +108,7 @@ export default function App() {
         <main className="container">
         <Routes>
           <Route path="/" element={<Dashboard me={me} />} />
+          <Route path="/conexiones" element={<Conexiones />} />
           <Route path="/inventario" element={<Inventario me={me} />} />
           <Route path="/cotizador" element={<Cotizador />} />
           <Route path="/ganancias" element={<Ganancias me={me} />} />
@@ -121,6 +126,7 @@ export default function App() {
           <Route path="/plan" element={me && !me.es_owner ? <Navigate to="/" replace /> : <Plan />} />
           <Route path="/suscripcion" element={me && !me.es_owner ? <Navigate to="/" replace /> : <Suscripcion />} />
           <Route path="/facturacion" element={me && !me.es_owner ? <Navigate to="/" replace /> : <Facturacion />} />
+          <Route path="/dte" element={me && !me.es_owner ? <Navigate to="/" replace /> : <Dte />} />
           <Route path="/perfil" element={<Perfil />} />
           <Route path="/admin" element={me && !me.es_admin ? <Navigate to="/" replace /> : <Admin />} />
           <Route path="/legal" element={<Legal />} />

@@ -335,6 +335,24 @@ diesel::table! {
 }
 
 diesel::table! {
+    dte_cuentas (id) {
+        id -> Uuid,
+        vendedor_id -> Uuid,
+        #[max_length = 30]
+        proveedor -> Varchar,
+        api_token -> Text,
+        #[max_length = 20]
+        rut_emisor -> Varchar,
+        #[max_length = 255]
+        razon_social -> Nullable<Varchar>,
+        certificacion -> Bool,
+        activa -> Bool,
+        created_at -> Timestamp,
+        updated_at -> Timestamp,
+    }
+}
+
+diesel::table! {
     falabella_publicaciones (id) {
         id -> Uuid,
         producto_id -> Uuid,

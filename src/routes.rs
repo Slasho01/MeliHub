@@ -1,4 +1,4 @@
-use crate::controller::{admin_controller as adm, api_key_controller as keys, auth_controller as auth, auditoria_controller as audit, catalogo_controller as catalogo, cupon_controller as cupon, equipo_controller as equipo, facturacion_controller as fact, falabella_controller as fala, health, ml_controller as ml, paris_controller as paris, preguntas_controller as preg, reclamo_controller as reclamo, producto_controller as prod, pub_controller as pubc, saas_controller as saas, suscripcion_controller as subs, venta_controller as ventas};
+use crate::controller::{admin_controller as adm, api_key_controller as keys, auth_controller as auth, auditoria_controller as audit, catalogo_controller as catalogo, cupon_controller as cupon, dte_controller as dte, equipo_controller as equipo, facturacion_controller as fact, falabella_controller as fala, health, ml_controller as ml, paris_controller as paris, preguntas_controller as preg, reclamo_controller as reclamo, salud_controller as salud, producto_controller as prod, pub_controller as pubc, saas_controller as saas, suscripcion_controller as subs, venta_controller as ventas};
 use actix_web::web::{self, delete, get, post, put, resource as r};
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
@@ -81,6 +81,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(r("/paris/cuentas/{id}/etiqueta/{labelId}").route(get().to(paris::etiqueta)))
             .service(r("/paris/cuentas/{id}/razones-cancelacion").route(get().to(paris::razones_cancelacion)))
             // Catálogo unificado + gestor de inventario
+            .service(r("/salud/conexiones").route(get().to(salud::conexiones)))
             .service(r("/productos").route(get().to(prod::listar)))
             .service(r("/productos/inventario-masivo").route(post().to(prod::inventario_masivo)))
             .service(r("/productos/alertas").route(get().to(prod::alertas)))
@@ -90,6 +91,9 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(r("/productos/{id}/historial").route(get().to(prod::historial)))
             .service(r("/config/ganancias").route(get().to(prod::get_config)).route(put().to(prod::set_config)))
             .service(r("/cotizador/logo").route(get().to(prod::get_logo)).route(put().to(prod::set_logo)))
+            // Facturación electrónica (DTE / SII) — conexión del proveedor
+            .service(r("/dte/cuentas").route(get().to(dte::listar)).route(post().to(dte::conectar)))
+            .service(r("/dte/cuentas/{id}").route(delete().to(dte::desconectar)))
             // Ventas centralizadas (órdenes de ML) + dashboard con ganancia real
             .service(r("/ventas/sincronizar").route(post().to(ventas::sincronizar)))
             .service(r("/ventas/dashboard").route(get().to(ventas::dashboard)))
