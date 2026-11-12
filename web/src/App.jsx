@@ -22,6 +22,7 @@ import Envios from './pages/Envios'
 import Preguntas from './pages/Preguntas'
 import Reclamos from './pages/Reclamos'
 import Catalogo from './pages/Catalogo'
+import Cotizador from './pages/Cotizador'
 import Falabella from './pages/Falabella'
 import Paris from './pages/Paris'
 import Landing from './pages/Landing'
@@ -73,6 +74,7 @@ export default function App() {
           {me?.es_admin && <NavLink to="/paris" className={cls}>Cuentas</NavLink>}
           <div className="sidebar-section">Catálogo</div>
           <NavLink to="/inventario" className={cls}>Inventario</NavLink>
+          <NavLink to="/cotizador" className={cls}>Cotizador</NavLink>
           <NavLink to="/ganancias" className={cls}>Ganancias</NavLink>
           <div className="sidebar-section">Cuenta</div>
           {me?.es_owner && <NavLink to="/api-keys" className={cls}>API keys</NavLink>}
@@ -103,6 +105,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Dashboard me={me} />} />
           <Route path="/inventario" element={<Inventario me={me} />} />
+          <Route path="/cotizador" element={<Cotizador />} />
           <Route path="/ganancias" element={<Ganancias me={me} />} />
           <Route path="/ventas" element={<Ventas />} />
           <Route path="/envios" element={<Envios />} />
