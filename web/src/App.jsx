@@ -27,6 +27,7 @@ import Conexiones from './pages/Conexiones'
 import Dte from './pages/Dte'
 import Reportes from './pages/Reportes'
 import Resumen from './pages/Resumen'
+import Correo from './pages/Correo'
 import Falabella from './pages/Falabella'
 import Paris from './pages/Paris'
 import Landing from './pages/Landing'
@@ -93,6 +94,7 @@ export default function App() {
           {me?.es_owner && <NavLink to="/facturacion" className={cls}>Facturación</NavLink>}
           {me?.es_admin && <NavLink to="/dte" className={cls}>Facturación SII</NavLink>}
           <NavLink to="/perfil" className={cls}>Mi cuenta</NavLink>
+          {me?.es_admin && <NavLink to="/correo" className={cls}>Correo</NavLink>}
           {me?.es_admin && <NavLink to="/admin" className={cls}>Admin</NavLink>}
         </nav>
         <div className="sidebar-foot">
@@ -133,6 +135,7 @@ export default function App() {
           <Route path="/suscripcion" element={me && !me.es_owner ? <Navigate to="/" replace /> : <Suscripcion />} />
           <Route path="/facturacion" element={me && !me.es_owner ? <Navigate to="/" replace /> : <Facturacion />} />
           <Route path="/dte" element={me && !me.es_admin ? <Navigate to="/" replace /> : <Dte />} />
+          <Route path="/correo" element={me && !me.es_admin ? <Navigate to="/" replace /> : <Correo />} />
           <Route path="/perfil" element={<Perfil />} />
           <Route path="/admin" element={me && !me.es_admin ? <Navigate to="/" replace /> : <Admin />} />
           <Route path="/legal" element={<Legal />} />

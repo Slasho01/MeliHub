@@ -1,4 +1,4 @@
-use crate::schema::{auditoria, cupones, dte_cuentas, facturacion, falabella_cuentas, falabella_publicaciones, historial_producto, miembros, ml_cuentas, notificaciones, ordenes_ml, paris_cuentas, paris_publicaciones, paris_ventas, productos, suscripciones, vendedores};
+use crate::schema::{auditoria, config_correo, cupones, dte_cuentas, facturacion, falabella_cuentas, falabella_publicaciones, historial_producto, miembros, ml_cuentas, notificaciones, ordenes_ml, paris_cuentas, paris_publicaciones, paris_ventas, productos, suscripciones, vendedores};
 use chrono::NaiveDateTime;
 use diesel::prelude::*;
 use serde::Serialize;
@@ -178,6 +178,36 @@ pub struct NewParisCuenta {
     pub nombre: Option<String>,
     pub api_key: String,
     pub sandbox: bool,
+}
+
+#[derive(Queryable, Selectable, Serialize, Debug, Clone)]
+#[diesel(table_name = config_correo, check_for_backend(diesel::pg::Pg))]
+pub struct ConfigCorreo {
+    pub id: Uuid,
+    pub proveedor: String,
+    #[serde(skip_serializing)]
+    pub resend_api_key: Option<String>,
+    pub smtp_host: Option<String>,
+    pub smtp_port: i32,
+    pub smtp_usuario: Option<String>,
+    #[serde(skip_serializing)]
+    pub smtp_password: Option<String>,
+    pub smtp_tls: bool,
+    pub remitente: Option<String>,
+    pub updated_at: NaiveDateTime,
+}
+
+#[derive(Insertable, AsChangeset)]
+#[diesel(table_name = config_correo)]
+pub struct NewConfigCorreo {
+    pub proveedor: String,
+    pub resend_api_key: Option<String>,
+    pub smtp_host: Option<String>,
+    pub smtp_port: i32,
+    pub smtp_usuario: Option<String>,
+    pub smtp_password: Option<String>,
+    pub smtp_tls: bool,
+    pub remitente: Option<String>,
 }
 
 #[derive(Queryable, Selectable, Serialize, Debug, Clone)]

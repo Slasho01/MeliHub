@@ -270,7 +270,25 @@ pub fn start(pool: web::Data<DbPool>, client: web::Data<MlClient>, falabella: we
                 }
                 // Órdenes (ventas) — best-effort; requiere permiso de ventas en la app ML.
                 match crate::sync::sincronizar_ordenes(&pool, &client, cuenta).await {
-                    Ok(n) if n > 0 => log::info!("Cuenta {}: {n} órdenes sincronizadas", cuenta.ml_user_id),
+                    Ok(n) if n > 0 => {
+                        log::info!("Cuenta {}: {n} órdenes sincronizadas", cuenta.ml_user_id);
+                        // Aviso por correo de venta(s) nueva(s) — best-effort (si el correo está configurado).
+                        let (vid, nick) = (cuenta.vendedor_id, cuenta.nickname.clone().unwrap_or_default());
+                        let datos = db::run(&pool, move |conn| {
+                            use crate::schema::vendedores;
+                            use diesel::prelude::*;
+                            let email = vendedores::table.find(vid).select(vendedores::email).first::<String>(conn).optional()?;
+                            Ok::<_, crate::errors::ApiError>(email.zip(crate::services::correo_services::datos(conn)?))
+                        })
+                        .await
+                        .ok()
+                        .flatten();
+                        if let Some((email, datos)) = datos {
+                            let nick = nick.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;");
+                            let html = format!("<div style=\"font-family:system-ui,sans-serif;color:#1f2733\"><h2 style=\"color:#13233b\">🛒 Nueva(s) venta(s) en Mercado Libre</h2><p>Tienes <b>{n}</b> venta(s) nueva(s) en la cuenta <b>{nick}</b>.</p><p>Entra a MeliHub para despacharlas.</p></div>");
+                            let _ = crate::email::enviar(&datos, &email, "Nueva venta · MeliHub", &html).await;
+                        }
+                    }
                     Ok(_) => {}
                     Err(e) => log::warn!("Error sincronizando órdenes de {}: {e}", cuenta.ml_user_id),
                 }

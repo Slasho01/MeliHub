@@ -337,6 +337,25 @@ diesel::table! {
 }
 
 diesel::table! {
+    config_correo (id) {
+        id -> Uuid,
+        #[max_length = 10]
+        proveedor -> Varchar,
+        resend_api_key -> Nullable<Text>,
+        #[max_length = 255]
+        smtp_host -> Nullable<Varchar>,
+        smtp_port -> Int4,
+        #[max_length = 255]
+        smtp_usuario -> Nullable<Varchar>,
+        smtp_password -> Nullable<Text>,
+        smtp_tls -> Bool,
+        #[max_length = 255]
+        remitente -> Nullable<Varchar>,
+        updated_at -> Timestamp,
+    }
+}
+
+diesel::table! {
     dte_cuentas (id) {
         id -> Uuid,
         vendedor_id -> Uuid,

@@ -8,6 +8,7 @@ mod falabella;
 mod jobs;
 mod mailer;
 mod dte;
+mod email;
 mod ml;
 mod paris;
 mod repricing;

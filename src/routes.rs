@@ -1,4 +1,4 @@
-use crate::controller::{admin_controller as adm, api_key_controller as keys, auth_controller as auth, auditoria_controller as audit, catalogo_controller as catalogo, cupon_controller as cupon, dte_controller as dte, equipo_controller as equipo, facturacion_controller as fact, falabella_controller as fala, health, ml_controller as ml, paris_controller as paris, preguntas_controller as preg, reclamo_controller as reclamo, salud_controller as salud, producto_controller as prod, pub_controller as pubc, saas_controller as saas, suscripcion_controller as subs, venta_controller as ventas};
+use crate::controller::{admin_controller as adm, api_key_controller as keys, auth_controller as auth, auditoria_controller as audit, catalogo_controller as catalogo, correo_controller as correo, cupon_controller as cupon, dte_controller as dte, equipo_controller as equipo, facturacion_controller as fact, falabella_controller as fala, health, ml_controller as ml, paris_controller as paris, preguntas_controller as preg, reclamo_controller as reclamo, salud_controller as salud, producto_controller as prod, pub_controller as pubc, saas_controller as saas, suscripcion_controller as subs, venta_controller as ventas};
 use actix_web::web::{self, delete, get, post, put, resource as r};
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
@@ -127,6 +127,9 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(r("/admin/vendedores/{id}/plan").route(put().to(adm::set_plan)))
             .service(r("/admin/vendedores/{id}/estado").route(put().to(adm::set_estado)))
             .service(r("/admin/metricas").route(get().to(adm::metricas)))
+            // Configuración de correo (admin): proveedor Resend/SMTP + prueba
+            .service(r("/admin/correo").route(get().to(correo::obtener)).route(put().to(correo::guardar)))
+            .service(r("/admin/correo/test").route(post().to(correo::probar)))
             // Auditoría (actividad del equipo, dueño)
             .service(r("/auditoria").route(get().to(audit::listar)))
             // API keys (gestión por el vendedor autenticado)

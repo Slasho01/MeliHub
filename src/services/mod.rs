@@ -11,6 +11,7 @@ pub mod falabella_push_services;
 pub mod inventario_services;
 pub mod ml_services;
 pub mod paris_push_services;
+pub mod correo_services;
 pub mod dte_services;
 pub mod paris_services;
 pub mod pub_services;

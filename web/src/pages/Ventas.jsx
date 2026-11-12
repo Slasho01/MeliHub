@@ -13,6 +13,36 @@ function Kpi({ label, value, sub, tone }) {
   )
 }
 
+const fechaDia = (iso) => { const d = new Date(iso); return isNaN(d) ? iso : d.toLocaleDateString('es-CL', { weekday: 'short', day: '2-digit', month: 'short' }) }
+
+// Gráfico de barras interactivo: cada columna es una zona de hover (fácil de apuntar aunque la
+// barra sea fina) → muestra fecha, venta, ganancia y órdenes.
+function BarChart({ serie }) {
+  const [hi, setHi] = useState(null)
+  const maxV = Math.max(1, ...serie.map((d) => d.venta))
+  const d = hi != null ? serie[hi] : null
+  return (
+    <div style={{ position: 'relative' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 130 }}>
+        {serie.map((s, i) => (
+          <div key={s.dia} onMouseEnter={() => setHi(i)} onMouseLeave={() => setHi(null)}
+            style={{ flex: 1, minWidth: 4, alignSelf: 'stretch', display: 'flex', alignItems: 'flex-end', cursor: 'pointer' }}>
+            <div style={{ width: '100%', height: `${Math.max(2, Math.round((s.venta / maxV) * 100))}%`, borderRadius: '3px 3px 0 0', transition: 'background .1s', background: hi === i ? 'var(--accent)' : 'color-mix(in srgb, var(--accent) 72%, transparent)' }} />
+          </div>
+        ))}
+      </div>
+      {d && (
+        <div style={{ position: 'absolute', top: -6, left: `clamp(0px, calc(${((hi + 0.5) / serie.length) * 100}% - 75px), calc(100% - 150px))`, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 8, padding: '7px 11px', pointerEvents: 'none', boxShadow: '0 8px 20px rgba(0,0,0,.35)', minWidth: 140, zIndex: 5 }}>
+          <div className="xs muted" style={{ textTransform: 'capitalize' }}>{fechaDia(d.dia)}</div>
+          <div className="sm" style={{ fontWeight: 700 }}>{money(d.venta)}</div>
+          <div className="xs" style={{ color: d.ganancia >= 0 ? 'var(--ok)' : 'var(--bad, #d93025)' }}>ganancia {money(d.ganancia)}</div>
+          <div className="xs muted">{d.ordenes} orden(es)</div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function Ventas() {
   const [dias, setDias] = useState(30)
   const [dash, setDash] = useState(null)
@@ -35,8 +65,6 @@ export default function Ventas() {
       cargar()
     } catch (e) { setError(e.message) } finally { setSync(false) }
   }
-
-  const maxV = Math.max(1, ...(dash?.serie || []).map((d) => d.venta))
 
   return (
     <div className="stack">
@@ -70,15 +98,7 @@ export default function Ventas() {
             {dash.serie.length === 0 ? (
               <div className="empty">Sin ventas en el período.</div>
             ) : (
-              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 120 }}>
-                {dash.serie.map((d) => (
-                  <div
-                    key={d.dia}
-                    title={`${d.dia}: ${money(d.venta)} · ganancia ${money(d.ganancia)} · ${d.ordenes} orden(es)`}
-                    style={{ flex: 1, minWidth: 4, background: 'var(--accent)', height: `${Math.max(2, Math.round((d.venta / maxV) * 100))}%`, borderRadius: 3 }}
-                  />
-                ))}
-              </div>
+              <BarChart serie={dash.serie} />
             )}
           </div>
 
