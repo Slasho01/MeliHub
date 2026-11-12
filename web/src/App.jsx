@@ -20,6 +20,8 @@ import Suscripcion from './pages/Suscripcion'
 import Auditoria from './pages/Auditoria'
 import Envios from './pages/Envios'
 import Preguntas from './pages/Preguntas'
+import Reclamos from './pages/Reclamos'
+import Catalogo from './pages/Catalogo'
 import Falabella from './pages/Falabella'
 import Paris from './pages/Paris'
 import Landing from './pages/Landing'
@@ -63,6 +65,8 @@ export default function App() {
           <NavLink to="/ventas" className={cls}>Ventas</NavLink>
           <NavLink to="/envios" className={cls}>Envíos</NavLink>
           <NavLink to="/preguntas" className={cls}>Preguntas</NavLink>
+          <NavLink to="/reclamos" className={cls}>Reclamos</NavLink>
+          <NavLink to="/catalogo" className={cls}>Catálogo (Buy Box)</NavLink>
           <div className="sidebar-section">Falabella</div>
           <NavLink to="/falabella" className={cls}>Cuentas</NavLink>
           {me?.es_admin && <div className="sidebar-section">Paris</div>}
@@ -103,6 +107,8 @@ export default function App() {
           <Route path="/ventas" element={<Ventas />} />
           <Route path="/envios" element={<Envios />} />
           <Route path="/preguntas" element={<Preguntas />} />
+          <Route path="/reclamos" element={<Reclamos />} />
+          <Route path="/catalogo" element={<Catalogo />} />
           <Route path="/falabella" element={<Falabella me={me} />} />
           <Route path="/paris" element={me && !me.es_admin ? <Navigate to="/" replace /> : <Paris me={me} />} />
           <Route path="/api-keys" element={me && !me.es_owner ? <Navigate to="/" replace /> : <ApiKeys />} />

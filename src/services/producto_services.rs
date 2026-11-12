@@ -111,6 +111,8 @@ pub fn listar_historial(conn: &mut PgConnection, producto_id: Uuid, limit: i64) 
 pub struct ProductoFiltro {
     pub cuenta_id: Option<Uuid>,
     pub q: Option<String>,
+    /// Filtra por estado de la publicación en ML: "active" | "paused".
+    pub estado: Option<String>,
 }
 
 /// Catálogo del vendedor. Siempre acotado a sus cuentas conectadas: al desconectar
@@ -129,7 +131,24 @@ pub fn listar(
         q = q.filter(productos::ml_cuenta_id.eq(cid));
     }
     if let Some(txt) = filtro.q.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
-        q = q.filter(productos::titulo.ilike(format!("%{txt}%")));
+        // Busca por título, por el código ML (ml_item_id) o por el SKU PROPIO del vendedor
+        // (atributo SELLER_SKU de Mercado Libre). Si el vendedor no usa SKUs, ese atributo
+        // viene vacío y simplemente no matchea — no afecta la búsqueda por título/código.
+        let pat = format!("%{txt}%");
+        let sku_vendedor = diesel::dsl::sql::<diesel::sql_types::Bool>(
+            "EXISTS (SELECT 1 FROM jsonb_array_elements(COALESCE(productos.datos->'attributes','[]'::jsonb)) a WHERE a->>'id' = 'SELLER_SKU' AND a->>'value_name' ILIKE ",
+        )
+        .bind::<diesel::sql_types::Text, _>(pat.clone())
+        .sql(")");
+        q = q.filter(
+            productos::titulo
+                .ilike(pat.clone())
+                .or(productos::ml_item_id.ilike(pat))
+                .or(sku_vendedor),
+        );
+    }
+    if let Some(est) = filtro.estado.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        q = q.filter(productos::estado.eq(est.to_string()));
     }
     q.select(Producto::as_select())
         .order(productos::sincronizado_at.desc())

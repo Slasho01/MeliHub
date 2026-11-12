@@ -106,12 +106,24 @@ fn ficha(datos: &serde_json::Value) -> (Option<String>, Vec<Especificacion>) {
     (descripcion, especificaciones)
 }
 
-/// Mercado Libre sirve el thumbnail en baja (`-I`, ~1 KB). Forzamos https y la
-/// variante `-O` (original, mucho mejor calidad) para todos los canales.
+/// Mercado Libre sirve variantes por tamaño vía el sufijo final (`-I` 90px, `-O` 500px,
+/// `-W` 568px, `-F` 755px+ = la más grande). Forzamos https y la variante **`-F` en `.jpg`**
+/// para traer la mayor resolución en todos los canales (WooCommerce, Paris, etc.).
 fn mejor_imagen(url: Option<String>) -> Option<String> {
     url.map(|u| {
         let u = if let Some(r) = u.strip_prefix("http://") { format!("https://{r}") } else { u };
-        u.replace("-I.jpg", "-O.jpg").replace("-I.webp", "-O.webp").replace("-I.png", "-O.png")
+        if u.contains("mlstatic.com") {
+            // Reemplaza el sufijo de tamaño del final (`-X.ext`) por `-F.jpg`, dejando intacto
+            // el resto (incluido un posible prefijo de zoom `2X`). El guard de largo evita
+            // tocar URLs sin sufijo de tamaño.
+            if let Some(pos) = u.rfind('-') {
+                let tail = &u[pos + 1..];
+                if tail.len() <= 6 && tail.contains('.') {
+                    return format!("{}-F.jpg", &u[..pos]);
+                }
+            }
+        }
+        u.replace(".webp", ".jpg")
     })
 }
 
@@ -460,4 +472,24 @@ pub fn reportar_devolucion(conn: &mut PgConnection, key: &ApiKey, producto_id: U
             .map(|s| s.to_string());
         Ok(VentaAplicada { nuevo_stock: nuevo, ml_cuenta_id: p.ml_cuenta_id, ml_item_id: p.ml_item_id, user_product_id })
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mejor_imagen_maximiza_a_f() {
+        let f = |s: &str| mejor_imagen(Some(s.to_string())).unwrap();
+        // thumbnail -I (90px) -> -F (grande)
+        assert_eq!(f("https://http2.mlstatic.com/D_971195-MLC109_042026-I.webp"), "https://http2.mlstatic.com/D_971195-MLC109_042026-F.jpg");
+        // -O (500px) -> -F, y http -> https
+        assert_eq!(f("http://http2.mlstatic.com/D_123-O.jpg"), "https://http2.mlstatic.com/D_123-F.jpg");
+        // ya en -F: se mantiene (solo normaliza extensión)
+        assert_eq!(f("https://http2.mlstatic.com/D_123-F.webp"), "https://http2.mlstatic.com/D_123-F.jpg");
+        // conserva prefijo de zoom 2X
+        assert_eq!(f("https://http2.mlstatic.com/D_NQ_NP_2X_777-O.webp"), "https://http2.mlstatic.com/D_NQ_NP_2X_777-F.jpg");
+        // url sin sufijo de tamaño: no se rompe (solo webp->jpg)
+        assert_eq!(f("https://otro.com/foto.webp"), "https://otro.com/foto.jpg");
+    }
 }

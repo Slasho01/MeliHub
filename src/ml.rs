@@ -275,6 +275,62 @@ impl MlClient {
         Ok(())
     }
 
+    // ---------------- Reclamos (post-venta) ----------------
+
+    /// Busca los reclamos del vendedor (los más nuevos primero). El vendedor va implícito
+    /// en el token. Devuelve `{ data: [...], paging: {...} }`.
+    pub async fn claims_search(&self, access_token: &str, offset: i64) -> ApiResult<serde_json::Value> {
+        self.get(access_token, &format!("/post-purchase/v1/claims/search?sort=date_desc&offset={offset}&limit=50")).await
+    }
+
+    /// Detalle de un reclamo.
+    pub async fn claim_detail(&self, access_token: &str, claim_id: i64) -> ApiResult<serde_json::Value> {
+        self.get(access_token, &format!("/post-purchase/v1/claims/{claim_id}")).await
+    }
+
+    /// Mensajes (conversación) de un reclamo.
+    pub async fn claim_messages(&self, access_token: &str, claim_id: i64) -> ApiResult<serde_json::Value> {
+        self.get(access_token, &format!("/post-purchase/v1/claims/{claim_id}/messages")).await
+    }
+
+    /// Envía un mensaje al comprador dentro de un reclamo.
+    pub async fn claim_send_message(&self, access_token: &str, claim_id: i64, text: &str) -> ApiResult<()> {
+        let res = self
+            .http
+            .post(format!("{}/post-purchase/v1/claims/{claim_id}/actions/send-message", self.cfg.api_base))
+            .bearer_auth(access_token)
+            .header("Accept", "application/json")
+            .json(&serde_json::json!({ "message": text }))
+            .send()
+            .await
+            .map_err(|e| ApiError::internal(format!("Mercado Libre no respondió: {e}")))?;
+        let status = res.status();
+        if !status.is_success() {
+            let t = res.text().await.unwrap_or_default();
+            return Err(ApiError::bad_request(format!("Mercado Libre rechazó el mensaje ({status}): {t}")));
+        }
+        Ok(())
+    }
+
+    // ---------------- Catálogo (competencia / Buy Box) ----------------
+
+    /// IDs de las publicaciones del vendedor que son de **catálogo** (`catalog_listing=true`).
+    /// Devuelve `{ results: [item_ids], paging: {...} }`.
+    pub async fn catalog_item_ids(&self, access_token: &str, seller_id: i64, offset: i64) -> ApiResult<serde_json::Value> {
+        self.get(access_token, &format!("/users/{seller_id}/items/search?catalog_listing=true&offset={offset}&limit=50")).await
+    }
+
+    /// Estado de competencia de un ítem de catálogo: si gana/pierde la Buy Box, el precio del
+    /// ganador y el precio necesario para ganar. `GET /items/{id}/price_to_win?version=v2`.
+    pub async fn price_to_win(&self, access_token: &str, item_id: &str) -> ApiResult<serde_json::Value> {
+        self.get(access_token, &format!("/items/{item_id}/price_to_win?version=v2")).await
+    }
+
+    /// Detalle de un producto de catálogo (nombre, atributos). `GET /products/{id}`.
+    pub async fn catalog_product(&self, access_token: &str, product_id: &str) -> Option<serde_json::Value> {
+        self.get(access_token, &format!("/products/{product_id}")).await.ok()
+    }
+
     /// Detalle de un envío: `logistic_type` (fulfillment/self_service/…) y `status`.
     pub async fn get_shipment(&self, access_token: &str, shipment_id: i64) -> Option<serde_json::Value> {
         self.get(access_token, &format!("/shipments/{shipment_id}")).await.ok()
