@@ -7,6 +7,7 @@ mod errors;
 mod falabella;
 mod jobs;
 mod mailer;
+mod dte;
 mod ml;
 mod paris;
 mod twofa;

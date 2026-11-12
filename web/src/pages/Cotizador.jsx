@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { get, put, money } from '../api'
+import { get, put, post, money } from '../api'
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
 const hoy = () => new Date().toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit', year: 'numeric' })
@@ -19,11 +19,16 @@ export default function Cotizador() {
   const [iva, setIva] = useState(false)
   const [notas, setNotas] = useState('')
   const [buscar, setBuscar] = useState('')
+  const [dteCuentas, setDteCuentas] = useState([])
+  const [tipoDte, setTipoDte] = useState(39)
+  const [emitiendo, setEmitiendo] = useState(false)
+  const [emitRes, setEmitRes] = useState(null)
   const [error, setError] = useState('')
 
   useEffect(() => {
     get('/productos').then((d) => setProductos(Array.isArray(d) ? d : (d?.data || []))).catch(() => {})
     get('/cotizador/logo').then((r) => setLogo(r?.logo || '')).catch(() => {})
+    get('/dte/cuentas').then((d) => setDteCuentas(Array.isArray(d) ? d : [])).catch(() => {})
     let guardado = null
     try { guardado = JSON.parse(localStorage.getItem(LS) || 'null') } catch { /* ignore */ }
     if (guardado) setEmpresa((e) => ({ ...e, ...guardado }))
@@ -77,6 +82,22 @@ export default function Cotizador() {
   const neto = subtotal - descuento
   const ivaMonto = iva ? Math.round(neto * 0.19) : 0
   const total = neto + ivaMonto
+
+  const emitir = async () => {
+    if (!lineas.length) { setError('Agrega productos primero.'); return }
+    if (!dteCuentas.length) return
+    setEmitiendo(true); setError(''); setEmitRes(null)
+    try {
+      const r = await post('/dte/emitir', {
+        cuenta_id: dteCuentas[0].id,
+        tipo: Number(tipoDte),
+        receptor: { rut: cliente.rut, razon_social: cliente.nombre },
+        detalle: lineas.map((x) => ({ nombre: x.nombre || 'Ítem', cantidad: Number(x.cantidad) || 0, precio: Number(x.precio) || 0 })),
+        descuento_pct: Number(descuentoPct) || 0,
+      })
+      setEmitRes(r)
+    } catch (e) { setError(e.message) } finally { setEmitiendo(false) }
+  }
 
   const generarPDF = () => {
     if (!lineas.length) { setError('Agrega al menos un producto a la cotización.'); return }
@@ -270,6 +291,29 @@ export default function Cotizador() {
           <button className="btn btn-dark" style={{ marginTop: 6 }} onClick={generarPDF}>📄 Descargar PDF</button>
         </div>
       </div>
+
+      {dteCuentas.length > 0 && (
+        <div className="card stack" style={{ gap: 8 }}>
+          <b className="sm">Facturar en el SII</b>
+          <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <select className="input" style={{ width: 180 }} value={tipoDte} onChange={(e) => setTipoDte(e.target.value)}>
+              <option value={39}>Boleta electrónica</option>
+              <option value={33}>Factura electrónica</option>
+            </select>
+            <button className="btn btn-accent" disabled={emitiendo || !lineas.length} onClick={emitir}>
+              {emitiendo ? 'Emitiendo…' : `Emitir ${Number(tipoDte) === 33 ? 'factura' : 'boleta'}`}
+            </button>
+            <span className="muted xs">Emite con {dteCuentas[0].razon_social || dteCuentas[0].rut_emisor}{dteCuentas[0].certificacion ? ' · certificación' : ''}</span>
+          </div>
+          {emitRes && (
+            <div className="alert alert-ok">
+              Documento emitido{emitRes.folio ? ` (folio ${emitRes.folio})` : ''}.{' '}
+              {emitRes.pdf && <a href={emitRes.pdf} target="_blank" rel="noreferrer">Ver PDF</a>}
+            </div>
+          )}
+          <span className="muted xs">La <b>factura</b> puede requerir giro, dirección y comuna del cliente (se agregan cuando validemos la emisión).</span>
+        </div>
+      )}
     </div>
   )
 }

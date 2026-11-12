@@ -94,6 +94,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             // Facturación electrónica (DTE / SII) — conexión del proveedor
             .service(r("/dte/cuentas").route(get().to(dte::listar)).route(post().to(dte::conectar)))
             .service(r("/dte/cuentas/{id}").route(delete().to(dte::desconectar)))
+            .service(r("/dte/emitir").route(post().to(dte::emitir)))
             // Ventas centralizadas (órdenes de ML) + dashboard con ganancia real
             .service(r("/ventas/sincronizar").route(post().to(ventas::sincronizar)))
             .service(r("/ventas/dashboard").route(get().to(ventas::dashboard)))
