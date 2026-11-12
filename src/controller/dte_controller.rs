@@ -11,6 +11,14 @@ use serde::Deserialize;
 use serde_json::json;
 use uuid::Uuid;
 
+/// Por ahora la facturación SII está restringida al administrador (mientras se valida).
+fn exigir_admin(user: &AuthVendedor) -> ApiResult<()> {
+    if !user.es_admin() {
+        return Err(ApiError::forbidden("Por ahora la facturación electrónica está disponible solo para el administrador."));
+    }
+    Ok(())
+}
+
 #[derive(Deserialize)]
 pub struct ConectarDte {
     pub api_token: String,
@@ -21,6 +29,7 @@ pub struct ConectarDte {
 }
 
 pub async fn conectar(user: AuthVendedor, body: web::Json<ConectarDte>, pool: web::Data<DbPool>) -> ApiResult<HttpResponse> {
+    exigir_admin(&user)?;
     user.exigir_owner()?;
     let vid = user.id;
     let b = body.into_inner();
@@ -30,12 +39,14 @@ pub async fn conectar(user: AuthVendedor, body: web::Json<ConectarDte>, pool: we
 }
 
 pub async fn listar(user: AuthVendedor, pool: web::Data<DbPool>) -> ApiResult<HttpResponse> {
+    exigir_admin(&user)?;
     let vid = user.id;
     let l = db::run(&pool, move |conn| dte_services::listar(conn, vid)).await?;
     Ok(HttpResponse::Ok().json(l))
 }
 
 pub async fn desconectar(user: AuthVendedor, path: web::Path<Uuid>, pool: web::Data<DbPool>) -> ApiResult<HttpResponse> {
+    exigir_admin(&user)?;
     user.exigir_owner()?;
     let (vid, id) = (user.id, path.into_inner());
     db::run(&pool, move |conn| dte_services::desconectar(conn, id, vid)).await?;
@@ -56,6 +67,7 @@ pub struct EmitirReq {
 
 /// Emite una boleta/factura en el SII vía LibreDTE, a partir de los datos del cotizador/venta.
 pub async fn emitir(user: AuthVendedor, body: web::Json<EmitirReq>, pool: web::Data<DbPool>) -> ApiResult<HttpResponse> {
+    exigir_admin(&user)?;
     user.exigir_edicion()?;
     let r = body.into_inner();
     if r.detalle.is_empty() {

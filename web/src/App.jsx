@@ -87,7 +87,7 @@ export default function App() {
           {me?.es_owner && <NavLink to="/plan" className={cls}>Plan</NavLink>}
           {me?.es_owner && <NavLink to="/suscripcion" className={cls}>Suscripción</NavLink>}
           {me?.es_owner && <NavLink to="/facturacion" className={cls}>Facturación</NavLink>}
-          {me?.es_owner && <NavLink to="/dte" className={cls}>Facturación SII</NavLink>}
+          {me?.es_admin && <NavLink to="/dte" className={cls}>Facturación SII</NavLink>}
           <NavLink to="/perfil" className={cls}>Mi cuenta</NavLink>
           {me?.es_admin && <NavLink to="/admin" className={cls}>Admin</NavLink>}
         </nav>
@@ -126,7 +126,7 @@ export default function App() {
           <Route path="/plan" element={me && !me.es_owner ? <Navigate to="/" replace /> : <Plan />} />
           <Route path="/suscripcion" element={me && !me.es_owner ? <Navigate to="/" replace /> : <Suscripcion />} />
           <Route path="/facturacion" element={me && !me.es_owner ? <Navigate to="/" replace /> : <Facturacion />} />
-          <Route path="/dte" element={me && !me.es_owner ? <Navigate to="/" replace /> : <Dte />} />
+          <Route path="/dte" element={me && !me.es_admin ? <Navigate to="/" replace /> : <Dte />} />
           <Route path="/perfil" element={<Perfil />} />
           <Route path="/admin" element={me && !me.es_admin ? <Navigate to="/" replace /> : <Admin />} />
           <Route path="/legal" element={<Legal />} />
