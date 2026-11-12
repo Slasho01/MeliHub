@@ -11,6 +11,13 @@ const estadoInfo = (s) => ({
   unknown: ['Sin dato', 'var(--muted)'],
 }[s] || [s || '—', 'var(--muted)'])
 
+const Precio = ({ label, v, warn }) => (
+  <div style={{ minWidth: 76 }}>
+    <div className="muted xs">{label}</div>
+    <div style={{ fontWeight: 600, color: warn ? 'var(--bad, #d93025)' : undefined, whiteSpace: 'nowrap' }}>{v != null ? money(v) : '—'}</div>
+  </div>
+)
+
 export default function Catalogo() {
   const [cuenta, setCuenta] = useState('')
   const [cuentas, setCuentas] = useState([])
@@ -67,40 +74,38 @@ export default function Catalogo() {
       ) : rows.length === 0 ? (
         <div className="empty">No tienes publicaciones de catálogo.</div>
       ) : (
-        <>
+        <div className="stack" style={{ gap: 10 }}>
           <div className="sm muted">{rows.length} publicación(es) de catálogo · <b style={{ color: 'var(--ok)' }}>{ganando}</b> ganando la Buy Box</div>
-          <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
-            <table style={{ minWidth: 820 }}>
-              <thead><tr>
-                <th>Producto</th><th>Cuenta</th><th>Estado</th><th>Mi precio</th><th>Ganador</th><th>Para ganar</th><th></th>
-              </tr></thead>
-              <tbody>
-                {rows.map((r) => {
-                  const [txt, color] = estadoInfo(r.estado)
-                  const puedeIgualar = r.precio_para_ganar && r.estado !== 'winning'
-                  return (
-                    <tr key={`${r.cuenta_id}-${r.item_id}`}>
-                      <td style={{ maxWidth: 260 }}><b>{r.producto || r.item_id}</b><div className="muted xs">{r.item_id}</div></td>
-                      <td className="sm muted">{r.cuenta || '—'}</td>
-                      <td><span className="badge" style={{ color }}>{txt}</span></td>
-                      <td>{r.mi_precio != null ? money(r.mi_precio) : '—'}</td>
-                      <td>{r.precio_ganador != null ? money(r.precio_ganador) : '—'}</td>
-                      <td style={{ color: puedeIgualar ? 'var(--bad, #d93025)' : undefined }}>{r.precio_para_ganar != null ? money(r.precio_para_ganar) : '—'}</td>
-                      <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                        {puedeIgualar && (
-                          <button className="btn btn-sm btn-accent" disabled={busy === r.item_id} onClick={() => igualar(r)}>
-                            {busy === r.item_id ? '…' : 'Igualar'}
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
+          {rows.map((r) => {
+            const [txt, color] = estadoInfo(r.estado)
+            const puedeIgualar = r.precio_para_ganar && r.estado !== 'winning'
+            return (
+              <div key={`${r.cuenta_id}-${r.item_id}`} className="card" style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                {r.thumbnail ? (
+                  <img src={r.thumbnail} alt="" width="52" height="52" style={{ borderRadius: 8, objectFit: 'cover', flexShrink: 0, background: 'var(--bg)' }} />
+                ) : (
+                  <div style={{ width: 52, height: 52, borderRadius: 8, flexShrink: 0, background: 'var(--bg)', display: 'grid', placeItems: 'center' }} className="muted xs">s/f</div>
+                )}
+                <div style={{ flex: '1 1 200px', minWidth: 0 }}>
+                  <b style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.producto || r.item_id}</b>
+                  <div className="muted xs">{r.item_id} · {r.cuenta}</div>
+                  <span className="badge" style={{ color, marginTop: 4, display: 'inline-block' }}>{txt}</span>
+                </div>
+                <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', rowGap: 6 }}>
+                  <Precio label="Mi precio" v={r.mi_precio} />
+                  <Precio label="Ganador" v={r.precio_ganador} />
+                  <Precio label="Para ganar" v={r.precio_para_ganar} warn={puedeIgualar} />
+                </div>
+                {puedeIgualar && (
+                  <button className="btn btn-sm btn-accent" style={{ flexShrink: 0 }} disabled={busy === r.item_id} onClick={() => igualar(r)}>
+                    {busy === r.item_id ? '…' : 'Igualar'}
+                  </button>
+                )}
+              </div>
+            )
+          })}
           <p className="xs muted" style={{ margin: 0 }}>"Igualar" cambia el precio de tu publicación al precio para ganar — no crea publicaciones nuevas.</p>
-        </>
+        </div>
       )}
     </div>
   )

@@ -66,12 +66,18 @@ pub async fn listar(
         }
     }
 
-    // Nombre del producto desde la base local (sin llamar a ML por cada ítem).
-    let ids_para_titulo = item_ids.clone();
-    let titulos = db::run(&pool, move |conn| Ok::<_, ApiError>(producto_services::titulos_por_item(conn, vid, &ids_para_titulo))).await?;
+    // Nombre + foto del producto desde la base local (sin llamar a ML por cada ítem).
+    let ids = item_ids.clone();
+    let fichas = db::run(&pool, move |conn| Ok::<_, ApiError>(producto_services::fichas_por_item(conn, vid, &ids))).await?;
     for row in salida.iter_mut() {
         let item = row.get("item_id").and_then(|x| x.as_str()).unwrap_or("").to_string();
-        row["producto"] = json!(titulos.get(&item).cloned().unwrap_or(item));
+        match fichas.get(&item) {
+            Some((titulo, thumb)) => {
+                row["producto"] = json!(titulo);
+                row["thumbnail"] = json!(thumb);
+            }
+            None => row["producto"] = json!(item),
+        }
     }
     Ok(HttpResponse::Ok().json(salida))
 }

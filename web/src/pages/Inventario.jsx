@@ -127,11 +127,9 @@ export default function Inventario({ me }) {
         <div><h1>Inventario</h1><p className="muted sm" style={{ margin: 0 }}>Costo/precio propio, y control de la publicación en Mercado Libre.</p></div>
         <div className="row">
           <input className="input" style={{ width: 200 }} placeholder="Buscar por título o SKU…" value={q} onChange={(e) => setQ(e.target.value)} />
-          <select className="input" value={estado} onChange={(e) => setEstado(e.target.value)} title="Filtra por estado de la publicación">
-            <option value="">Todos los estados</option>
-            <option value="active">Activas</option>
-            <option value="paused">Pausadas</option>
-          </select>
+          <label className="row sm muted" style={{ gap: 6, whiteSpace: 'nowrap' }} title="Muestra solo las publicaciones pausadas">
+            <input type="checkbox" checked={estado === 'paused'} onChange={(e) => setEstado(e.target.checked ? 'paused' : '')} /> Solo pausadas
+          </label>
           <select className="input" value={cuenta} onChange={(e) => setCuenta(e.target.value)}>
             <option value="">Todas las cuentas</option>
             {cuentas.map((c) => <option key={c.id} value={c.id}>{c.nickname || `Usuario ${c.ml_user_id}`}</option>)}

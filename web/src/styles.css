@@ -34,9 +34,11 @@ button { font: inherit; cursor: pointer; }
   .spacer { display: none; }
   .topbar-menu > .btn, .topbar-menu > a.btn, .topbar-menu > a.btn-accent { width: 100%; text-align: center; }
   .container { padding: 16px; }
-  .card { overflow-x: auto; }                 /* tablas anchas hacen scroll dentro de su tarjeta */
+  .card { overflow-x: auto; -webkit-overflow-scrolling: touch; }   /* tablas anchas scrollean dentro de su tarjeta */
   table { font-size: 13px; }
-  th, td { padding: 8px 6px; }
+  th, td { padding: 8px 10px; white-space: nowrap; }          /* columnas legibles: la tabla scrollea en vez de amontonar el texto */
+  /* Títulos largos dentro de celdas: recortar con … en vez de romperlos en muchas líneas */
+  td b { display: inline-block; max-width: 48vw; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; }
   h1 { font-size: 20px; }
 }
 

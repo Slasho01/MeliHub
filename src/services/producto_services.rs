@@ -173,6 +173,21 @@ pub fn titulos_por_item(conn: &mut PgConnection, vendedor_id: Uuid, item_ids: &[
         .unwrap_or_default()
 }
 
+/// Mapa `item_id -> (título, thumbnail)` desde la base local (para mostrar ficha + foto).
+pub fn fichas_por_item(conn: &mut PgConnection, vendedor_id: Uuid, item_ids: &[String]) -> std::collections::HashMap<String, (String, Option<String>)> {
+    if item_ids.is_empty() {
+        return std::collections::HashMap::new();
+    }
+    productos::table
+        .inner_join(ml_cuentas::table)
+        .filter(ml_cuentas::vendedor_id.eq(vendedor_id))
+        .filter(productos::ml_item_id.eq_any(item_ids))
+        .select((productos::ml_item_id, productos::titulo, productos::thumbnail))
+        .load::<(String, String, Option<String>)>(conn)
+        .map(|rows| rows.into_iter().map(|(i, t, th)| (i, (t, th))).collect())
+        .unwrap_or_default()
+}
+
 // ----------------------------- Control de publicaciones (Fase A) -----------------------------
 
 /// Trae el producto y su cuenta ML (para el token), verificando propiedad.
