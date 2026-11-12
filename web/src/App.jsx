@@ -26,6 +26,7 @@ import Cotizador from './pages/Cotizador'
 import Conexiones from './pages/Conexiones'
 import Dte from './pages/Dte'
 import Reportes from './pages/Reportes'
+import Resumen from './pages/Resumen'
 import Falabella from './pages/Falabella'
 import Paris from './pages/Paris'
 import Landing from './pages/Landing'
@@ -65,7 +66,8 @@ export default function App() {
         </div>
         <nav className="sidebar-nav" onClick={closeNavMobile}>
           <div className="sidebar-section">Mercado Libre</div>
-          <NavLink to="/" end className={cls}>Cuentas</NavLink>
+          <NavLink to="/" end className={cls}>Resumen</NavLink>
+          <NavLink to="/cuentas" className={cls}>Cuentas</NavLink>
           <NavLink to="/conexiones" className={cls}>Conexiones</NavLink>
           <NavLink to="/ventas" className={cls}>Ventas</NavLink>
           <NavLink to="/reportes" className={cls}>Reportes</NavLink>
@@ -109,7 +111,8 @@ export default function App() {
         </header>
         <main className="container">
         <Routes>
-          <Route path="/" element={<Dashboard me={me} />} />
+          <Route path="/" element={<Resumen />} />
+          <Route path="/cuentas" element={<Dashboard me={me} />} />
           <Route path="/conexiones" element={<Conexiones />} />
           <Route path="/inventario" element={<Inventario me={me} />} />
           <Route path="/cotizador" element={<Cotizador />} />

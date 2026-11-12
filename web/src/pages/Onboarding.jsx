@@ -3,7 +3,7 @@ import { NavLink } from 'react-router-dom'
 import { get } from '../api'
 
 const PASOS = [
-  { key: 'ml_conectado', label: 'Conecta tu cuenta de Mercado Libre', to: '/', cta: 'Conectar' },
+  { key: 'ml_conectado', label: 'Conecta tu cuenta de Mercado Libre', to: '/cuentas', cta: 'Conectar' },
   { key: 'productos_sincronizados', label: 'Sincroniza tus publicaciones', to: '/inventario', cta: 'Inventario' },
   { key: 'costos_cargados', label: 'Carga costos para ver tu ganancia real', to: '/inventario', cta: 'Cargar costos' },
   { key: 'otro_canal', label: 'Conecta otro canal (Falabella / Paris)', to: '/falabella', cta: 'Conectar' },
