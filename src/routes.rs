@@ -84,7 +84,9 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(r("/paris/cuentas/{id}/etiqueta/{labelId}").route(get().to(paris::etiqueta)))
             .service(r("/paris/cuentas/{id}/razones-cancelacion").route(get().to(paris::razones_cancelacion)))
             // ---- Shopify (tienda propia) ----
-            .service(r("/shopify/cuentas").route(get().to(shopify::listar)).route(post().to(shopify::conectar)))
+            .service(r("/shopify/cuentas").route(get().to(shopify::listar)))
+            .service(r("/shopify/conectar").route(post().to(shopify::conectar)))
+            .service(r("/shopify/callback").route(get().to(shopify::callback)))
             .service(r("/shopify/cuentas/{id}").route(delete().to(shopify::desconectar)))
             .service(r("/shopify/publicar").route(post().to(shopify::publicar)))
             // Catálogo unificado + gestor de inventario

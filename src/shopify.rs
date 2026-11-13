@@ -4,7 +4,7 @@
 use crate::errors::{ApiError, ApiResult};
 use serde_json::{json, Value};
 
-const API_VER: &str = "2024-10";
+const API_VER: &str = "2026-10";
 
 pub struct ShopifyClient {
     http: reqwest::Client,
@@ -42,6 +42,22 @@ impl ShopifyClient {
             return Ok(Value::Null);
         }
         serde_json::from_str(&txt).map_err(|e| ApiError::internal(format!("Respuesta de Shopify inválida: {e}")))
+    }
+
+    /// OAuth: intercambia el `code` del callback por el access token de la tienda.
+    pub async fn exchange_code(&self, shop: &str, client_id: &str, client_secret: &str, code: &str) -> ApiResult<String> {
+        let url = format!("https://{}/admin/oauth/access_token", dominio(shop));
+        let body = json!({ "client_id": client_id, "client_secret": client_secret, "code": code });
+        let res = self.http.post(url).json(&body).send().await.map_err(|e| ApiError::internal(format!("Shopify no respondió: {e}")))?;
+        let status = res.status();
+        let txt = res.text().await.unwrap_or_default();
+        if !status.is_success() {
+            return Err(ApiError::bad_request(format!("Shopify rechazó el intercambio OAuth ({status}): {txt}")));
+        }
+        serde_json::from_str::<Value>(&txt)
+            .ok()
+            .and_then(|v| v.get("access_token").and_then(|x| x.as_str()).map(|s| s.to_string()))
+            .ok_or_else(|| ApiError::internal("Shopify no devolvió access_token"))
     }
 
     /// Verifica la conexión (datos de la tienda).

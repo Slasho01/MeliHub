@@ -20,10 +20,10 @@ export default function Shopify() {
 
   const conectar = async (e) => {
     e.preventDefault()
-    if (!form.shop_domain.trim() || !form.access_token.trim()) { setError('Ingresa el dominio y el Admin API access token.'); return }
+    if (!form.shop_domain.trim()) { setError('Ingresa el dominio de tu tienda (…myshopify.com).'); return }
     setBusy(true); setError(''); setMsg('')
-    try { await post('/shopify/cuentas', form); setMsg('Tienda conectada.'); setForm({ shop_domain: '', access_token: '', nombre: '' }); cargar() }
-    catch (err) { setError(err.message) } finally { setBusy(false) }
+    try { const r = await post('/shopify/conectar', { shop_domain: form.shop_domain }); window.location.href = r.authorize_url }
+    catch (err) { setError(err.message); setBusy(false) }
   }
   const desconectar = async (c) => {
     if (!window.confirm(`¿Desconectar ${c.nombre || c.shop_domain}?`)) return
@@ -58,17 +58,11 @@ export default function Shopify() {
       <div className="row" style={{ gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' }}>
         <form className="card stack" style={{ gap: 10, flex: '1 1 340px' }} onSubmit={conectar}>
           <b className="sm">Conectar tienda</b>
-          <label>Dominio de la tienda
+          <label>Dominio de tu tienda
             <input className="input" placeholder="mitienda.myshopify.com" value={form.shop_domain} onChange={(e) => setForm({ ...form, shop_domain: e.target.value })} />
           </label>
-          <label>Admin API access token
-            <input className="input" type="password" autoComplete="off" placeholder="shpat_..." value={form.access_token} onChange={(e) => setForm({ ...form, access_token: e.target.value })} />
-          </label>
-          <label>Nombre (opcional)
-            <input className="input" placeholder="Mi tienda" value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} />
-          </label>
-          <button className="btn btn-dark" disabled={busy}>{busy ? 'Conectando…' : 'Conectar'}</button>
-          <p className="muted xs" style={{ margin: 0 }}>En Shopify: Configuración → Apps → <b>Desarrollar apps</b> → crea una app, dale permisos de productos/inventario/pedidos y copia el <b>Admin API access token</b>.</p>
+          <button className="btn btn-dark" disabled={busy}>{busy ? 'Redirigiendo…' : 'Conectar con Shopify'}</button>
+          <p className="muted xs" style={{ margin: 0 }}>Te llevaremos a Shopify para <b>autorizar</b> la app; al volver, tu tienda queda conectada (sin copiar tokens a mano).</p>
         </form>
 
         <div className="card stack" style={{ gap: 8, flex: '1 1 280px' }}>
