@@ -129,6 +129,37 @@ pub async fn cancelar(user: AuthVendedor, pool: web::Data<DbPool>, mp: web::Data
 }
 
 /// Webhook de Mercado Pago: al cambiar el estado de la suscripción, ajusta el plan.
+/// Valida la firma `x-signature` de Mercado Pago (HMAC-SHA256 del manifest).
+fn firma_mp_valida(req: &HttpRequest, data_id: &str, secret: &str) -> bool {
+    use hmac::{Hmac, Mac};
+    use sha2::Sha256;
+    let h = |k: &str| req.headers().get(k).and_then(|v| v.to_str().ok()).unwrap_or("");
+    let sig = h("x-signature");
+    if sig.is_empty() {
+        return false;
+    }
+    let req_id = h("x-request-id");
+    let (mut ts, mut v1) = ("", "");
+    for part in sig.split(',') {
+        let mut it = part.splitn(2, '=');
+        match (it.next().map(str::trim), it.next().map(str::trim)) {
+            (Some("ts"), Some(val)) => ts = val,
+            (Some("v1"), Some(val)) => v1 = val,
+            _ => {}
+        }
+    }
+    if ts.is_empty() || v1.is_empty() {
+        return false;
+    }
+    let manifest = format!("id:{};request-id:{};ts:{};", data_id.to_lowercase(), req_id, ts);
+    let Ok(mut mac) = Hmac::<Sha256>::new_from_slice(secret.as_bytes()) else { return false };
+    mac.update(manifest.as_bytes());
+    let esperado: String = mac.finalize().into_bytes().iter().map(|b| format!("{b:02x}")).collect();
+    // Comparación en tiempo constante.
+    let (a, b) = (esperado.as_bytes(), v1.as_bytes());
+    a.len() == b.len() && a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
+}
+
 pub async fn webhook(
     req: HttpRequest,
     body: web::Bytes,
@@ -154,7 +185,12 @@ pub async fn webhook(
         .cloned()
         .or_else(|| body_json.pointer("/data/id").and_then(|v| v.as_str()).map(String::from));
 
-    log::info!("[MP webhook] topic={topic:?} id={id:?} query={q:?}");
+    // Firma: si hay secreto configurado, rechazamos webhooks que no vengan firmados por MP.
+    if !cfg.mp_webhook_secret.trim().is_empty() && !firma_mp_valida(&req, id.as_deref().unwrap_or(""), &cfg.mp_webhook_secret) {
+        log::warn!("[MP webhook] firma inválida — rechazado");
+        return HttpResponse::Unauthorized().finish();
+    }
+    log::info!("[MP webhook] topic={topic:?} id={id:?}");
     if let Some(id) = id {
         // Solo nos interesan las suscripciones (preapproval).
         if topic.is_empty() || topic.contains("preapproval") || topic.contains("subscription") {

@@ -12,6 +12,8 @@ pub struct Config {
     pub app_url: String,
     /// Access token de Mercado Pago (del dueño de MeliHub) para cobrar suscripciones.
     pub mp_access_token: String,
+    /// Secreto de la firma de webhooks de Mercado Pago (para validar `x-signature`).
+    pub mp_webhook_secret: String,
     /// API key de Resend (envío de correos por HTTP; Render bloquea SMTP).
     pub resend_api_key: String,
     /// Remitente de los correos (ej. "MeliHub <no-reply@tudominio.cl>").
@@ -56,6 +58,14 @@ impl Config {
         if jwt_secret.len() < 16 {
             return Err("JWT_SECRET debe tener al menos 16 caracteres".into());
         }
+        let app_url = var("APP_URL", "http://localhost:8090").trim_end_matches('/').to_string();
+        // Candado: en producción (APP_URL https y no localhost) exige TOKEN_ENC_KEY,
+        // si no los tokens de los canales quedarían en texto plano en la BD.
+        let es_prod = app_url.starts_with("https://") && !app_url.contains("localhost") && !app_url.contains("127.0.0.1");
+        let tiene_enc_key = std::env::var("TOKEN_ENC_KEY").ok().filter(|s| !s.trim().is_empty()).is_some();
+        if es_prod && !tiene_enc_key {
+            return Err("En producción debes definir TOKEN_ENC_KEY (cifra los tokens/secretos en reposo).".into());
+        }
         Ok(Config {
             database_url,
             jwt_secret,
@@ -73,8 +83,9 @@ impl Config {
                 api_base: var("ML_API_BASE", "https://api.mercadolibre.com").trim_end_matches('/').to_string(),
                 auth_base: var("ML_AUTH_BASE", "https://auth.mercadolibre.cl").trim_end_matches('/').to_string(),
             },
-            app_url: var("APP_URL", "http://localhost:8090").trim_end_matches('/').to_string(),
+            app_url,
             mp_access_token: var("MP_ACCESS_TOKEN", ""),
+            mp_webhook_secret: var("MP_WEBHOOK_SECRET", ""),
             resend_api_key: var("RESEND_API_KEY", ""),
             mail_from: var("MAIL_FROM", "MeliHub <onboarding@resend.dev>"),
             shopify_api_key: var("SHOPIFY_API_KEY", ""),

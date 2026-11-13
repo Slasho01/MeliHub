@@ -109,7 +109,7 @@ async fn main() -> std::io::Result<()> {
                     .index_file("index.html")
                     .default_handler(actix_web::dev::fn_service(|req: actix_web::dev::ServiceRequest| async {
                         let (http_req, _payload) = req.into_parts();
-                        let file = actix_files::NamedFile::open_async("./web/dist/index.html").await?;
+                        let file = actix_files::NamedFile::open("./web/dist/index.html")?;
                         let res = file.into_response(&http_req);
                         Ok(actix_web::dev::ServiceResponse::new(http_req, res))
                     })),
