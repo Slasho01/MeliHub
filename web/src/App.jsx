@@ -33,6 +33,7 @@ import Devoluciones from './pages/Devoluciones'
 import Shopify from './pages/Shopify'
 import Promociones from './pages/Promociones'
 import GlobalSearch from './GlobalSearch'
+import ThemeToggle from './ThemeToggle'
 import Falabella from './pages/Falabella'
 import Paris from './pages/Paris'
 import Landing from './pages/Landing'
@@ -42,7 +43,6 @@ export default function App() {
   const [auth, setAuth] = useState(() => !!getToken())
   const [me, setMe] = useState(null)
   const [menu, setMenu] = useState(() => typeof window !== 'undefined' && window.innerWidth > 900)
-  const [tema, setTema] = useState(() => { try { return localStorage.getItem('melihub_tema') || 'dark' } catch { return 'dark' } })
 
   const logout = () => { setToken(null); setAuth(false); setMe(null) }
 
@@ -51,8 +51,8 @@ export default function App() {
   }, [auth])
 
   useEffect(() => {
-    try { document.documentElement.dataset.theme = tema; localStorage.setItem('melihub_tema', tema) } catch { /* ignore */ }
-  }, [tema])
+    try { document.documentElement.dataset.theme = localStorage.getItem('melihub_tema') || 'dark' } catch { /* ignore */ }
+  }, [])
 
   if (!auth) return (
     <Routes>
@@ -126,7 +126,7 @@ export default function App() {
           <button className="menu-btn" aria-label="Menú" aria-expanded={menu} onClick={() => setMenu((v) => !v)}>☰</button>
           <div className="brand">Meli<b>Hub</b></div>
           <GlobalSearch />
-          <button className="menu-btn" title="Cambiar tema claro/oscuro" aria-label="Tema" onClick={() => setTema((t) => (t === 'dark' ? 'light' : 'dark'))}>{tema === 'dark' ? '☀️' : '🌙'}</button>
+          <ThemeToggle className="menu-btn" />
         </header>
         <main className="container">
         <Routes>

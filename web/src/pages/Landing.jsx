@@ -1,28 +1,35 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import ThemeToggle from '../ThemeToggle'
 
 const clp = (n) => '$' + n.toLocaleString('es-CL')
+
+const CANALES = ['Mercado Libre', 'Falabella', 'Shopify', 'WooCommerce', 'Tu tienda']
 
 const FEATURES = [
   { ic: '🔗', t: 'Todas tus cuentas juntas', d: 'Conecta cuantas cuentas de Mercado Libre quieras con OAuth y gestiónalas desde un solo panel.' },
   { ic: '📦', t: 'Inventario unificado', d: 'Un catálogo central con el stock, precio y estado de cada publicación de todas tus cuentas.' },
-  { ic: '🔄', t: 'Stock en dos vías', d: 'Vendes en tu tienda o en otro canal y el stock baja solo en Mercado Libre. Sin descuadres.' },
-  { ic: '💰', t: 'Ventas y ganancias', d: 'Mira las ventas del día de todas las cuentas, con comisiones y ganancia neta ya calculada.' },
-  { ic: '🏷️', t: 'Etiquetas de envío', d: 'Descarga juntas las etiquetas de Flex y Centro de envío (colecta) de todas tus cuentas, por día.' },
-  { ic: '🧩', t: 'Distribuye tu catálogo', d: 'Lleva tus productos a tu tienda web, WooCommerce y marketplaces con Mercado Libre como fuente única.' },
-  { ic: '🏬', t: 'Publica en Falabella', d: 'Conecta Falabella Seller y lleva tu catálogo de ML con precios, stock, imágenes y órdenes sincronizados. (Pro y Business)' },
+  { ic: '🔄', t: 'Stock en dos vías', d: 'Vendes en cualquier canal y el stock baja solo en Mercado Libre y el resto. Sin sobreventa ni descuadres.' },
+  { ic: '💰', t: 'Ganancia real', d: 'Ventas del día con la ganancia neta ya calculada: precio − comisión de ML − tu costo.' },
+  { ic: '⚡', t: 'Repricing automático', d: 'Mantén tus publicaciones de catálogo ganando la Buy Box, respetando siempre tu margen mínimo.' },
+  { ic: '🚚', t: 'Despachos unificados', d: 'Todos los pedidos por despachar de tus canales en una vista, con descarga de etiquetas.' },
+  { ic: '🏬', t: 'Multicanal de verdad', d: 'Lleva tu catálogo de ML a Falabella, Shopify y tu tienda (WooCommerce) con precio y stock sincronizados.' },
+  { ic: '📊', t: 'Reportes y dashboard', d: 'Rentabilidad por cuenta, productos más vendidos y evolución de ventas. Exporta el reporte en PDF.' },
 ]
 
 const EXTRAS = [
+  { ic: '💬', t: 'Post-venta completo', d: 'Preguntas, reclamos y devoluciones de todas tus cuentas, centralizados y con respuesta rápida.' },
+  { ic: '🏷️', t: 'Catálogo y promociones', d: 'Compite en la Buy Box y suma tus productos a las ofertas y campañas de Mercado Libre.' },
+  { ic: '🧾', t: 'Cotizador con PDF', d: 'Arma cotizaciones con productos de tu inventario y descárgalas en PDF con el logo de tu empresa.' },
   { ic: '👥', t: 'Equipo con roles', d: 'Suma operadores con permisos de operación o solo lectura. Revoca el acceso al instante.' },
   { ic: '🔐', t: 'Seguridad', d: 'Verificación en dos pasos (2FA), tokens cifrados y registro de actividad de tu equipo.' },
-  { ic: '⚡', t: 'Siempre al día', d: 'Sincroniza publicaciones, precios y ventas con un clic. El panel refleja el estado real en ML.' },
+  { ic: '🩺', t: 'Salud y alertas', d: 'Panel de conexiones que avisa si algo dejó de sincronizar, y alertas de stock bajo configurables.' },
 ]
 
 const STEPS = [
-  { n: 1, t: 'Conecta', d: 'Vincula tus cuentas de Mercado Libre en segundos con OAuth seguro.' },
-  { n: 2, t: 'Centraliza', d: 'Catálogo, stock, ventas y envíos de todas las cuentas en un solo lugar.' },
-  { n: 3, t: 'Distribuye', d: 'Vende en más canales y mantén el stock sincronizado automáticamente.' },
+  { n: 1, t: 'Conecta', d: 'Vincula tus cuentas de Mercado Libre y tus canales en segundos, de forma segura.' },
+  { n: 2, t: 'Centraliza', d: 'Catálogo, stock, ventas, post-venta y despachos de todo, en un solo lugar.' },
+  { n: 3, t: 'Vende más', d: 'Distribuye a más canales, gana la Buy Box y mantén el stock sincronizado solo.' },
 ]
 
 function Precio({ p, destacado, bullets }) {
@@ -47,9 +54,9 @@ function Precio({ p, destacado, bullets }) {
 export default function Landing() {
   const [menu, setMenu] = useState(false)
   const planes = [
-    { p: { nombre: 'Free', precio_mensual: 0, precio_anual: 0 }, bullets: ['1 cuenta de Mercado Libre', 'Hasta 50 productos', '1 canal de distribución', 'Sin marketplaces (Falabella en Pro)'] },
-    { p: { nombre: 'Pro', precio_mensual: 9990, precio_anual: 99900 }, destacado: true, bullets: ['3 cuentas de Mercado Libre', 'Hasta 1.000 productos', '3 canales de distribución', 'Falabella y marketplaces', 'Equipo y roles'] },
-    { p: { nombre: 'Business', precio_mensual: 29990, precio_anual: 299900 }, bullets: ['Cuentas ilimitadas', 'Productos ilimitados', 'Canales ilimitados', 'Falabella y marketplaces', 'Soporte prioritario'] },
+    { p: { nombre: 'Free', precio_mensual: 0, precio_anual: 0 }, bullets: ['1 cuenta de Mercado Libre', 'Hasta 50 productos', '1 canal de distribución', 'Sin otros marketplaces'] },
+    { p: { nombre: 'Pro', precio_mensual: 9990, precio_anual: 99900 }, destacado: true, bullets: ['3 cuentas de Mercado Libre', 'Hasta 1.000 productos', 'Falabella, Shopify y tu tienda', 'Repricing y promociones', 'Equipo y roles'] },
+    { p: { nombre: 'Business', precio_mensual: 29990, precio_anual: 299900 }, bullets: ['Cuentas ilimitadas', 'Productos ilimitados', 'Todos los canales', 'Reportes y post-venta', 'Soporte prioritario'] },
   ]
 
   return (
@@ -62,18 +69,19 @@ export default function Landing() {
           <a href="#como">Cómo funciona</a>
           <a href="#precios">Precios</a>
           <Link to="/docs">API</Link>
+          <ThemeToggle className="btn btn-sm" />
           <Link to="/login" className="btn btn-sm">Entrar</Link>
           <Link to="/login?r=1" className="btn btn-sm btn-accent">Crear cuenta</Link>
         </nav>
       </header>
 
       <section className="lp-hero">
-        <div className="lp-badge">Hub multi-cuenta de Mercado Libre</div>
-        <h1 className="lp-h1">Todas tus cuentas de<br /><span className="hl">Mercado Libre</span>, en un solo panel.</h1>
+        <div className="lp-badge">Hub multicanal para Mercado Libre y tu e-commerce</div>
+        <h1 className="lp-h1">Vende en todos lados,<br />controla todo desde <span className="hl">un panel</span>.</h1>
         <p className="lp-sub">
-          MeliHub centraliza el inventario, las ventas y los envíos de todas tus cuentas de Mercado Libre,
-          y te deja distribuir tu catálogo a tu tienda, WooCommerce y marketplaces como Falabella. Sincroniza
-          el stock en ambos sentidos, descarga etiquetas y gestiona todo desde un mismo lugar.
+          MeliHub centraliza el inventario, las ventas, el post-venta y los despachos de todas tus cuentas de
+          Mercado Libre, y distribuye tu catálogo a <b>Falabella, Shopify y tu tienda</b> (WooCommerce) con el
+          stock sincronizado en ambos sentidos. Repricing de Buy Box, reportes y cotizador, todo en un mismo lugar.
         </p>
         <div className="lp-cta">
           <Link to="/login?r=1" className="btn btn-accent btn-lg">Empezar gratis</Link>
@@ -81,20 +89,27 @@ export default function Landing() {
         </div>
         <p className="muted sm" style={{ marginTop: 10 }}>3 días de prueba · Sin tarjeta para empezar</p>
 
+        <div className="row" style={{ justifyContent: 'center', gap: 8, flexWrap: 'wrap', marginTop: 22 }}>
+          <span className="muted sm">Vende en:</span>
+          {CANALES.map((c) => (
+            <span key={c} style={{ border: '1px solid var(--line)', background: 'var(--surface)', borderRadius: 999, padding: '4px 12px', fontSize: 13, fontWeight: 600 }}>{c}</span>
+          ))}
+        </div>
+
         <div className="lp-mock">
           <div className="lp-mock-bar"><span /><span /><span /><em className="muted sm">Panel MeliHub</em></div>
           <div className="lp-mock-body">
             <div className="lp-mock-row"><b>Inventario</b><span className="tag tag-ok">Sincronizado</span><i className="muted sm">1.342 productos</i></div>
             <div className="lp-mock-row"><b>Ventas de hoy</b><span className="tag">18 pedidos</span><i className="muted sm">Ganancia $284.900</i></div>
-            <div className="lp-mock-row"><b>Envíos</b><span className="tag tag-ok">7 por imprimir</span><i className="muted sm">Flex + colecta</i></div>
-            <div className="lp-mock-row"><b>Canales</b><span className="tag">Tienda + WooCommerce + Falabella</span><i className="muted sm">Stock en 2 vías</i></div>
+            <div className="lp-mock-row"><b>Buy Box</b><span className="tag tag-ok">Ganando</span><i className="muted sm">Repricing activo</i></div>
+            <div className="lp-mock-row"><b>Canales</b><span className="tag">ML · Falabella · Shopify · Tu tienda</span><i className="muted sm">Stock en 2 vías</i></div>
           </div>
         </div>
       </section>
 
       <section id="features" className="lp-section">
-        <h2 className="lp-h2">Todo tu Mercado Libre, ordenado</h2>
-        <p className="lp-lead">Deja de saltar entre cuentas y pestañas. MeliHub reúne lo que importa en una sola vista.</p>
+        <h2 className="lp-h2">Todo tu e-commerce, ordenado</h2>
+        <p className="lp-lead">Deja de saltar entre cuentas, canales y pestañas. MeliHub reúne lo que importa en una sola vista.</p>
         <div className="lp-grid">
           {FEATURES.map((f, i) => (
             <div key={i} className="lp-card">
@@ -137,7 +152,7 @@ export default function Landing() {
       </section>
 
       <section className="lp-final">
-        <h2 className="lp-h2">Centraliza tu Mercado Libre hoy</h2>
+        <h2 className="lp-h2">Centraliza tu e-commerce hoy</h2>
         <p className="lp-lead">Conecta tu primera cuenta en menos de un minuto.</p>
         <Link to="/login?r=1" className="btn btn-accent btn-lg">Crear mi cuenta gratis</Link>
       </section>
