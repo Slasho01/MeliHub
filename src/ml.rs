@@ -324,6 +324,41 @@ impl MlClient {
         self.get(access_token, &format!("/seller-promotions/promotions/{promotion_id}/items?promotion_type={tipo}&app_version=v2")).await
     }
 
+    /// Agrega un ítem a una promoción (body: {promotion_id, promotion_type, deal_price}).
+    pub async fn agregar_item_promocion(&self, access_token: &str, item_id: &str, body: &serde_json::Value) -> ApiResult<serde_json::Value> {
+        let res = self
+            .http
+            .post(format!("{}/seller-promotions/items/{item_id}?app_version=v2", self.cfg.api_base))
+            .bearer_auth(access_token)
+            .header("Accept", "application/json")
+            .json(body)
+            .send()
+            .await
+            .map_err(|e| ApiError::internal(format!("Mercado Libre no respondió: {e}")))?;
+        let status = res.status();
+        let txt = res.text().await.unwrap_or_default();
+        if !status.is_success() {
+            return Err(ApiError::bad_request(format!("Mercado Libre rechazó la promoción ({status}): {txt}")));
+        }
+        Ok(serde_json::from_str(&txt).unwrap_or(serde_json::Value::Null))
+    }
+
+    /// Quita un ítem de una promoción.
+    pub async fn quitar_item_promocion(&self, access_token: &str, item_id: &str, promotion_id: &str, tipo: &str) -> ApiResult<()> {
+        let res = self
+            .http
+            .delete(format!("{}/seller-promotions/items/{item_id}?promotion_id={promotion_id}&promotion_type={tipo}&app_version=v2", self.cfg.api_base))
+            .bearer_auth(access_token)
+            .send()
+            .await
+            .map_err(|e| ApiError::internal(format!("Mercado Libre no respondió: {e}")))?;
+        if !res.status().is_success() {
+            let t = res.text().await.unwrap_or_default();
+            return Err(ApiError::bad_request(format!("Mercado Libre no pudo quitar el ítem: {t}")));
+        }
+        Ok(())
+    }
+
     // ---------------- Catálogo (competencia / Buy Box) ----------------
 
     /// IDs de las publicaciones del vendedor que son de **catálogo** (`catalog_listing=true`).

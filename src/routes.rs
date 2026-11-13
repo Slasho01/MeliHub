@@ -37,6 +37,9 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(r("/ml/reclamos").route(get().to(reclamo::listar)))
             .service(r("/ml/devoluciones").route(get().to(reclamo::devoluciones)))
             .service(r("/ml/promociones").route(get().to(promo::listar)))
+            .service(r("/ml/promociones/items").route(get().to(promo::items)))
+            .service(r("/ml/promociones/agregar").route(post().to(promo::agregar)))
+            .service(r("/ml/promociones/quitar").route(post().to(promo::quitar)))
             .service(r("/ml/reclamos/responder").route(post().to(reclamo::responder)))
             .service(r("/ml/reclamos/{cuenta}/{claim}").route(get().to(reclamo::detalle)))
             // Publicaciones de catálogo (competencia / Buy Box)
@@ -89,6 +92,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(r("/shopify/conectar").route(post().to(shopify::conectar)))
             .service(r("/shopify/callback").route(get().to(shopify::callback)))
             .service(r("/shopify/cuentas/{id}").route(delete().to(shopify::desconectar)))
+            .service(r("/shopify/cuentas/{id}/ordenes").route(get().to(shopify::ordenes)))
             .service(r("/shopify/publicar").route(post().to(shopify::publicar)))
             // Catálogo unificado + gestor de inventario
             .service(r("/salud/conexiones").route(get().to(salud::conexiones)))

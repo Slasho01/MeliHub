@@ -5,7 +5,7 @@ import { get, descargarArchivo } from '../api'
 const asArray = (x) => (Array.isArray(x) ? x : x ? [x] : [])
 const fechaCorta = (iso) => { if (!iso) return ''; const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleString('es-CL', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) }
 
-const CANAL = { ML: ['Mercado Libre', '#ffe600'], Falabella: ['Falabella', '#78be20'], Paris: ['Paris', '#2a6f97'] }
+const CANAL = { ML: ['Mercado Libre', '#ffe600'], Falabella: ['Falabella', '#78be20'], Paris: ['Paris', '#2a6f97'], Shopify: ['Shopify', '#96bf48'] }
 
 // ML: pendiente de despacho (hay etiqueta por imprimir / preparando).
 const IMPRIMIBLE = ['ready_to_print', 'printed', 'ready_to_ship', 'invoice_pending']
@@ -73,6 +73,23 @@ export default function Despachos() {
       }
     } catch { /* best-effort */ }
 
+    // --- Shopify (por cuenta) ---
+    try {
+      const cuentas = await get('/shopify/cuentas').catch(() => [])
+      for (const c of asArray(cuentas)) {
+        const d = await get(`/shopify/cuentas/${c.id}/ordenes`).catch(() => null)
+        for (const o of asArray(d?.orders)) {
+          const nombre = o.customer ? [o.customer.first_name, o.customer.last_name].filter(Boolean).join(' ') : (o.email || '—')
+          out.push({
+            key: `sh-${o.id}`, canal: 'Shopify', shop: c.shop_domain, orderId: o.id,
+            ref: o.name || o.order_number, cuenta: c.nombre || c.shop_domain,
+            comprador: nombre || '—', fecha: o.created_at, estado: o.fulfillment_status || 'Sin despachar',
+            tracking: '', pendiente: !o.fulfillment_status && o.cancelled_at == null,
+          })
+        }
+      }
+    } catch { /* best-effort */ }
+
     out.sort((a, b) => new Date(b.fecha || 0) - new Date(a.fecha || 0))
     setRows(out); setCargando(false)
   }
@@ -98,6 +115,7 @@ export default function Despachos() {
             <option value="ML">Mercado Libre</option>
             <option value="Falabella">Falabella</option>
             <option value="Paris">Paris</option>
+            <option value="Shopify">Shopify</option>
           </select>
           <button className="btn btn-sm" onClick={cargar} disabled={cargando}>↻ Actualizar</button>
         </div>
@@ -107,7 +125,7 @@ export default function Despachos() {
       {msg && <div className="alert alert-ok">{msg}</div>}
 
       <div className="row" style={{ gap: 10, flexWrap: 'wrap', alignItems: 'stretch' }}>
-        {['ML', 'Falabella', 'Paris'].map((c) => (
+        {['ML', 'Falabella', 'Paris', 'Shopify'].map((c) => (
           <div key={c} className="card" style={{ flex: '1 1 160px', borderLeft: `4px solid ${CANAL[c][1]}` }}>
             <div className="muted sm">{CANAL[c][0]}</div>
             <div style={{ fontSize: 24, fontWeight: 800 }}>{pendientes(c)}</div>
@@ -136,6 +154,7 @@ export default function Despachos() {
                     {r.canal === 'ML' && <button className="btn btn-sm" onClick={() => etiquetaML(r)}>⬇ Etiqueta</button>}
                     {r.canal === 'Falabella' && <><button className="btn btn-sm" onClick={() => etiquetaFala(r)}>⬇ Etiqueta</button>{' '}<NavLink to="/falabella" className="btn btn-sm">Gestionar</NavLink></>}
                     {r.canal === 'Paris' && <>{r.labelId && <button className="btn btn-sm" onClick={() => etiquetaParis(r)}>Etiqueta</button>}{' '}<NavLink to="/paris" className="btn btn-sm">Gestionar</NavLink></>}
+                    {r.canal === 'Shopify' && <a className="btn btn-sm" href={`https://${r.shop}/admin/orders/${r.orderId}`} target="_blank" rel="noreferrer">Gestionar</a>}
                   </td>
                 </tr>
               ))}

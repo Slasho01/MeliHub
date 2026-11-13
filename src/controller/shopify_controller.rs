@@ -126,6 +126,15 @@ pub async fn desconectar(user: AuthVendedor, path: web::Path<Uuid>, pool: web::D
     Ok(HttpResponse::Ok().json(json!({ "ok": true })))
 }
 
+/// Órdenes de una tienda Shopify (para la vista de despachos).
+pub async fn ordenes(user: AuthVendedor, path: web::Path<Uuid>, pool: web::Data<DbPool>) -> ApiResult<HttpResponse> {
+    let (vid, id) = (user.id, path.into_inner());
+    let cuenta = db::run(&pool, move |conn| shopify_services::cuenta_por_id(conn, id, vid)).await?;
+    let token = crate::crypto::descifrar(&cuenta.access_token);
+    let v = ShopifyClient::new().get_orders(&cuenta.shop_domain, &token).await?;
+    Ok(HttpResponse::Ok().json(v))
+}
+
 #[derive(Deserialize)]
 pub struct PublicarShopify {
     pub cuenta_id: Uuid,
