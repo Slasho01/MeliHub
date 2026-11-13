@@ -312,6 +312,18 @@ impl MlClient {
         Ok(())
     }
 
+    // ---------------- Promociones / campañas ----------------
+
+    /// Promociones y campañas en las que el vendedor puede participar (ofertas, deals, descuentos).
+    pub async fn promociones(&self, access_token: &str, seller_id: i64) -> ApiResult<serde_json::Value> {
+        self.get(access_token, &format!("/seller-promotions/users/{seller_id}?app_version=v2")).await
+    }
+
+    /// Ítems de una promoción (elegibles / participando).
+    pub async fn promocion_items(&self, access_token: &str, promotion_id: &str, tipo: &str) -> ApiResult<serde_json::Value> {
+        self.get(access_token, &format!("/seller-promotions/promotions/{promotion_id}/items?promotion_type={tipo}&app_version=v2")).await
+    }
+
     // ---------------- Catálogo (competencia / Buy Box) ----------------
 
     /// IDs de las publicaciones del vendedor que son de **catálogo** (`catalog_listing=true`).

@@ -31,6 +31,7 @@ import Correo from './pages/Correo'
 import Despachos from './pages/Despachos'
 import Devoluciones from './pages/Devoluciones'
 import Shopify from './pages/Shopify'
+import Promociones from './pages/Promociones'
 import Falabella from './pages/Falabella'
 import Paris from './pages/Paris'
 import Landing from './pages/Landing'
@@ -81,6 +82,7 @@ export default function App() {
           <NavLink to="/reclamos" className={cls}>Reclamos</NavLink>
           <NavLink to="/devoluciones" className={cls}>Devoluciones</NavLink>
           <NavLink to="/catalogo" className={cls}>Catálogo (Buy Box)</NavLink>
+          <NavLink to="/promociones" className={cls}>Promociones</NavLink>
           <div className="sidebar-section">Falabella</div>
           <NavLink to="/falabella" className={cls}>Cuentas</NavLink>
           {me?.es_admin && <div className="sidebar-section">Paris</div>}
@@ -135,6 +137,7 @@ export default function App() {
           <Route path="/devoluciones" element={<Devoluciones />} />
           <Route path="/shopify" element={<Shopify />} />
           <Route path="/catalogo" element={<Catalogo />} />
+          <Route path="/promociones" element={<Promociones />} />
           <Route path="/falabella" element={<Falabella me={me} />} />
           <Route path="/paris" element={me && !me.es_admin ? <Navigate to="/" replace /> : <Paris me={me} />} />
           <Route path="/api-keys" element={me && !me.es_owner ? <Navigate to="/" replace /> : <ApiKeys />} />

@@ -54,6 +54,29 @@ pub fn desconectar(conn: &mut PgConnection, id: Uuid, vendedor_id: Uuid) -> ApiR
     Ok(())
 }
 
+/// Inserta la orden si es nueva; devuelve true si no se había procesado (para descontar stock).
+pub fn marcar_venta_si_nueva(conn: &mut PgConnection, order_id: &str, cuenta_id: Uuid) -> ApiResult<bool> {
+    use crate::schema::shopify_ventas;
+    let n = diesel::insert_into(shopify_ventas::table)
+        .values((shopify_ventas::order_id.eq(order_id), shopify_ventas::cuenta_id.eq(cuenta_id)))
+        .on_conflict_do_nothing()
+        .execute(conn)?;
+    Ok(n > 0)
+}
+
+/// Producto del hub por SKU (= ml_item_id, que usamos al publicar en Shopify).
+pub fn producto_de_sku(conn: &mut PgConnection, vendedor_id: Uuid, sku: &str) -> ApiResult<Option<Uuid>> {
+    use crate::schema::{ml_cuentas, productos};
+    let id: Option<Uuid> = productos::table
+        .inner_join(ml_cuentas::table)
+        .filter(ml_cuentas::vendedor_id.eq(vendedor_id))
+        .filter(productos::ml_item_id.eq(sku))
+        .select(productos::id)
+        .first(conn)
+        .optional()?;
+    Ok(id)
+}
+
 pub fn todas_cuentas(conn: &mut PgConnection) -> ApiResult<Vec<ShopifyCuenta>> {
     shopify_cuentas::table.filter(shopify_cuentas::activa.eq(true)).select(ShopifyCuenta::as_select()).load(conn).map_err(ApiError::from)
 }

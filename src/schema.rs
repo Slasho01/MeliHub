@@ -368,6 +368,16 @@ diesel::table! {
 }
 
 diesel::table! {
+    shopify_ventas (id) {
+        id -> Uuid,
+        cuenta_id -> Uuid,
+        #[max_length = 40]
+        order_id -> Varchar,
+        created_at -> Timestamp,
+    }
+}
+
+diesel::table! {
     config_correo (id) {
         id -> Uuid,
         #[max_length = 10]

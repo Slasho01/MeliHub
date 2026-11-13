@@ -236,6 +236,55 @@ async fn sincronizar_paris(pool: &web::Data<DbPool>, paris: &web::Data<ParisClie
     }
 }
 
+/// Trae órdenes de Shopify y descuenta stock en el hub (y lo empuja a ML). Best-effort.
+async fn procesar_ventas_shopify(pool: &web::Data<DbPool>, ml: &web::Data<MlClient>, ml_ok: bool) {
+    let client = crate::shopify::ShopifyClient::new();
+    let cuentas = match db::run(pool, crate::services::shopify_services::todas_cuentas).await {
+        Ok(c) => c,
+        Err(_) => return,
+    };
+    for cuenta in cuentas {
+        let token = crate::crypto::descifrar(&cuenta.access_token);
+        let v = match client.get_orders(&cuenta.shop_domain, &token).await {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        for ord in como_lista(v.get("orders")) {
+            let Some(oid) = ord.get("id").map(|x| x.as_i64().map(|n| n.to_string()).unwrap_or_else(|| x.to_string())) else { continue };
+            let (cid, oid2) = (cuenta.id, oid.clone());
+            let nueva = db::run(pool, move |conn| crate::services::shopify_services::marcar_venta_si_nueva(conn, &oid2, cid)).await.unwrap_or(false);
+            if !nueva {
+                continue;
+            }
+            let mut conteo: HashMap<String, i32> = HashMap::new();
+            for it in como_lista(ord.get("line_items")) {
+                let qty = it.get("quantity").and_then(|v| v.as_i64()).unwrap_or(1) as i32;
+                if let Some(sku) = it.get("sku").and_then(|v| v.as_str()).filter(|s| !s.is_empty()) {
+                    *conteo.entry(sku.to_string()).or_insert(0) += qty.max(0);
+                }
+            }
+            let vid = cuenta.vendedor_id;
+            let msg = format!("Orden {oid} en Shopify.");
+            let _ = db::run(pool, move |conn| {
+                crate::services::saas_services::notificar(conn, vid, "shopify_venta", "Nueva venta en Shopify", Some(msg));
+                Ok::<_, crate::errors::ApiError>(())
+            })
+            .await;
+            for (sku, qty) in conteo {
+                let (vid2, sku2) = (cuenta.vendedor_id, sku.clone());
+                let pid = db::run(pool, move |conn| crate::services::shopify_services::producto_de_sku(conn, vid2, &sku2)).await.ok().flatten();
+                let Some(pid) = pid else { continue };
+                if let Ok(venta) = db::run(pool, move |conn| crate::services::pub_services::aplicar_venta_externa(conn, pid, qty, "venta_shopify")).await {
+                    log::info!("Shopify venta {oid}: {sku} -{qty} → stock {}", venta.nuevo_stock);
+                    if ml_ok {
+                        crate::sync::empujar_stock_ml(pool, ml, &venta).await;
+                    }
+                }
+            }
+        }
+    }
+}
+
 /// Empuja stock/precio del hub a Shopify para las publicaciones mapeadas (best-effort).
 async fn sincronizar_shopify(pool: &web::Data<DbPool>) {
     let client = crate::shopify::ShopifyClient::new();
@@ -323,7 +372,8 @@ pub fn start(pool: web::Data<DbPool>, client: web::Data<MlClient>, falabella: we
             // Paris: ventas → descuentan stock (y se empuja a ML), y empujamos stock al canal.
             procesar_ventas_paris(&pool, &client, &paris, true).await;
             sincronizar_paris(&pool, &paris).await;
-            // Shopify: empujar stock/precio del hub a las tiendas conectadas.
+            // Shopify: traer ventas (descuenta stock + empuja a ML) y empujar stock/precio.
+            procesar_ventas_shopify(&pool, &client, true).await;
             sincronizar_shopify(&pool).await;
             // Repricing automático de Buy Box (solo vendedores que lo activaron).
             if let Ok(vends) = db::run(&pool, |conn| crate::services::inventario_services::vendedores_con_repricing(conn)).await {

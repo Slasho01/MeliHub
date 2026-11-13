@@ -11,6 +11,7 @@ pub mod equipo_controller;
 pub mod falabella_controller;
 pub mod ml_controller;
 pub mod paris_controller;
+pub mod promo_controller;
 pub mod reclamo_controller;
 pub mod salud_controller;
 pub mod shopify_controller;
