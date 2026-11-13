@@ -94,7 +94,7 @@ export default function Resumen() {
     get('/ventas/dashboard?dias=30').then(setDash).catch(() => {})
     Promise.all([get('/ventas/dashboard?dias=60').catch(() => null), get('/ventas/dashboard?dias=30').catch(() => null)])
       .then(([d60, d30]) => { if (d60 && d30) setPrev({ venta_total: d60.venta_total - d30.venta_total, ganancia_total: d60.ganancia_total - d30.ganancia_total, ordenes: d60.ordenes - d30.ordenes }) })
-    get('/productos/alertas?umbral=5').then((d) => setAlertas(Array.isArray(d) ? d : [])).catch(() => {})
+    get('/productos/alertas').then((d) => setAlertas(Array.isArray(d) ? d : [])).catch(() => {})
     get('/salud/conexiones').then((d) => setConex(Array.isArray(d) ? d : [])).catch(() => {})
     get('/ml/preguntas').then((d) => setPreguntas(Array.isArray(d) ? d : [])).catch(() => {})
   }, [])

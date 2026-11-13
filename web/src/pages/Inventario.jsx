@@ -21,7 +21,7 @@ export default function Inventario({ me }) {
   const [cuentas, setCuentas] = useState([])
   const [error, setError] = useState(null)
   const [msg, setMsg] = useState(null)
-  const [q, setQ] = useState('')
+  const [q, setQ] = useState(() => { try { return new URLSearchParams(window.location.search).get('q') || '' } catch { return '' } })
   const [cuenta, setCuenta] = useState('')
   const [verActivas, setVerActivas] = useState(true)
   const [verPausadas, setVerPausadas] = useState(true)
@@ -31,6 +31,12 @@ export default function Inventario({ me }) {
   const [bulk, setBulk] = useState({ costo: '', precio_jarstore: '' })
   const [alertas, setAlertas] = useState([])
   const [verAlertas, setVerAlertas] = useState(false)
+  const [umbral, setUmbral] = useState(5)
+  const guardarUmbral = async (v) => {
+    const n = Math.max(0, Number(v) || 0)
+    setUmbral(n)
+    try { await put('/config/alerta-stock', { umbral: n }); get('/productos/alertas').then(setAlertas).catch(() => {}) } catch { /* ignore */ }
+  }
   const [ocultarSinStock, setOcultarSinStock] = useState(true)
   const [hist, setHist] = useState({})   // { [id]: [...] }
   const [histId, setHistId] = useState(null)
@@ -55,7 +61,8 @@ export default function Inventario({ me }) {
   }
   useEffect(() => {
     get('/ml/cuentas').then(setCuentas).catch(() => {})
-    get('/productos/alertas?umbral=5').then(setAlertas).catch(() => {})
+    get('/productos/alertas').then(setAlertas).catch(() => {})
+    get('/config/alerta-stock').then((r) => setUmbral(r.umbral ?? 5)).catch(() => {})
   }, [])
   useEffect(() => { cargar() }, [q, cuenta, verActivas, verPausadas]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -159,7 +166,9 @@ export default function Inventario({ me }) {
       {alertas.length > 0 && (
         <div className="card" style={{ borderColor: 'var(--warn)' }}>
           <div className="row between" style={{ cursor: 'pointer' }} onClick={() => setVerAlertas((v) => !v)}>
-            <b style={{ color: 'var(--warn)' }}>⚠️ {alertas.length} producto(s) con stock bajo (≤ 5)</b>
+            <b style={{ color: 'var(--warn)' }}>⚠️ {alertas.length} producto(s) con stock bajo (≤&nbsp;
+              <input type="number" min="0" value={umbral} onClick={(e) => e.stopPropagation()} onChange={(e) => setUmbral(e.target.value)} onBlur={(e) => guardarUmbral(e.target.value)}
+                style={{ width: 48, background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 6, color: 'var(--ink)', padding: '1px 5px', fontSize: 13 }} />)</b>
             <span className="link-btn">{verAlertas ? 'ocultar' : 'ver'}</span>
           </div>
           {verAlertas && (

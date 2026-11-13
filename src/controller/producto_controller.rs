@@ -104,9 +104,35 @@ pub struct AlertaQuery {
 /// Productos activos con stock (depósito) ≤ umbral (5 por defecto). Para alertas de quiebre.
 pub async fn alertas(user: AuthVendedor, q: web::Query<AlertaQuery>, pool: web::Data<DbPool>) -> ApiResult<HttpResponse> {
     let (vid, admin) = (user.id, user.es_admin());
-    let umbral = q.into_inner().umbral.unwrap_or(5).max(0);
-    let items = db::run(&pool, move |conn| prod::stock_bajo(conn, vid, admin, umbral)).await?;
+    let umbral_q = q.into_inner().umbral;
+    let items = db::run(&pool, move |conn| {
+        // Sin umbral explícito → usa el configurado por el vendedor.
+        let umbral = match umbral_q {
+            Some(u) => u.max(0),
+            None => inv::alerta_stock(conn, vid)?,
+        };
+        prod::stock_bajo(conn, vid, admin, umbral)
+    })
+    .await?;
     Ok(HttpResponse::Ok().json(items))
+}
+
+pub async fn get_alerta_stock(user: AuthVendedor, pool: web::Data<DbPool>) -> ApiResult<HttpResponse> {
+    let vid = user.id;
+    let u = db::run(&pool, move |conn| inv::alerta_stock(conn, vid)).await?;
+    Ok(HttpResponse::Ok().json(json!({ "umbral": u })))
+}
+
+#[derive(Deserialize)]
+pub struct AlertaStockBody {
+    pub umbral: i32,
+}
+
+pub async fn set_alerta_stock(user: AuthVendedor, body: web::Json<AlertaStockBody>, pool: web::Data<DbPool>) -> ApiResult<HttpResponse> {
+    user.exigir_edicion()?;
+    let (vid, u) = (user.id, body.into_inner().umbral);
+    let v = db::run(&pool, move |conn| inv::set_alerta_stock(conn, vid, u)).await?;
+    Ok(HttpResponse::Ok().json(json!({ "umbral": v })))
 }
 
 /// Edición masiva de costo y/o precio JarStore.

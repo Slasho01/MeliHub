@@ -127,6 +127,7 @@ diesel::table! {
         cotizador_logo -> Nullable<Text>,
         repricing_activo -> Bool,
         repricing_margen_min -> Float8,
+        alerta_stock -> Int4,
     }
 }
 

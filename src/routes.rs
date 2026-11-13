@@ -96,6 +96,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(r("/productos").route(get().to(prod::listar)))
             .service(r("/productos/inventario-masivo").route(post().to(prod::inventario_masivo)))
             .service(r("/productos/alertas").route(get().to(prod::alertas)))
+            .service(r("/config/alerta-stock").route(get().to(prod::get_alerta_stock)).route(put().to(prod::set_alerta_stock)))
             .service(r("/productos/{id}/inventario").route(put().to(prod::set_inventario)))
             .service(r("/productos/{id}/ml/estado").route(post().to(prod::set_estado_ml)))
             .service(r("/productos/{id}/ml/precio").route(put().to(prod::set_precio_ml)))

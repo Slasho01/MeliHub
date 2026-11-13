@@ -104,6 +104,19 @@ pub fn set_repricing(conn: &mut PgConnection, vendedor_id: Uuid, activo: Option<
     repricing_cfg(conn, vendedor_id)
 }
 
+/// Umbral de stock bajo configurado por el vendedor (default 5).
+pub fn alerta_stock(conn: &mut PgConnection, vendedor_id: Uuid) -> ApiResult<i32> {
+    config(conn, vendedor_id)?;
+    config_ganancias::table.find(vendedor_id).select(config_ganancias::alerta_stock).first::<i32>(conn).map_err(ApiError::from)
+}
+
+pub fn set_alerta_stock(conn: &mut PgConnection, vendedor_id: Uuid, umbral: i32) -> ApiResult<i32> {
+    config(conn, vendedor_id)?;
+    let v = umbral.clamp(0, 9999);
+    diesel::update(config_ganancias::table.find(vendedor_id)).set(config_ganancias::alerta_stock.eq(v)).execute(conn)?;
+    Ok(v)
+}
+
 /// Vendedores con repricing activado (para el job automático).
 pub fn vendedores_con_repricing(conn: &mut PgConnection) -> ApiResult<Vec<Uuid>> {
     config_ganancias::table
