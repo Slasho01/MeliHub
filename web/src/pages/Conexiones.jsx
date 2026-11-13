@@ -8,7 +8,7 @@ const estadoInfo = (s) => ({
   desconectada: ['Desconectada', 'var(--bad, #d93025)'],
 }[s] || [s || '—', 'var(--muted)'])
 
-const tipoColor = (t) => ({ 'Mercado Libre': '#ffe600', Falabella: '#78be20', Paris: '#2a6f97' }[t] || 'var(--muted)')
+const tipoColor = (t) => ({ 'Mercado Libre': '#ffe600', Falabella: '#78be20', Paris: '#2a6f97', Shopify: '#96bf48' }[t] || 'var(--muted)')
 
 export default function Conexiones() {
   const [rows, setRows] = useState(null)

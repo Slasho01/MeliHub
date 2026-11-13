@@ -6,7 +6,7 @@ use crate::db::{self, DbPool};
 use crate::errors::{ApiError, ApiResult};
 use crate::schema::productos;
 use crate::services::common::now;
-use crate::services::{falabella_services, ml_services, paris_services};
+use crate::services::{falabella_services, ml_services, paris_services, shopify_services};
 use actix_web::{web, HttpResponse};
 use diesel::prelude::*;
 use serde_json::{json, Value};
@@ -27,11 +27,12 @@ pub async fn onboarding(user: AuthVendedor, pool: web::Data<DbPool>) -> ApiResul
             .unwrap_or(0);
         let fala = falabella_services::listar(conn, vid).map(|v| v.len()).unwrap_or(0);
         let paris = paris_services::listar(conn, vid).map(|v| v.len()).unwrap_or(0);
+        let shop = shopify_services::listar(conn, vid).map(|v| v.len()).unwrap_or(0);
         Ok::<_, ApiError>(json!({
             "ml_conectado": ml > 0,
             "productos_sincronizados": prods > 0,
             "costos_cargados": con_costo > 0,
-            "otro_canal": (fala + paris) > 0,
+            "otro_canal": (fala + paris + shop) > 0,
         }))
     })
     .await?;
@@ -102,6 +103,18 @@ pub async fn conexiones(user: AuthVendedor, pool: web::Data<DbPool>) -> ApiResul
                 "nombre": format!("{}{}", p.nombre.clone().unwrap_or_else(|| "Cuenta Paris".into()), if p.sandbox { " (sandbox)" } else { "" }),
                 "estado": if p.activa { "ok" } else { "desconectada" },
                 "detalle": if p.activa { "Conectada." } else { "Desconectada." },
+                "productos": Value::Null,
+                "ultima_sync_at": Value::Null,
+            }));
+        }
+
+        // --- Shopify ---
+        for s in shopify_services::listar(conn, vid)? {
+            out.push(json!({
+                "tipo": "Shopify",
+                "nombre": s.nombre.clone().unwrap_or_else(|| s.shop_domain.clone()),
+                "estado": if s.activa { "ok" } else { "desconectada" },
+                "detalle": if s.activa { "Conectada." } else { "Desconectada." },
                 "productos": Value::Null,
                 "ultima_sync_at": Value::Null,
             }));
