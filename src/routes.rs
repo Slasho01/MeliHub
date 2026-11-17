@@ -25,7 +25,9 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(r("/equipo/{id}/reinvitar").route(post().to(equipo::reinvitar)))
             // Mercado Libre: OAuth y cuentas
             .service(r("/ml/conectar").route(post().to(ml::conectar)))
-            .service(r("/ml/callback").route(get().to(ml::callback)))
+            // GET = callback de OAuth (login). POST = alias del webhook de notificaciones,
+            // por si en el panel de ML se configuró la URL de notificaciones como /callback.
+            .service(r("/ml/callback").route(get().to(ml::callback)).route(post().to(ml::webhook)))
             .service(r("/ml/webhook").route(post().to(ml::webhook)))
             .service(r("/ml/cuentas").route(get().to(ml::listar_cuentas)))
             .service(r("/ml/cuentas/{id}").route(delete().to(ml::desconectar)))
