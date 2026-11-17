@@ -32,6 +32,7 @@ import Despachos from './pages/Despachos'
 import Devoluciones from './pages/Devoluciones'
 import Shopify from './pages/Shopify'
 import Promociones from './pages/Promociones'
+import Kits from './pages/Kits'
 import GlobalSearch from './GlobalSearch'
 import ThemeToggle from './ThemeToggle'
 import Falabella from './pages/Falabella'
@@ -97,6 +98,7 @@ export default function App() {
           <NavLink to="/shopify" className={cls}>Cuentas</NavLink>
           <div className="sidebar-section">Catálogo</div>
           <NavLink to="/inventario" className={cls}>Inventario</NavLink>
+          <NavLink to="/kits" className={cls}>Kits / combos</NavLink>
           <NavLink to="/cotizador" className={cls}>Cotizador</NavLink>
           <NavLink to="/ganancias" className={cls}>Ganancias</NavLink>
           <div className="sidebar-section">Cuenta</div>
@@ -135,6 +137,7 @@ export default function App() {
           <Route path="/conexiones" element={<Conexiones />} />
           <Route path="/inventario" element={<Inventario me={me} />} />
           <Route path="/cotizador" element={<Cotizador />} />
+          <Route path="/kits" element={<Kits />} />
           <Route path="/ganancias" element={<Ganancias me={me} />} />
           <Route path="/ventas" element={<Ventas />} />
           <Route path="/reportes" element={<Reportes />} />

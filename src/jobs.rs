@@ -79,10 +79,12 @@ pub async fn procesar_ventas_cuenta(pool: &web::Data<DbPool>, ml: &web::Data<MlC
                 let (cid, sku2) = (cuenta.id, sku.clone());
                 let pid = db::run(pool, move |conn| crate::services::falabella_services::producto_de_sku(conn, cid, &sku2)).await.ok().flatten();
                 let Some(pid) = pid else { continue };
-                if let Ok(venta) = db::run(pool, move |conn| crate::services::pub_services::aplicar_venta_externa(conn, pid, qty, "venta_falabella")).await {
-                    log::info!("Falabella venta {order_id}: {sku} -{qty} → stock {}", venta.nuevo_stock);
+                if let Ok(ventas) = db::run(pool, move |conn| crate::services::kit_services::aplicar_venta_con_kits(conn, pid, qty, "venta_falabella")).await {
+                    log::info!("Falabella venta {order_id}: {sku} -{qty} ({} mov. de stock)", ventas.len());
                     if ml_ok {
-                        crate::sync::empujar_stock_ml(pool, ml, &venta).await;
+                        for v in &ventas {
+                            crate::sync::empujar_stock_ml(pool, ml, v).await;
+                        }
                     }
                 }
             }
@@ -183,10 +185,12 @@ async fn procesar_ventas_paris(pool: &web::Data<DbPool>, ml: &web::Data<MlClient
                 let (cid, sku2) = (cuenta.id, sku.clone());
                 let pid = db::run(pool, move |conn| crate::services::paris_services::producto_de_sku(conn, cid, &sku2)).await.ok().flatten();
                 let Some(pid) = pid else { continue };
-                if let Ok(venta) = db::run(pool, move |conn| crate::services::pub_services::aplicar_venta_externa(conn, pid, qty, "venta_paris")).await {
-                    log::info!("Paris venta {numero}: {sku} -{qty} → stock {}", venta.nuevo_stock);
+                if let Ok(ventas) = db::run(pool, move |conn| crate::services::kit_services::aplicar_venta_con_kits(conn, pid, qty, "venta_paris")).await {
+                    log::info!("Paris venta {numero}: {sku} -{qty} ({} mov. de stock)", ventas.len());
                     if ml_ok {
-                        crate::sync::empujar_stock_ml(pool, ml, &venta).await;
+                        for v in &ventas {
+                            crate::sync::empujar_stock_ml(pool, ml, v).await;
+                        }
                     }
                 }
             }
@@ -274,10 +278,12 @@ async fn procesar_ventas_shopify(pool: &web::Data<DbPool>, ml: &web::Data<MlClie
                 let (vid2, sku2) = (cuenta.vendedor_id, sku.clone());
                 let pid = db::run(pool, move |conn| crate::services::shopify_services::producto_de_sku(conn, vid2, &sku2)).await.ok().flatten();
                 let Some(pid) = pid else { continue };
-                if let Ok(venta) = db::run(pool, move |conn| crate::services::pub_services::aplicar_venta_externa(conn, pid, qty, "venta_shopify")).await {
-                    log::info!("Shopify venta {oid}: {sku} -{qty} → stock {}", venta.nuevo_stock);
+                if let Ok(ventas) = db::run(pool, move |conn| crate::services::kit_services::aplicar_venta_con_kits(conn, pid, qty, "venta_shopify")).await {
+                    log::info!("Shopify venta {oid}: {sku} -{qty} ({} mov. de stock)", ventas.len());
                     if ml_ok {
-                        crate::sync::empujar_stock_ml(pool, ml, &venta).await;
+                        for v in &ventas {
+                            crate::sync::empujar_stock_ml(pool, ml, v).await;
+                        }
                     }
                 }
             }

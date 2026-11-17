@@ -443,6 +443,17 @@ diesel::table! {
     }
 }
 
+diesel::table! {
+    kit_componentes (id) {
+        id -> Uuid,
+        vendedor_id -> Uuid,
+        kit_producto_id -> Uuid,
+        componente_producto_id -> Uuid,
+        cantidad -> Int4,
+        created_at -> Timestamp,
+    }
+}
+
 diesel::joinable!(falabella_ventas -> falabella_cuentas (cuenta_id));
 diesel::joinable!(falabella_publicaciones -> falabella_cuentas (cuenta_id));
 diesel::joinable!(falabella_publicaciones -> productos (producto_id));

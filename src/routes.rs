@@ -1,4 +1,4 @@
-use crate::controller::{admin_controller as adm, api_key_controller as keys, auth_controller as auth, auditoria_controller as audit, catalogo_controller as catalogo, correo_controller as correo, cupon_controller as cupon, dte_controller as dte, equipo_controller as equipo, facturacion_controller as fact, falabella_controller as fala, health, ml_controller as ml, paris_controller as paris, preguntas_controller as preg, promo_controller as promo, reclamo_controller as reclamo, salud_controller as salud, shopify_controller as shopify, producto_controller as prod, pub_controller as pubc, saas_controller as saas, suscripcion_controller as subs, venta_controller as ventas};
+use crate::controller::{admin_controller as adm, api_key_controller as keys, auth_controller as auth, auditoria_controller as audit, catalogo_controller as catalogo, correo_controller as correo, cupon_controller as cupon, dte_controller as dte, equipo_controller as equipo, facturacion_controller as fact, falabella_controller as fala, health, kit_controller as kit, ml_controller as ml, paris_controller as paris, preguntas_controller as preg, promo_controller as promo, reclamo_controller as reclamo, salud_controller as salud, shopify_controller as shopify, producto_controller as prod, pub_controller as pubc, saas_controller as saas, suscripcion_controller as subs, venta_controller as ventas};
 use actix_web::web::{self, delete, get, post, put, resource as r};
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
@@ -40,6 +40,9 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(r("/ml/promociones/items").route(get().to(promo::items)))
             .service(r("/ml/promociones/agregar").route(post().to(promo::agregar)))
             .service(r("/ml/promociones/quitar").route(post().to(promo::quitar)))
+            // Kits / combos
+            .service(r("/kits").route(get().to(kit::listar)).route(post().to(kit::definir)))
+            .service(r("/kits/{id}").route(delete().to(kit::eliminar)))
             .service(r("/ml/reclamos/responder").route(post().to(reclamo::responder)))
             .service(r("/ml/reclamos/{cuenta}/{claim}").route(get().to(reclamo::detalle)))
             // Publicaciones de catálogo (competencia / Buy Box)

@@ -1,4 +1,4 @@
-use crate::schema::{auditoria, config_correo, cupones, dte_cuentas, facturacion, falabella_cuentas, falabella_publicaciones, historial_producto, miembros, ml_cuentas, notificaciones, ordenes_ml, paris_cuentas, paris_publicaciones, paris_ventas, productos, shopify_cuentas, shopify_publicaciones, suscripciones, vendedores};
+use crate::schema::{auditoria, config_correo, cupones, dte_cuentas, facturacion, falabella_cuentas, falabella_publicaciones, historial_producto, kit_componentes, miembros, ml_cuentas, notificaciones, ordenes_ml, paris_cuentas, paris_publicaciones, paris_ventas, productos, shopify_cuentas, shopify_publicaciones, suscripciones, vendedores};
 use chrono::NaiveDateTime;
 use diesel::prelude::*;
 use serde::Serialize;
@@ -224,6 +224,26 @@ pub struct NewShopifyPublicacion {
     pub shopify_product_id: String,
     pub variant_id: Option<String>,
     pub inventory_item_id: Option<String>,
+}
+
+#[derive(Queryable, Selectable, Serialize, Debug, Clone)]
+#[diesel(table_name = kit_componentes, check_for_backend(diesel::pg::Pg))]
+pub struct KitComponente {
+    pub id: Uuid,
+    pub vendedor_id: Uuid,
+    pub kit_producto_id: Uuid,
+    pub componente_producto_id: Uuid,
+    pub cantidad: i32,
+    pub created_at: NaiveDateTime,
+}
+
+#[derive(Insertable)]
+#[diesel(table_name = kit_componentes)]
+pub struct NewKitComponente {
+    pub vendedor_id: Uuid,
+    pub kit_producto_id: Uuid,
+    pub componente_producto_id: Uuid,
+    pub cantidad: i32,
 }
 
 #[derive(Queryable, Selectable, Serialize, Debug, Clone)]
