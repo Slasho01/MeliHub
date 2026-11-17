@@ -167,12 +167,16 @@ async fn procesar_notificacion(pool: &web::Data<DbPool>, client: &web::Data<MlCl
         return Ok(());
     }
     let cuenta = db::run(pool, move |conn| svc::cuenta_por_ml_user(conn, user_id)).await?;
-    let Some(cuenta) = cuenta else { return Ok(()) }; // notificación de una cuenta que no gestionamos
+    let Some(cuenta) = cuenta else {
+        log::warn!("[Webhook ML] NO hay cuenta conectada con ml_user_id={user_id} — notificación ignorada");
+        return Ok(());
+    };
     // Para items: resource = "/items/MLCxxxx" -> refrescamos ese ítem.
     if topic == "items" || resource.starts_with("/items/") {
         if let Some(item_id) = resource.rsplit('/').next().filter(|s| !s.is_empty()) {
             // 1) Trae el ítem de ML y actualiza el stock/precio en el hub.
-            crate::sync::refrescar_item(pool, client, &cuenta, item_id).await?;
+            let n = crate::sync::refrescar_item(pool, client, &cuenta, item_id).await?;
+            log::info!("[Webhook ML] item {item_id} refrescado desde ML ({n} fila(s) actualizada(s))");
             // 2) Propaga ese producto a los demás canales en segundos (sin esperar el ciclo).
             let (cid, iid) = (cuenta.id, item_id.to_string());
             if let Ok(Some(pid)) = db::run(pool, move |conn| svc::producto_id_por_item(conn, cid, &iid)).await {
