@@ -13,19 +13,69 @@ use chrono::Duration;
 /// Devuelve un access_token válido, renovándolo (y persistiéndolo) si expira pronto.
 /// Empuja a Mercado Libre el nuevo stock tras una venta externa (p. ej. Falabella),
 /// para mantener sincronizados todos los canales. Best-effort.
-pub async fn empujar_stock_ml(pool: &web::Data<DbPool>, client: &MlClient, venta: &crate::services::pub_services::VentaAplicada) {
+pub async fn empujar_stock_ml(pool: &web::Data<DbPool>, client: &MlClient, venta: &crate::services::pub_services::VentaAplicada) -> bool {
     let cid = venta.ml_cuenta_id;
     let cuenta = match db::run(pool, move |conn| svc::cuenta_por_id(conn, cid)).await {
         Ok(Some(c)) => c,
-        _ => return,
+        _ => return false,
     };
-    let Ok(token) = access_token_valido(pool, client, &cuenta).await else { return };
+    let Ok(token) = access_token_valido(pool, client, &cuenta).await else { return false };
     let res = match &venta.user_product_id {
         Some(upid) => client.update_deposito_stock(&token, upid, venta.nuevo_stock).await,
         None => client.update_stock(&token, &venta.ml_item_id, venta.nuevo_stock).await,
     };
-    if let Err(e) = res {
-        log::warn!("No se pudo empujar stock a ML ({}): {e}", venta.ml_item_id);
+    match res {
+        Ok(()) => true,
+        Err(e) => {
+            log::warn!("No se pudo empujar stock a ML ({}): {e}", venta.ml_item_id);
+            false
+        }
+    }
+}
+
+/// Empuja el stock (y precio) de UN producto a todos los canales donde está publicado
+/// (Falabella, Paris, Shopify). Se usa tras un webhook de ML para propagar en segundos,
+/// sin esperar al ciclo periódico. Best-effort: los errores se loguean y no cortan.
+pub async fn empujar_producto_a_canales(
+    pool: &web::Data<DbPool>,
+    producto_id: uuid::Uuid,
+    fala: &crate::falabella::FalabellaClient,
+    paris: &crate::paris::ParisClient,
+) {
+    // Falabella (stock + precio).
+    if let Ok(rows) = db::run(pool, move |conn| crate::services::falabella_services::sync_de_producto(conn, producto_id)).await {
+        for (cuenta, sku, precio, stock, op) in rows {
+            let api_key = crate::crypto::descifrar(&cuenta.api_key);
+            let xml = crate::services::falabella_push_services::build_stock_precio_xml(&sku, precio, stock, &op);
+            if let Err(e) = fala.product_update(&cuenta.user_id, &api_key, xml).await {
+                log::warn!("Webhook push Falabella ({sku}): {e}");
+            }
+        }
+    }
+    // Paris (stock por variante).
+    if let Ok(rows) = db::run(pool, move |conn| crate::services::paris_services::sync_de_producto(conn, producto_id)).await {
+        for (cuenta, psku, stock) in rows {
+            let api_key = crate::crypto::descifrar(&cuenta.api_key);
+            let body = crate::services::paris_push_services::build_stock(&[(format!("{psku}-1"), stock)]);
+            if let Err(e) = paris.update_stock_sku_seller(cuenta.sandbox, &api_key, &body).await {
+                log::warn!("Webhook push Paris ({psku}): {e}");
+            }
+        }
+    }
+    // Shopify (stock + precio).
+    if let Ok(rows) = db::run(pool, move |conn| crate::services::shopify_services::sync_de_producto(conn, producto_id)).await {
+        let client = crate::shopify::ShopifyClient::new();
+        for (cuenta, vid, iid, precio, stock) in rows {
+            let token = crate::crypto::descifrar(&cuenta.access_token);
+            if let Some(v) = &vid {
+                let _ = client.actualizar_variante_precio(&cuenta.shop_domain, &token, v, precio).await;
+            }
+            if let Some(inv) = &iid {
+                if let Ok(Some(l)) = client.ubicacion_principal(&cuenta.shop_domain, &token).await {
+                    let _ = client.set_inventario(&cuenta.shop_domain, &token, inv, l, stock).await;
+                }
+            }
+        }
     }
 }
 

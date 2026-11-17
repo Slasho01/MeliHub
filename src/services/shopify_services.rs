@@ -104,6 +104,31 @@ pub fn items_cuenta(conn: &mut PgConnection, cuenta_id: Uuid) -> ApiResult<Vec<S
     Ok(out)
 }
 
+/// Mapeo de UN producto a las cuentas Shopify donde está publicado (push puntual tras webhook).
+/// Devuelve (cuenta, variant_id, inventory_item_id, precio, stock).
+pub fn sync_de_producto(conn: &mut PgConnection, producto_id: Uuid) -> ApiResult<Vec<(crate::models::ShopifyCuenta, Option<String>, Option<String>, i64, i32)>> {
+    use crate::schema::{productos, shopify_cuentas};
+    let pubs: Vec<(Uuid, Option<String>, Option<String>)> = shopify_publicaciones::table
+        .filter(shopify_publicaciones::producto_id.eq(producto_id))
+        .select((shopify_publicaciones::cuenta_id, shopify_publicaciones::variant_id, shopify_publicaciones::inventory_item_id))
+        .load(conn)?;
+    if pubs.is_empty() {
+        return Ok(vec![]);
+    }
+    let (pj, precio, stock): (Option<i64>, i64, i32) = productos::table
+        .find(producto_id)
+        .select((productos::precio_jarstore, productos::precio, productos::stock))
+        .first(conn)?;
+    let p = pj.filter(|v| *v > 0).unwrap_or(precio);
+    let mut out = Vec::new();
+    for (cid, vid, iid) in pubs {
+        if let Some(c) = shopify_cuentas::table.find(cid).select(crate::models::ShopifyCuenta::as_select()).first(conn).optional()? {
+            out.push((c, vid, iid, p, stock));
+        }
+    }
+    Ok(out)
+}
+
 /// Guarda (o actualiza) el mapeo producto del hub -> producto Shopify.
 pub fn registrar_publicacion(conn: &mut PgConnection, producto_id: Uuid, cuenta_id: Uuid, shopify_product_id: &str, variant_id: Option<String>, inventory_item_id: Option<String>) -> ApiResult<()> {
     let nuevo = NewShopifyPublicacion {

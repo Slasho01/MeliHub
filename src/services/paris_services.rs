@@ -105,6 +105,28 @@ pub fn publicaciones_para_sync(conn: &mut PgConnection, cuenta_id: Uuid) -> ApiR
         .collect())
 }
 
+/// Mapeo de UN producto a las cuentas Paris donde está publicado (push puntual de stock tras
+/// webhook). Devuelve (cuenta, paris_sku, stock). Omite publicaciones sin paris_sku.
+pub fn sync_de_producto(conn: &mut PgConnection, producto_id: Uuid) -> ApiResult<Vec<(crate::models::ParisCuenta, String, i32)>> {
+    use crate::schema::paris_cuentas;
+    let pubs: Vec<(Uuid, Option<String>)> = paris_publicaciones::table
+        .filter(paris_publicaciones::producto_id.eq(producto_id))
+        .select((paris_publicaciones::cuenta_id, paris_publicaciones::paris_sku))
+        .load(conn)?;
+    if pubs.is_empty() {
+        return Ok(vec![]);
+    }
+    let stock: i32 = productos::table.find(producto_id).select(productos::stock).first(conn)?;
+    let mut out = Vec::new();
+    for (cid, psku) in pubs {
+        let Some(ps) = psku else { continue };
+        if let Some(c) = paris_cuentas::table.find(cid).select(crate::models::ParisCuenta::as_select()).first(conn).optional()? {
+            out.push((c, ps, stock));
+        }
+    }
+    Ok(out)
+}
+
 /// producto_id asociado a un sku_seller en una cuenta (para aplicar ventas de Paris).
 pub fn producto_de_sku(conn: &mut PgConnection, cuenta_id: Uuid, sku_seller: &str) -> ApiResult<Option<Uuid>> {
     paris_publicaciones::table

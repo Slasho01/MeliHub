@@ -319,7 +319,7 @@ pub fn start(pool: web::Data<DbPool>, client: web::Data<MlClient>, falabella: we
         log::info!("Job de sincronización inactivo (Mercado Libre sin configurar)");
         return;
     }
-    let secs = std::env::var("SYNC_INTERVAL_SECS").ok().and_then(|v| v.parse::<u64>().ok()).unwrap_or(1800).max(60);
+    let secs = std::env::var("SYNC_INTERVAL_SECS").ok().and_then(|v| v.parse::<u64>().ok()).unwrap_or(300).max(60);
     log::info!("Job de sincronización de Mercado Libre cada {secs}s");
     actix_web::rt::spawn(async move {
         let mut tick = actix_web::rt::time::interval(Duration::from_secs(secs));

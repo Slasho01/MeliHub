@@ -2,7 +2,9 @@ use crate::auth::AuthVendedor;
 use crate::config::Config;
 use crate::db::{self, DbPool};
 use crate::errors::{ApiError, ApiResult};
+use crate::falabella::FalabellaClient;
 use crate::ml::MlClient;
+use crate::paris::ParisClient;
 use crate::services::common::now;
 use crate::services::ml_services as svc;
 use actix_web::{web, HttpResponse};
@@ -139,18 +141,20 @@ pub async fn webhook(
     body: web::Json<WebhookNotif>,
     pool: web::Data<DbPool>,
     client: web::Data<MlClient>,
+    fala: web::Data<FalabellaClient>,
+    paris: web::Data<ParisClient>,
 ) -> ApiResult<HttpResponse> {
     let n = body.into_inner();
-    let (pool2, client2) = (pool.clone(), client.clone());
+    let (pool2, client2, fala2, paris2) = (pool.clone(), client.clone(), fala.clone(), paris.clone());
     actix_web::rt::spawn(async move {
-        if let Err(e) = procesar_notificacion(&pool2, &client2, n).await {
+        if let Err(e) = procesar_notificacion(&pool2, &client2, &fala2, &paris2, n).await {
             log::warn!("Webhook ML: {e}");
         }
     });
     Ok(HttpResponse::Ok().finish())
 }
 
-async fn procesar_notificacion(pool: &web::Data<DbPool>, client: &web::Data<MlClient>, n: WebhookNotif) -> ApiResult<()> {
+async fn procesar_notificacion(pool: &web::Data<DbPool>, client: &web::Data<MlClient>, fala: &web::Data<FalabellaClient>, paris: &web::Data<ParisClient>, n: WebhookNotif) -> ApiResult<()> {
     let topic = n.topic.unwrap_or_default();
     let resource = n.resource.unwrap_or_default();
     let user_id = n.user_id.unwrap_or(0);
@@ -162,7 +166,32 @@ async fn procesar_notificacion(pool: &web::Data<DbPool>, client: &web::Data<MlCl
     // Para items: resource = "/items/MLCxxxx" -> refrescamos ese ítem.
     if topic == "items" || resource.starts_with("/items/") {
         if let Some(item_id) = resource.rsplit('/').next().filter(|s| !s.is_empty()) {
+            // 1) Trae el ítem de ML y actualiza el stock/precio en el hub.
             crate::sync::refrescar_item(pool, client, &cuenta, item_id).await?;
+            // 2) Propaga ese producto a los demás canales en segundos (sin esperar el ciclo).
+            let (cid, iid) = (cuenta.id, item_id.to_string());
+            if let Ok(Some(pid)) = db::run(pool, move |conn| svc::producto_id_por_item(conn, cid, &iid)).await {
+                // Si este producto es componente de kits, recomputa su disponibilidad y empújalos a ML.
+                let kits: Vec<(Uuid, crate::services::pub_services::VentaAplicada)> = db::run(pool, move |conn| {
+                    let mut out = Vec::new();
+                    for k in crate::services::kit_services::kits_que_usan(conn, pid)? {
+                        if let Some(v) = crate::services::kit_services::sincronizar_stock_kit(conn, k)? {
+                            out.push((k, v));
+                        }
+                    }
+                    Ok::<_, ApiError>(out)
+                })
+                .await
+                .unwrap_or_default();
+                for (_, v) in &kits {
+                    crate::sync::empujar_stock_ml(pool, client, v).await;
+                }
+                // Empuja el producto y los kits afectados a Falabella/Paris/Shopify.
+                crate::sync::empujar_producto_a_canales(pool, pid, fala, paris).await;
+                for (kid, _) in &kits {
+                    crate::sync::empujar_producto_a_canales(pool, *kid, fala, paris).await;
+                }
+            }
         }
     } else if topic == "questions" || resource.starts_with("/questions/") {
         // Nueva pregunta de un comprador: avisamos al vendedor (se responde en /ml/preguntas).

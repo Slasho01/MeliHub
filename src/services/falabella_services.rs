@@ -58,6 +58,31 @@ pub fn publicaciones_para_sync(conn: &mut PgConnection, cuenta_id: Uuid) -> ApiR
     Ok(rows.into_iter().map(|(sku, precio, pf, stock, op)| (sku, pf.filter(|&x| x > 0).unwrap_or(precio), stock, op)).collect())
 }
 
+/// Mapeo de UN producto a las cuentas de Falabella donde está publicado (para push puntual
+/// de stock/precio tras un webhook). Devuelve (cuenta, seller_sku, precio, stock, operador).
+pub fn sync_de_producto(conn: &mut PgConnection, producto_id: Uuid) -> ApiResult<Vec<(crate::models::FalabellaCuenta, String, i64, i32, String)>> {
+    use crate::schema::falabella_cuentas;
+    let pubs: Vec<(Uuid, String, String)> = falabella_publicaciones::table
+        .filter(falabella_publicaciones::producto_id.eq(producto_id))
+        .select((falabella_publicaciones::cuenta_id, falabella_publicaciones::seller_sku, falabella_publicaciones::operador))
+        .load(conn)?;
+    if pubs.is_empty() {
+        return Ok(vec![]);
+    }
+    let (precio, pf, stock): (i64, Option<i64>, i32) = productos::table
+        .find(producto_id)
+        .select((productos::precio, productos::precio_falabella, productos::stock))
+        .first(conn)?;
+    let p = pf.filter(|&x| x > 0).unwrap_or(precio);
+    let mut out = Vec::new();
+    for (cid, sku, op) in pubs {
+        if let Some(c) = falabella_cuentas::table.find(cid).select(crate::models::FalabellaCuenta::as_select()).first(conn).optional()? {
+            out.push((c, sku, p, stock, op));
+        }
+    }
+    Ok(out)
+}
+
 /// Marca una orden de Falabella como procesada. Devuelve `true` si era NUEVA (hay que
 /// descontar stock) y `false` si ya estaba (evita descontar dos veces).
 pub fn marcar_venta_si_nueva(conn: &mut PgConnection, order_id: &str, cuenta_id: Uuid) -> ApiResult<bool> {

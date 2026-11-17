@@ -105,6 +105,17 @@ pub fn cuenta_por_ml_user(conn: &mut PgConnection, ml_user_id: i64) -> ApiResult
         .map_err(ApiError::from)
 }
 
+/// producto_id del hub para un `ml_item_id` dentro de una cuenta (tras un webhook de ML).
+pub fn producto_id_por_item(conn: &mut PgConnection, cuenta_id: Uuid, ml_item_id: &str) -> ApiResult<Option<Uuid>> {
+    use crate::schema::productos;
+    productos::table
+        .filter(productos::ml_cuenta_id.eq(cuenta_id).and(productos::ml_item_id.eq(ml_item_id)))
+        .select(productos::id)
+        .first(conn)
+        .optional()
+        .map_err(ApiError::from)
+}
+
 /// Cuentas que no se sincronizan desde hace más de `horas` (o nunca).
 pub fn cuentas_desactualizadas(conn: &mut PgConnection, horas: i64) -> ApiResult<Vec<MlCuenta>> {
     let corte = crate::services::common::now() - chrono::Duration::hours(horas);

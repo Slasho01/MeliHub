@@ -414,6 +414,38 @@ pub fn reportar_venta(conn: &mut PgConnection, key: &ApiKey, producto_id: Uuid, 
     })
 }
 
+/// Reporta una venta desde la API pública (p. ej. JarStore / tu tienda) teniendo en cuenta
+/// los KITS: si el producto vendido es un kit, descuenta el stock de cada componente y
+/// recomputa los kits afectados; si no, usa el descuento normal. Devuelve TODAS las
+/// `VentaAplicada` a empujar a ML y el stock disponible resultante del producto vendido.
+pub fn reportar_venta_con_kits(conn: &mut PgConnection, key: &ApiKey, producto_id: Uuid, cantidad: i32) -> ApiResult<(Vec<VentaAplicada>, i32)> {
+    if cantidad <= 0 {
+        return Err(ApiError::bad_request("La cantidad debe ser mayor que 0"));
+    }
+    if crate::services::kit_services::es_kit(conn, producto_id)? {
+        // Verifica que el kit corresponda a esta API key (mismo dueño y, si la key está
+        // acotada a una cuenta, esa cuenta). Los componentes son del mismo vendedor.
+        use crate::schema::ml_cuentas;
+        let p: Producto = productos::table
+            .find(producto_id)
+            .select(Producto::as_select())
+            .first(conn)
+            .optional()?
+            .or_not_found("Producto")?;
+        let vend: Uuid = ml_cuentas::table.find(p.ml_cuenta_id).select(ml_cuentas::vendedor_id).first(conn)?;
+        if vend != key.vendedor_id || key.ml_cuenta_id.is_some_and(|c| c != p.ml_cuenta_id) {
+            return Err(ApiError::forbidden("Ese producto no corresponde a esta API key"));
+        }
+        let ventas = crate::services::kit_services::aplicar_venta_con_kits(conn, producto_id, cantidad, "venta_api")?;
+        let disponible = crate::services::kit_services::disponible(conn, producto_id)?;
+        Ok((ventas, disponible))
+    } else {
+        let v = reportar_venta(conn, key, producto_id, cantidad)?;
+        let ns = v.nuevo_stock;
+        Ok((vec![v], ns))
+    }
+}
+
 /// Devuelve stock a un producto (cancelación/devolución en la plataforma): lo SUMA y lo
 /// deja listo para empujarlo de vuelta a Mercado Libre. Mismas validaciones de pertenencia.
 /// Descuenta stock por una venta EXTERNA (p. ej. una orden de Falabella) y deja la info

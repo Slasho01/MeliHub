@@ -55,35 +55,23 @@ pub async fn reportar_venta(
 ) -> ApiResult<HttpResponse> {
     let key = key_de(&req, &pool).await?;
     let VentaRequest { producto_id, cantidad } = body.into_inner();
-    let kvid = key.vendedor_id;
-    let venta = db::run(&pool, move |conn| pub_services::reportar_venta(conn, &key, producto_id, cantidad)).await?;
+    // Kit-aware: si el producto es un kit, descuenta componentes; si no, descuento normal.
+    let (ventas, nuevo_stock) = db::run(&pool, move |conn| pub_services::reportar_venta_con_kits(conn, &key, producto_id, cantidad)).await?;
 
-    // Empujar el nuevo stock a Mercado Libre (best-effort: la venta ya ocurrió en la plataforma).
+    // Empujar cada movimiento de stock a Mercado Libre (best-effort: la venta ya ocurrió).
     let mut ml_actualizado = false;
     if cfg.ml.configurado() {
-        let cuenta_id = venta.ml_cuenta_id;
-        match db::run(&pool, move |conn| ml_services::get_cuenta(conn, cuenta_id, kvid, true)).await {
-            Ok(cuenta) => match crate::sync::access_token_valido(&pool, &client, &cuenta).await {
-                Ok(token) => {
-                    // Si usa stock por ubicación (FULL/depósito), descontamos SOLO el
-                    // depósito; si no, el disponible del item.
-                    let res = match &venta.user_product_id {
-                        Some(upid) => client.update_deposito_stock(&token, upid, venta.nuevo_stock).await,
-                        None => client.update_stock(&token, &venta.ml_item_id, venta.nuevo_stock).await,
-                    };
-                    match res {
-                        Ok(()) => ml_actualizado = true,
-                        Err(e) => log::warn!("No se pudo actualizar stock en ML ({}): {e}", venta.ml_item_id),
-                    }
-                }
-                Err(e) => log::warn!("Token ML no disponible para {}: {e}", venta.ml_item_id),
-            },
-            Err(e) => log::warn!("Cuenta ML no encontrada para la venta: {e}"),
+        ml_actualizado = true;
+        for v in &ventas {
+            if !crate::sync::empujar_stock_ml(&pool, &client, v).await {
+                ml_actualizado = false;
+            }
         }
     }
     Ok(HttpResponse::Ok().json(json!({
         "producto_id": producto_id,
-        "nuevo_stock": venta.nuevo_stock,
+        "nuevo_stock": nuevo_stock,
+        "movimientos": ventas.len(),
         "ml_actualizado": ml_actualizado,
     })))
 }
