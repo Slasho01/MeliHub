@@ -20,7 +20,7 @@ export default function Aceptar() {
   return (
     <div className="auth-wrap">
       <div className="card auth-card stack">
-        <div className="center"><div className="brand" style={{ fontSize: 24 }}>Meli<b>Hub</b></div></div>
+        <div className="center"><div className="brand" style={{ fontSize: 24 }}>Vent<b>oki</b></div></div>
         {!token ? (
           <div className="alert alert-bad">Enlace de invitación inválido o incompleto.</div>
         ) : ok ? (
@@ -30,7 +30,7 @@ export default function Aceptar() {
           </>
         ) : (
           <form className="stack" onSubmit={submit}>
-            <p className="muted sm" style={{ margin: 0 }}>Te invitaron a MeliHub. Crea tu contraseña para entrar.</p>
+            <p className="muted sm" style={{ margin: 0 }}>Te invitaron a Ventoki. Crea tu contraseña para entrar.</p>
             <div><label>Contraseña (mín. 8)</label>
               <input className="input" type="password" autoComplete="new-password" value={pass} onChange={(e) => setPass(e.target.value)} required minLength={8} />
               <PasswordMeter value={pass} /></div>

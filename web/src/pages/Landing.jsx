@@ -62,7 +62,7 @@ export default function Landing() {
   return (
     <div className="lp">
       <header className="lp-nav">
-        <div className="brand">Meli<b>Hub</b></div>
+        <div className="brand">Vent<b>oki</b></div>
         <button className="nav-toggle" aria-label="Menú" aria-expanded={menu} onClick={() => setMenu((v) => !v)}>☰</button>
         <nav className={`lp-nav-links ${menu ? 'open' : ''}`} onClick={() => setMenu(false)}>
           <a href="#features">Características</a>
@@ -79,7 +79,7 @@ export default function Landing() {
         <div className="lp-badge">Hub multicanal para Mercado Libre y tu e-commerce</div>
         <h1 className="lp-h1">Vende en todos lados,<br />controla todo desde <span className="hl">un panel</span>.</h1>
         <p className="lp-sub">
-          MeliHub centraliza el inventario, las ventas, el post-venta y los despachos de todas tus cuentas de
+          Ventoki centraliza el inventario, las ventas, el post-venta y los despachos de todas tus cuentas de
           Mercado Libre, y distribuye tu catálogo a <b>Falabella, Shopify y tu tienda</b> (WooCommerce) con el
           stock sincronizado en ambos sentidos. Repricing de Buy Box, reportes y cotizador, todo en un mismo lugar.
         </p>
@@ -97,7 +97,7 @@ export default function Landing() {
         </div>
 
         <div className="lp-mock">
-          <div className="lp-mock-bar"><span /><span /><span /><em className="muted sm">Panel MeliHub</em></div>
+          <div className="lp-mock-bar"><span /><span /><span /><em className="muted sm">Panel Ventoki</em></div>
           <div className="lp-mock-body">
             <div className="lp-mock-row"><b>Inventario</b><span className="tag tag-ok">Sincronizado</span><i className="muted sm">1.342 productos</i></div>
             <div className="lp-mock-row"><b>Ventas de hoy</b><span className="tag">18 pedidos</span><i className="muted sm">Ganancia $284.900</i></div>
@@ -109,7 +109,7 @@ export default function Landing() {
 
       <section id="features" className="lp-section">
         <h2 className="lp-h2">Todo tu e-commerce, ordenado</h2>
-        <p className="lp-lead">Deja de saltar entre cuentas, canales y pestañas. MeliHub reúne lo que importa en una sola vista.</p>
+        <p className="lp-lead">Deja de saltar entre cuentas, canales y pestañas. Ventoki reúne lo que importa en una sola vista.</p>
         <div className="lp-grid">
           {FEATURES.map((f, i) => (
             <div key={i} className="lp-card">
@@ -158,13 +158,13 @@ export default function Landing() {
       </section>
 
       <footer className="lp-footer">
-        <div className="brand">Meli<b>Hub</b></div>
+        <div className="brand">Vent<b>oki</b></div>
         <div className="row" style={{ gap: 16, flexWrap: 'wrap' }}>
           <Link to="/docs" className="muted">Documentación API</Link>
           <Link to="/legal" className="muted">Términos y privacidad</Link>
           <Link to="/login" className="muted">Entrar</Link>
         </div>
-        <span className="muted sm">© {new Date().getFullYear()} MeliHub · No afiliado a Mercado Libre.</span>
+        <span className="muted sm">© {new Date().getFullYear()} Ventoki · No afiliado a Mercado Libre.</span>
       </footer>
     </div>
   )

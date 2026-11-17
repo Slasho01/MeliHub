@@ -228,7 +228,7 @@ fn pagina(ok: bool, msg: &str) -> HttpResponse {
     let color = if ok { "#16a34a" } else { "#d93025" };
     let titulo = if ok { "✓ Conectado" } else { "No se pudo conectar" };
     let html = format!(
-        "<!doctype html><meta charset=\"utf-8\"><title>MeliHub</title>\
+        "<!doctype html><meta charset=\"utf-8\"><title>Ventoki</title>\
          <body style=\"font-family:system-ui;display:grid;place-items:center;height:100vh;margin:0;background:#f4f5f7\">\
          <div style=\"text-align:center;padding:32px;background:#fff;border-radius:16px;box-shadow:0 10px 40px rgba(0,0,0,.08)\">\
          <h1 style=\"color:{color};margin:0 0 8px\">{titulo}</h1><p style=\"color:#444;margin:0\">{}</p></div></body>",

@@ -40,12 +40,12 @@ pub async fn forgot(
         if let Ok(token) = crear_reset_token(v.id, &v.password_hash, &cfg.jwt_secret) {
             let link = format!("{}/reset?token={}", cfg.app_url, token);
             let html = format!(
-                "<p>Hola {},</p><p>Para restablecer tu contraseña de MeliHub, haz clic en el botón:</p>\
+                "<p>Hola {},</p><p>Para restablecer tu contraseña de Ventoki, haz clic en el botón:</p>\
                  <p><a href=\"{link}\" style=\"background:#111;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none\">Restablecer contraseña</a></p>\
                  <p>El enlace vence en 1 hora. Si no lo pediste, ignora este correo.</p>",
                 esc(&v.nombre)
             );
-            if let Err(e) = mailer.enviar(&v.email, "Restablecer contraseña · MeliHub", &html).await {
+            if let Err(e) = mailer.enviar(&v.email, "Restablecer contraseña · Ventoki", &html).await {
                 log::warn!("No se pudo enviar el correo de reseteo: {e}");
             }
         }

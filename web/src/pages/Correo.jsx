@@ -46,7 +46,7 @@ export default function Correo() {
     <div className="stack" style={{ maxWidth: 640 }}>
       <div>
         <h1 style={{ margin: 0 }}>Correo</h1>
-        <p className="muted sm" style={{ margin: 0 }}>Configura cómo MeliHub envía correos (notificaciones, invitaciones, reset de clave).</p>
+        <p className="muted sm" style={{ margin: 0 }}>Configura cómo Ventoki envía correos (notificaciones, invitaciones, reset de clave).</p>
       </div>
 
       {error && <div className="alert alert-bad">{error}</div>}
@@ -62,12 +62,12 @@ export default function Correo() {
 
         {esSmtp && (
           <div className="alert" style={{ borderLeft: '3px solid var(--warn)' }}>
-            ⚠️ Muchos hosts (como <b>Render</b>) <b>bloquean SMTP saliente</b>. Si MeliHub corre ahí, usa Resend; SMTP solo funciona en un servidor que lo permita (VPS).
+            ⚠️ Muchos hosts (como <b>Render</b>) <b>bloquean SMTP saliente</b>. Si Ventoki corre ahí, usa Resend; SMTP solo funciona en un servidor que lo permita (VPS).
           </div>
         )}
 
         <label>Remitente <span className="muted xs">(formato: Nombre &lt;correo@tudominio.cl&gt;)</span>
-          <input className="input" placeholder="MeliHub <ventas@tudominio.cl>" value={form.remitente} onChange={(e) => set('remitente', e.target.value)} />
+          <input className="input" placeholder="Ventoki <ventas@tudominio.cl>" value={form.remitente} onChange={(e) => set('remitente', e.target.value)} />
         </label>
 
         {!esSmtp ? (

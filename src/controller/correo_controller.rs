@@ -78,7 +78,7 @@ pub async fn probar(user: AuthVendedor, body: web::Json<TestBody>, pool: web::Da
         return Err(ApiError::bad_request("Indica un correo de destino para la prueba."));
     }
     let datos = db::run(&pool, correo_services::datos).await?.ok_or_else(|| ApiError::bad_request("Primero guarda la configuración de correo."))?;
-    let html = "<div style=\"font-family:system-ui,sans-serif;color:#1f2733\"><h2 style=\"color:#13233b\">✅ Correo de prueba · MeliHub</h2><p>Si recibes esto, tu configuración de correo funciona correctamente.</p></div>";
-    crate::email::enviar(&datos, &destino, "Prueba de correo · MeliHub", html).await?;
+    let html = "<div style=\"font-family:system-ui,sans-serif;color:#1f2733\"><h2 style=\"color:#13233b\">✅ Correo de prueba · Ventoki</h2><p>Si recibes esto, tu configuración de correo funciona correctamente.</p></div>";
+    crate::email::enviar(&datos, &destino, "Prueba de correo · Ventoki", html).await?;
     Ok(HttpResponse::Ok().json(json!({ "ok": true })))
 }

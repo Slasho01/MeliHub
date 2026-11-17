@@ -20,7 +20,7 @@ export default function Reset() {
   return (
     <div className="auth-wrap">
       <div className="card auth-card stack">
-        <div className="center"><div className="brand" style={{ fontSize: 24 }}>Meli<b>Hub</b></div></div>
+        <div className="center"><div className="brand" style={{ fontSize: 24 }}>Vent<b>oki</b></div></div>
         {!token ? (
           <div className="alert alert-bad">Enlace inválido o incompleto.</div>
         ) : ok ? (

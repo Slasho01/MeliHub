@@ -1,5 +1,5 @@
 //! Cliente de Mercado Pago para **suscripciones** (preapproval). El dueño de
-//! MeliHub cobra con su `MP_ACCESS_TOKEN`. Contrato aislado aquí.
+//! Ventoki cobra con su `MP_ACCESS_TOKEN`. Contrato aislado aquí.
 
 use crate::errors::{ApiError, ApiResult};
 use serde::{Deserialize, Serialize};

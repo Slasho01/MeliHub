@@ -107,7 +107,7 @@ fn pagina(app_url: &str, ok: bool, msg: &str) -> HttpResponse {
     let (titulo, color) = if ok { ("✅ Listo", "#2aa76a") } else { ("⚠️ Error", "#d93025") };
     let esc = |s: &str| s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;");
     let html = format!(
-        "<!doctype html><html lang=\"es\"><meta charset=\"utf-8\"><meta http-equiv=\"refresh\" content=\"3;url={}/shopify\"><body style=\"font-family:system-ui,sans-serif;background:#0f1420;color:#e8edf5;display:grid;place-items:center;height:100vh;margin:0\"><div style=\"text-align:center;max-width:420px;padding:20px\"><h2 style=\"color:{color}\">{titulo}</h2><p>{}</p><p style=\"color:#8a93a6\">Volviendo a MeliHub…</p></div></body></html>",
+        "<!doctype html><html lang=\"es\"><meta charset=\"utf-8\"><meta http-equiv=\"refresh\" content=\"3;url={}/shopify\"><body style=\"font-family:system-ui,sans-serif;background:#0f1420;color:#e8edf5;display:grid;place-items:center;height:100vh;margin:0\"><div style=\"text-align:center;max-width:420px;padding:20px\"><h2 style=\"color:{color}\">{titulo}</h2><p>{}</p><p style=\"color:#8a93a6\">Volviendo a Ventoki…</p></div></body></html>",
         esc(app_url), esc(msg)
     );
     HttpResponse::Ok().content_type("text/html; charset=utf-8").body(html)

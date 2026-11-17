@@ -23,7 +23,7 @@ pub struct EstadoBody {
     pub estado: String,
 }
 
-/// Pausa o reactiva una publicación en Mercado Libre (y lo refleja en MeliHub).
+/// Pausa o reactiva una publicación en Mercado Libre (y lo refleja en Ventoki).
 pub async fn set_estado_ml(
     user: AuthVendedor,
     path: web::Path<Uuid>,
@@ -53,7 +53,7 @@ pub struct PrecioBody {
     pub precio: i64,
 }
 
-/// Empuja un nuevo precio a Mercado Libre (y lo refleja en MeliHub).
+/// Empuja un nuevo precio a Mercado Libre (y lo refleja en Ventoki).
 pub async fn set_precio_ml(
     user: AuthVendedor,
     path: web::Path<Uuid>,

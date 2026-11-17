@@ -7,13 +7,13 @@ function Terminos() {
     <div className="stack" style={{ lineHeight: 1.7 }}>
       <h2>Términos y Condiciones</h2>
       <p className="muted sm">Última actualización: {ACTUALIZADO}</p>
-      <p><b>1. El servicio.</b> MeliHub es una herramienta que centraliza las publicaciones de Mercado Libre de una o más cuentas, administra inventario, precios y ganancias, y las distribuye a plataformas de terceros (tu propia web, WordPress, etc.) mediante API-keys. El uso del servicio implica la aceptación de estos términos.</p>
+      <p><b>1. El servicio.</b> Ventoki es una herramienta que centraliza las publicaciones de Mercado Libre de una o más cuentas, administra inventario, precios y ganancias, y las distribuye a plataformas de terceros (tu propia web, WordPress, etc.) mediante API-keys. El uso del servicio implica la aceptación de estos términos.</p>
       <p><b>2. Cuenta.</b> Eres responsable de la veracidad de tus datos, de la seguridad de tu contraseña y de toda actividad en tu cuenta. Debes tener autorización para conectar las cuentas de Mercado Libre que vincules.</p>
-      <p><b>3. Uso aceptable.</b> No puedes usar MeliHub para fines ilícitos, para vulnerar los términos de Mercado Libre, Mercado Pago u otras plataformas, ni para acceder a datos que no te pertenecen.</p>
-      <p><b>4. Integraciones de terceros.</b> MeliHub se conecta a Mercado Libre, Mercado Pago y otros servicios. El funcionamiento de esas integraciones depende de dichas plataformas; no garantizamos su disponibilidad ni nos hacemos responsables de cambios en sus APIs o políticas.</p>
+      <p><b>3. Uso aceptable.</b> No puedes usar Ventoki para fines ilícitos, para vulnerar los términos de Mercado Libre, Mercado Pago u otras plataformas, ni para acceder a datos que no te pertenecen.</p>
+      <p><b>4. Integraciones de terceros.</b> Ventoki se conecta a Mercado Libre, Mercado Pago y otros servicios. El funcionamiento de esas integraciones depende de dichas plataformas; no garantizamos su disponibilidad ni nos hacemos responsables de cambios en sus APIs o políticas.</p>
       <p><b>5. Suscripción y pagos.</b> Los planes de pago se cobran de forma mensual mediante Mercado Pago. Puedes cancelar cuando quieras; el acceso al plan se mantiene hasta el fin del período pagado. No hay reembolsos por períodos ya iniciados, salvo obligación legal.</p>
       <p><b>6. Disponibilidad.</b> Hacemos esfuerzos razonables por mantener el servicio operativo, pero se ofrece "tal cual", sin garantías de disponibilidad ininterrumpida.</p>
-      <p><b>7. Limitación de responsabilidad.</b> En la medida permitida por la ley, MeliHub no responde por daños indirectos, pérdida de ventas, de datos o de stock derivados del uso del servicio o de fallas de integraciones de terceros.</p>
+      <p><b>7. Limitación de responsabilidad.</b> En la medida permitida por la ley, Ventoki no responde por daños indirectos, pérdida de ventas, de datos o de stock derivados del uso del servicio o de fallas de integraciones de terceros.</p>
       <p><b>8. Terminación.</b> Podemos suspender cuentas que incumplan estos términos. Puedes cerrar tu cuenta cuando quieras.</p>
       <p><b>9. Ley aplicable.</b> Estos términos se rigen por las leyes de la República de Chile.</p>
       <p className="muted sm"><i>Este es un borrador de referencia; revísalo con un abogado antes de operar comercialmente.</i></p>

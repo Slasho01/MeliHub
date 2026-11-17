@@ -13,7 +13,7 @@ fn totp_de(secret_b32: &str, cuenta: &str) -> ApiResult<TOTP> {
     let bytes = Secret::Encoded(secret_b32.to_string())
         .to_bytes()
         .map_err(|_| ApiError::internal("Secreto 2FA inválido"))?;
-    Ok(TOTP::new_unchecked(Algorithm::SHA1, 6, 1, 30, bytes, Some("MeliHub".to_string()), cuenta.to_string()))
+    Ok(TOTP::new_unchecked(Algorithm::SHA1, 6, 1, 30, bytes, Some("Ventoki".to_string()), cuenta.to_string()))
 }
 
 /// URL otpauth:// para cargar en la app de autenticación (QR o manual).

@@ -54,7 +54,7 @@ async fn main() -> std::io::Result<()> {
     }
 
     let addr = (config.host.clone(), config.port);
-    log::info!("MeliHub escuchando en http://{}:{}", addr.0, addr.1);
+    log::info!("Ventoki escuchando en http://{}:{}", addr.0, addr.1);
     if config.ml.configurado() {
         log::info!("Mercado Libre configurado (client_id presente)");
     } else {

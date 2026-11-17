@@ -116,7 +116,7 @@ pub struct AuthVendedor {
 }
 
 impl AuthVendedor {
-    /// Súper-admin de la plataforma (el dueño de MeliHub).
+    /// Súper-admin de la plataforma (el dueño de Ventoki).
     pub fn es_admin(&self) -> bool {
         self.rol == "admin"
     }

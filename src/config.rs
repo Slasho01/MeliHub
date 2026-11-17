@@ -8,15 +8,15 @@ pub struct Config {
     pub port: u16,
     pub cors_origins: Vec<String>,
     pub ml: MlConfig,
-    /// URL pública de MeliHub (para back_url de pagos, etc.).
+    /// URL pública de Ventoki (para back_url de pagos, etc.).
     pub app_url: String,
-    /// Access token de Mercado Pago (del dueño de MeliHub) para cobrar suscripciones.
+    /// Access token de Mercado Pago (del dueño de Ventoki) para cobrar suscripciones.
     pub mp_access_token: String,
     /// Secreto de la firma de webhooks de Mercado Pago (para validar `x-signature`).
     pub mp_webhook_secret: String,
     /// API key de Resend (envío de correos por HTTP; Render bloquea SMTP).
     pub resend_api_key: String,
-    /// Remitente de los correos (ej. "MeliHub <no-reply@tudominio.cl>").
+    /// Remitente de los correos (ej. "Ventoki <no-reply@tudominio.cl>").
     pub mail_from: String,
     /// Credenciales de la app de Shopify (OAuth): API key, API secret y scopes.
     pub shopify_api_key: String,
@@ -87,7 +87,7 @@ impl Config {
             mp_access_token: var("MP_ACCESS_TOKEN", ""),
             mp_webhook_secret: var("MP_WEBHOOK_SECRET", ""),
             resend_api_key: var("RESEND_API_KEY", ""),
-            mail_from: var("MAIL_FROM", "MeliHub <onboarding@resend.dev>"),
+            mail_from: var("MAIL_FROM", "Ventoki <onboarding@resend.dev>"),
             shopify_api_key: var("SHOPIFY_API_KEY", ""),
             shopify_api_secret: var("SHOPIFY_API_SECRET", ""),
             shopify_scopes: var("SHOPIFY_SCOPES", "read_products,write_products,read_inventory,write_inventory,read_locations,read_orders"),

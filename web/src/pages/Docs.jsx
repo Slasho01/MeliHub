@@ -17,7 +17,7 @@ export default function Docs() {
   return (
     <div className="lp">
       <header className="lp-nav">
-        <Link to="/" className="brand" style={{ textDecoration: 'none' }}>Meli<b>Hub</b></Link>
+        <Link to="/" className="brand" style={{ textDecoration: 'none' }}>Vent<b>oki</b></Link>
         <nav className="lp-nav-links">
           <Link to="/" className="muted">Inicio</Link>
           <Link to="/login" className="btn btn-sm btn-accent">Entrar</Link>
@@ -27,7 +27,7 @@ export default function Docs() {
       <div className="doc">
         <h1 className="lp-h2" style={{ textAlign: 'left' }}>Documentación de la API</h1>
         <p className="muted" style={{ marginTop: 8 }}>
-          MeliHub expone una API simple para que tu tienda o cualquier plataforma lea tu catálogo
+          Ventoki expone una API simple para que tu tienda o cualquier plataforma lea tu catálogo
           de Mercado Libre y reporte ventas y devoluciones, manteniendo el stock sincronizado en
           ambos sentidos. Si usas WordPress, el <a href="#wp">plugin oficial</a> hace todo esto por ti.
         </p>
@@ -45,7 +45,7 @@ export default function Docs() {
 
         <section className="card doc-card">
           <h2>2. URL base</h2>
-          <p className="muted">Todas las rutas cuelgan de <code>/api/pub</code> en tu dominio de MeliHub:</p>
+          <p className="muted">Todas las rutas cuelgan de <code>/api/pub</code> en tu dominio de Ventoki:</p>
           <Code>{`${base}/api/pub`}</Code>
         </section>
 
@@ -76,7 +76,7 @@ export default function Docs() {
           </Endpoint>
 
           <Endpoint metodo="POST" ruta="/api/pub/ventas">
-            <p className="muted">Reporta una venta: <b>descuenta</b> el stock en MeliHub y lo empuja a Mercado Libre.</p>
+            <p className="muted">Reporta una venta: <b>descuenta</b> el stock en Ventoki y lo empuja a Mercado Libre.</p>
             <Code>{`curl -X POST ${base}/api/pub/ventas \\
   -H "X-API-Key: mh_tu_clave_secreta" \\
   -H "Content-Type: application/json" \\
@@ -98,7 +98,7 @@ export default function Docs() {
           <p className="muted sm" style={{ marginTop: 14 }}>
             <b>Notas.</b> <code>producto_id</code> es el <code>id</code> que entrega <code>GET /productos</code>
             (no el <code>ml_item_id</code>). <code>cantidad</code> debe ser mayor que 0. Si la publicación ya
-            no está conectada a una cuenta de ML activa, el stock se ajusta igual en MeliHub y
+            no está conectada a una cuenta de ML activa, el stock se ajusta igual en Ventoki y
             <code>ml_actualizado</code> vuelve <code>false</code>.
           </p>
         </section>
@@ -117,8 +117,8 @@ export default function Docs() {
         <section id="wp" className="card doc-card">
           <h2>5. Plugin de WordPress / WooCommerce</h2>
           <p className="muted">
-            Si tu tienda es WooCommerce, no necesitas programar: instala el plugin <b>MeliHub Sync</b>,
-            pega la URL de tu MeliHub y una API key, y sincroniza el catálogo. Las ventas de WooCommerce
+            Si tu tienda es WooCommerce, no necesitas programar: instala el plugin <b>Ventoki Sync</b>,
+            pega la URL de tu Ventoki y una API key, y sincroniza el catálogo. Las ventas de WooCommerce
             reportan la baja de stock automáticamente.
           </p>
           <div className="row" style={{ gap: 10, flexWrap: 'wrap', marginTop: 4 }}>
@@ -126,7 +126,7 @@ export default function Docs() {
           </div>
           <ol className="doc-list" style={{ marginTop: 14 }}>
             <li>En WordPress: <b>Plugins → Añadir nuevo → Subir plugin</b>, elige el .zip y actívalo (requiere WooCommerce).</li>
-            <li>Ve a <b>MeliHub Sync</b> en el menú y pega la <b>URL</b> de tu MeliHub y tu <b>API key</b>.</li>
+            <li>Ve a <b>Ventoki Sync</b> en el menú y pega la <b>URL</b> de tu Ventoki y tu <b>API key</b>.</li>
             <li>Pulsa <b>Sincronizar</b>. Tus productos de Mercado Libre aparecerán en WooCommerce con stock y precio.</li>
           </ol>
         </section>

@@ -65,7 +65,7 @@ pub async fn suscribir(
     let back = format!("{}/suscripcion", cfg.app_url);
     let notif = format!("{}/api/suscripcion/webhook", cfg.app_url);
     let ext = format!("{}:{}:{}", vid, plan.id, ciclo);
-    let reason = format!("MeliHub - Plan {} ({})", plan.nombre, ciclo);
+    let reason = format!("Ventoki - Plan {} ({})", plan.nombre, ciclo);
     let (frequency, ftype) = if ciclo == "anual" { (12, "months") } else { (1, "months") };
     // Prueba gratis solo en la primera suscripción.
     let trial = if db::run(&pool, move |conn| subs::tuvo_suscripcion(conn, org)).await? {
@@ -117,7 +117,7 @@ pub async fn pagos(user: AuthVendedor, pool: web::Data<DbPool>, mp: web::Data<Me
     Ok(HttpResponse::Ok().json(json!({ "pagos": pagos })))
 }
 
-/// Cancela la suscripción (en MeliHub y en Mercado Pago).
+/// Cancela la suscripción (en Ventoki y en Mercado Pago).
 pub async fn cancelar(user: AuthVendedor, pool: web::Data<DbPool>, mp: web::Data<MercadoPago>) -> ApiResult<HttpResponse> {
     user.exigir_owner()?;
     let vid = user.id;
@@ -206,12 +206,12 @@ pub async fn webhook(
                     let id_mail = id.clone();
                     if let Ok(Some((email, plan))) = db::run(&pool, move |conn| subs::email_y_plan(conn, &id_mail)).await {
                         let (asunto, html) = if estado == "authorized" {
-                            ("Suscripción activada · MeliHub".to_string(), format!(
-                                "<p>¡Tu suscripción al plan <b>{plan}</b> de MeliHub está activa!</p>\
+                            ("Suscripción activada · Ventoki".to_string(), format!(
+                                "<p>¡Tu suscripción al plan <b>{plan}</b> de Ventoki está activa!</p>\
                                  <p>Gracias por suscribirte. Puedes gestionarla desde <a href=\"{}/suscripcion\">tu panel</a>.</p>",
                                 cfg.app_url))
                         } else {
-                            ("Problema con tu pago · MeliHub".to_string(), format!(
+                            ("Problema con tu pago · Ventoki".to_string(), format!(
                                 "<p>No pudimos cobrar tu suscripción al plan <b>{plan}</b> y quedó <b>pausada</b>.</p>\
                                  <p>Revisa tu medio de pago o vuelve a suscribirte desde <a href=\"{}/plan\">tu panel</a> para no perder el acceso.</p>",
                                 cfg.app_url))

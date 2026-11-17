@@ -368,8 +368,8 @@ pub fn start(pool: web::Data<DbPool>, client: web::Data<MlClient>, falabella: we
                         .flatten();
                         if let Some((email, datos)) = datos {
                             let nick = nick.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;");
-                            let html = format!("<div style=\"font-family:system-ui,sans-serif;color:#1f2733\"><h2 style=\"color:#13233b\">🛒 Nueva(s) venta(s) en Mercado Libre</h2><p>Tienes <b>{n}</b> venta(s) nueva(s) en la cuenta <b>{nick}</b>.</p><p>Entra a MeliHub para despacharlas.</p></div>");
-                            let _ = crate::email::enviar(&datos, &email, "Nueva venta · MeliHub", &html).await;
+                            let html = format!("<div style=\"font-family:system-ui,sans-serif;color:#1f2733\"><h2 style=\"color:#13233b\">🛒 Nueva(s) venta(s) en Mercado Libre</h2><p>Tienes <b>{n}</b> venta(s) nueva(s) en la cuenta <b>{nick}</b>.</p><p>Entra a Ventoki para despacharlas.</p></div>");
+                            let _ = crate::email::enviar(&datos, &email, "Nueva venta · Ventoki", &html).await;
                         }
                     }
                     Ok(_) => {}

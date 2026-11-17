@@ -73,7 +73,7 @@ export default function App() {
     <div className={`app-shell ${menu ? 'nav-open' : ''}`}>
       <aside className="sidebar">
         <div className="sidebar-head">
-          <div className="brand">Meli<b>Hub</b></div>
+          <div className="brand">Vent<b>oki</b></div>
           <button className="side-toggle" aria-label="Ocultar menú" title="Ocultar menú" onClick={() => setMenu(false)}>«</button>
         </div>
         <nav className="sidebar-nav" onClick={closeNavMobile}>
@@ -126,7 +126,7 @@ export default function App() {
       <div className="main">
         <header className="main-top">
           <button className="menu-btn" aria-label="Menú" aria-expanded={menu} onClick={() => setMenu((v) => !v)}>☰</button>
-          <div className="brand">Meli<b>Hub</b></div>
+          <div className="brand">Vent<b>oki</b></div>
           <GlobalSearch />
           <ThemeToggle className="menu-btn" />
         </header>

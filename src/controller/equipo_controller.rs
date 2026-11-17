@@ -43,12 +43,12 @@ pub async fn invitar(
     let link = format!("{}/aceptar?token={}", cfg.app_url, token);
     if mailer.configurado() {
         let html = format!(
-            "<p>Hola {},</p><p>Te invitaron a colaborar en <b>MeliHub</b>. Crea tu contraseña para entrar:</p>\
+            "<p>Hola {},</p><p>Te invitaron a colaborar en <b>Ventoki</b>. Crea tu contraseña para entrar:</p>\
              <p><a href=\"{link}\" style=\"background:#111;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none\">Aceptar invitación</a></p>\
              <p>El enlace vence en 7 días.</p>",
             esc(&m.nombre)
         );
-        let _ = mailer.enviar(&m.email, "Invitación a MeliHub", &html).await;
+        let _ = mailer.enviar(&m.email, "Invitación a Ventoki", &html).await;
     }
     let (actor, det) = (user.actor_id, format!("{} ({})", m.email, m.rol));
     let _ = db::run(&pool, move |conn| crate::services::auditoria_services::log(conn, org, actor, "equipo_invitar".into(), det)).await;
@@ -69,10 +69,10 @@ pub async fn reinvitar(
     let link = format!("{}/aceptar?token={}", cfg.app_url, token);
     if mailer.configurado() {
         let html = format!(
-            "<p>Hola {},</p><p>Aquí tienes de nuevo tu invitación a MeliHub:</p><p><a href=\"{link}\">Aceptar invitación</a></p>",
+            "<p>Hola {},</p><p>Aquí tienes de nuevo tu invitación a Ventoki:</p><p><a href=\"{link}\">Aceptar invitación</a></p>",
             esc(&m.nombre)
         );
-        let _ = mailer.enviar(&m.email, "Invitación a MeliHub", &html).await;
+        let _ = mailer.enviar(&m.email, "Invitación a Ventoki", &html).await;
     }
     Ok(HttpResponse::Ok().json(json!({ "enlace": link, "correo_enviado": mailer.configurado() })))
 }

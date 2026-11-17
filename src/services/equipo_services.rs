@@ -39,7 +39,7 @@ pub fn invitar(conn: &mut PgConnection, org_id: Uuid, nombre: &str, email: &str,
     // El email no puede ser el de un vendedor (dueño), para no romper el login.
     let existe: i64 = vendedores::table.filter(vendedores::email.eq(&email)).count().get_result(conn)?;
     if existe > 0 {
-        return Err(ApiError::conflict("Ese email ya tiene su propia cuenta en MeliHub"));
+        return Err(ApiError::conflict("Ese email ya tiene su propia cuenta en Ventoki"));
     }
     let token = token_random();
     let expira = now() + Duration::days(7);

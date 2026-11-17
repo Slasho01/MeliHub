@@ -48,7 +48,7 @@ export default function Login({ onAuth }) {
     <div className="auth-wrap">
       <div className="card auth-card stack">
         <div className="center">
-          <div className="brand" style={{ fontSize: 24 }}>Meli<b>Hub</b></div>
+          <div className="brand" style={{ fontSize: 24 }}>Vent<b>oki</b></div>
           <p className="muted sm" style={{ margin: '4px 0 0' }}>Centraliza tus publicaciones de Mercado Libre</p>
         </div>
         <form className="stack" onSubmit={submit}>
