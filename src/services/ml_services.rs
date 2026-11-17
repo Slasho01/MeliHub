@@ -116,9 +116,9 @@ pub fn producto_id_por_item(conn: &mut PgConnection, cuenta_id: Uuid, ml_item_id
         .map_err(ApiError::from)
 }
 
-/// Cuentas que no se sincronizan desde hace más de `horas` (o nunca).
-pub fn cuentas_desactualizadas(conn: &mut PgConnection, horas: i64) -> ApiResult<Vec<MlCuenta>> {
-    let corte = crate::services::common::now() - chrono::Duration::hours(horas);
+/// Cuentas que no se sincronizan desde hace más de `minutos` (o nunca).
+pub fn cuentas_desactualizadas(conn: &mut PgConnection, minutos: i64) -> ApiResult<Vec<MlCuenta>> {
+    let corte = crate::services::common::now() - chrono::Duration::minutes(minutos);
     ml_cuentas::table
         .filter(ml_cuentas::activa.eq(true))
         .filter(ml_cuentas::ultima_sync_at.is_null().or(ml_cuentas::ultima_sync_at.lt(corte)))

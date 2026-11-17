@@ -11,7 +11,11 @@ use actix_web::web;
 use std::collections::HashMap;
 use std::time::Duration;
 
-const SYNC_MAX_HORAS: i64 = 6;
+/// Cada cuántos MINUTOS, como máximo, se re-pullea el catálogo de una cuenta desde ML.
+/// Configurable con `ML_SYNC_MINUTOS` (default 15, mínimo 1).
+fn ml_sync_minutos() -> i64 {
+    std::env::var("ML_SYNC_MINUTOS").ok().and_then(|v| v.parse::<i64>().ok()).unwrap_or(15).max(1)
+}
 
 fn como_lista(v: Option<&serde_json::Value>) -> Vec<serde_json::Value> {
     match v {
@@ -326,7 +330,8 @@ pub fn start(pool: web::Data<DbPool>, client: web::Data<MlClient>, falabella: we
         tick.tick().await; // consumir el tick inmediato
         loop {
             tick.tick().await;
-            let cuentas = match db::run(&pool, move |conn| svc::cuentas_desactualizadas(conn, SYNC_MAX_HORAS)).await {
+            let pull_min = ml_sync_minutos();
+            let cuentas = match db::run(&pool, move |conn| svc::cuentas_desactualizadas(conn, pull_min)).await {
                 Ok(c) => c,
                 Err(e) => {
                     log::warn!("No se pudieron listar cuentas a sincronizar: {e}");

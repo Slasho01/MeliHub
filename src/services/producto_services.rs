@@ -150,6 +150,12 @@ pub fn listar(
     if let Some(est) = filtro.estado.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
         q = q.filter(productos::estado.eq(est.to_string()));
     }
+    // Oculta las publicaciones de CATÁLOGO del inventario: son el "gemelo" que compite en
+    // Buy Box (comparte stock con la normal) y vive en la sección «Catálogo». Evita el
+    // duplicado. Mantiene las normales y las que no son de catálogo (catalog_listing != true).
+    q = q.filter(diesel::dsl::sql::<diesel::sql_types::Bool>(
+        "productos.datos->>'catalog_listing' IS DISTINCT FROM 'true'",
+    ));
     q.select(Producto::as_select())
         .order(productos::sincronizado_at.desc())
         .limit(500)
