@@ -117,7 +117,7 @@ export default function Inventario({ me }) {
     for (const p of items || []) {
       rows.push([p.ml_item_id, p.titulo, p.estado, p.stock, p.precio, p.costo ?? '', p.precio_jarstore ?? '', p.ml?.ganancia ?? '', p.jarstore?.ganancia ?? '', p.ml?.margen ?? ''])
     }
-    csvLocal('inventario-melihub.csv', rows)
+    csvLocal('inventario-ventoki.csv', rows)
   }
 
   const aplicarMasivo = async () => {

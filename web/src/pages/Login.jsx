@@ -82,7 +82,7 @@ export default function Login({ onAuth }) {
         <div className="center sm muted" style={{ borderTop: '1px solid var(--line)', paddingTop: 12, marginTop: 2 }}>
           <a className="link-btn" href="/docs">Documentación de la API</a>
           <span style={{ margin: '0 8px' }}>·</span>
-          <a className="link-btn" href="/melihub-sync.zip" download>⬇ Plugin de WordPress</a>
+          <a className="link-btn" href="/ventoki-sync.zip" download>⬇ Plugin de WordPress</a>
         </div>
       </div>
     </div>

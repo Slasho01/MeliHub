@@ -13,7 +13,7 @@ function Endpoint({ metodo, ruta, children }) {
 }
 
 export default function Docs() {
-  const base = typeof window !== 'undefined' ? window.location.origin : 'https://tu-melihub.com'
+  const base = typeof window !== 'undefined' ? window.location.origin : 'https://tu-ventoki.com'
   return (
     <div className="lp">
       <header className="lp-nav">
@@ -122,7 +122,7 @@ export default function Docs() {
             reportan la baja de stock automáticamente.
           </p>
           <div className="row" style={{ gap: 10, flexWrap: 'wrap', marginTop: 4 }}>
-            <a className="btn btn-accent" href="/melihub-sync.zip" download>⬇ Descargar plugin (.zip)</a>
+            <a className="btn btn-accent" href="/ventoki-sync.zip" download>⬇ Descargar plugin (.zip)</a>
           </div>
           <ol className="doc-list" style={{ marginTop: 14 }}>
             <li>En WordPress: <b>Plugins → Añadir nuevo → Subir plugin</b>, elige el .zip y actívalo (requiere WooCommerce).</li>
