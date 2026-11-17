@@ -150,17 +150,45 @@ pub fn listar(
     if let Some(est) = filtro.estado.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
         q = q.filter(productos::estado.eq(est.to_string()));
     }
-    // Oculta las publicaciones de CATÁLOGO del inventario: son el "gemelo" que compite en
-    // Buy Box (comparte stock con la normal) y vive en la sección «Catálogo». Evita el
-    // duplicado. Mantiene las normales y las que no son de catálogo (catalog_listing != true).
-    q = q.filter(diesel::dsl::sql::<diesel::sql_types::Bool>(
-        "productos.datos->>'catalog_listing' IS DISTINCT FROM 'true'",
-    ));
-    q.select(Producto::as_select())
+    let mut items: Vec<Producto> = q
+        .select(Producto::as_select())
         .order(productos::sincronizado_at.desc())
         .limit(500)
-        .load(conn)
-        .map_err(ApiError::from)
+        .load(conn)?;
+    // Dedup de catálogo: si un producto tiene publicación NORMAL y de CATÁLOGO (comparten
+    // depósito), muestra solo la normal. Si solo tiene una (sea del tipo que sea), la muestra.
+    // Clave de identidad: el depósito compartido (user_product_id) o, si no, el SELLER_SKU.
+    let claves_normales: std::collections::HashSet<String> = items
+        .iter()
+        .filter(|p| !es_catalogo(p))
+        .filter_map(clave_dedup)
+        .collect();
+    items.retain(|p| !(es_catalogo(p) && clave_dedup(p).map(|k| claves_normales.contains(&k)).unwrap_or(false)));
+    Ok(items)
+}
+
+/// ¿La publicación es de catálogo (compite en Buy Box)?
+fn es_catalogo(p: &Producto) -> bool {
+    p.datos.get("catalog_listing").and_then(|v| v.as_bool()).unwrap_or(false)
+}
+
+/// Clave de identidad del producto físico, para unir la publicación normal y la de catálogo:
+/// primero el depósito compartido (`user_product_id`); si no hay, el SELLER_SKU del vendedor.
+fn clave_dedup(p: &Producto) -> Option<String> {
+    if let Some(upid) = p.datos.get("user_product_id").and_then(|v| v.as_str()).map(str::trim).filter(|s| !s.is_empty()) {
+        return Some(format!("upid:{upid}"));
+    }
+    p.datos
+        .get("attributes")
+        .and_then(|a| a.as_array())
+        .and_then(|arr| {
+            arr.iter()
+                .find(|a| a.get("id").and_then(|v| v.as_str()) == Some("SELLER_SKU"))
+                .and_then(|a| a.get("value_name").and_then(|v| v.as_str()))
+                .map(|s| s.trim().to_lowercase())
+                .filter(|s| !s.is_empty())
+                .map(|s| format!("sku:{s}"))
+        })
 }
 
 /// Mapa `ml_item_id -> título` de las publicaciones del vendedor, para mostrar nombres
