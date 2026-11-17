@@ -138,13 +138,17 @@ pub struct WebhookNotif {
 /// No autenticado (lo llama ML); se valida por el user_id contra las cuentas conectadas.
 /// Responde 200 siempre y rápido; el procesamiento ocurre en segundo plano.
 pub async fn webhook(
-    body: web::Json<WebhookNotif>,
+    body: web::Bytes,
     pool: web::Data<DbPool>,
     client: web::Data<MlClient>,
     fala: web::Data<FalabellaClient>,
     paris: web::Data<ParisClient>,
 ) -> ApiResult<HttpResponse> {
-    let n = body.into_inner();
+    // Log de recepción CRUDA: confirma que ML está llegando pase lo que pase con el parseo.
+    let crudo: String = String::from_utf8_lossy(&body).chars().take(300).collect();
+    log::info!("[Webhook ML] POST recibido ({} bytes): {crudo}", body.len());
+    // Parseo tolerante (no exige content-type): si falla, seguimos con campos vacíos.
+    let n: WebhookNotif = serde_json::from_slice(&body).unwrap_or(WebhookNotif { topic: None, resource: None, user_id: None });
     let (pool2, client2, fala2, paris2) = (pool.clone(), client.clone(), fala.clone(), paris.clone());
     actix_web::rt::spawn(async move {
         if let Err(e) = procesar_notificacion(&pool2, &client2, &fala2, &paris2, n).await {
@@ -158,6 +162,7 @@ async fn procesar_notificacion(pool: &web::Data<DbPool>, client: &web::Data<MlCl
     let topic = n.topic.unwrap_or_default();
     let resource = n.resource.unwrap_or_default();
     let user_id = n.user_id.unwrap_or(0);
+    log::info!("[Webhook ML] recibido topic='{topic}' resource='{resource}' user={user_id}");
     if user_id == 0 {
         return Ok(());
     }
