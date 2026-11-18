@@ -57,6 +57,20 @@ pub fn alertas_conexiones(conn: &mut PgConnection, vendedor_id: Uuid) -> Vec<(St
         .unwrap_or_default()
 }
 
+/// Marca como leídos todos los avisos de conexión/sincronización del vendedor.
+/// Sirve para limpiar la banda de "Avisos de sincronización" en Conexiones.
+pub fn descartar_alertas_conexiones(conn: &mut PgConnection, vendedor_id: Uuid) -> ApiResult<usize> {
+    diesel::update(
+        notificaciones::table
+            .filter(notificaciones::vendedor_id.eq(vendedor_id))
+            .filter(notificaciones::leida.eq(false))
+            .filter(notificaciones::tipo.eq_any(["reconectar", "sync_error", "falabella_sync", "paris_sync", "shopify_sync"])),
+    )
+    .set(notificaciones::leida.eq(true))
+    .execute(conn)
+    .map_err(ApiError::from)
+}
+
 pub fn listar(conn: &mut PgConnection, vendedor_id: Uuid, solo_no_leidas: bool, limit: i64) -> ApiResult<Vec<Notificacion>> {
     let mut q = notificaciones::table.filter(notificaciones::vendedor_id.eq(vendedor_id)).into_boxed();
     if solo_no_leidas {

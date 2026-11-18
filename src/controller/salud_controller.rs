@@ -6,7 +6,7 @@ use crate::db::{self, DbPool};
 use crate::errors::{ApiError, ApiResult};
 use crate::schema::productos;
 use crate::services::common::now;
-use crate::services::{falabella_services, ml_services, paris_services, shopify_services};
+use crate::services::{falabella_services, ml_services, paris_services, saas_services, shopify_services};
 use actix_web::{web, HttpResponse};
 use diesel::prelude::*;
 use serde_json::{json, Value};
@@ -131,6 +131,13 @@ pub async fn conexiones(user: AuthVendedor, pool: web::Data<DbPool>) -> ApiResul
 
 /// Prueba EN VIVO cada conexión del vendedor (valida token/credenciales con una llamada real).
 /// Devuelve [{tipo, nombre, ok, mensaje}]. Útil para onboarding y soporte.
+/// Descarta (marca leídos) los avisos de sincronización de la banda de Conexiones.
+pub async fn descartar_alertas(user: AuthVendedor, pool: web::Data<DbPool>) -> ApiResult<HttpResponse> {
+    let vid = user.id;
+    let n = db::run(&pool, move |conn| saas_services::descartar_alertas_conexiones(conn, vid)).await?;
+    Ok(HttpResponse::Ok().json(json!({ "descartadas": n })))
+}
+
 pub async fn probar(
     user: AuthVendedor,
     pool: web::Data<DbPool>,

@@ -105,6 +105,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             // Catálogo unificado + gestor de inventario
             .service(r("/salud/conexiones").route(get().to(salud::conexiones)))
             .service(r("/salud/probar").route(post().to(salud::probar)))
+            .service(r("/salud/alertas/descartar").route(post().to(salud::descartar_alertas)))
             .service(r("/onboarding").route(get().to(salud::onboarding)))
             .service(r("/productos").route(get().to(prod::listar)))
             .service(r("/productos/inventario-masivo").route(post().to(prod::inventario_masivo)))

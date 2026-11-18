@@ -31,6 +31,11 @@ export default function Conexiones() {
     post('/salud/probar').then((d) => setTest(d || [])).catch((e) => setError(e.message)).finally(() => setProbando(false))
   }
 
+  const descartar = () => {
+    setAlertas([])
+    post('/salud/alertas/descartar').catch((e) => setError(e.message))
+  }
+
   const lista = rows || []
   const ok = lista.filter((r) => r.estado === 'ok').length
   const warn = lista.filter((r) => r.estado === 'atrasada' || r.estado === 'pendiente').length
@@ -53,7 +58,10 @@ export default function Conexiones() {
 
       {alertas.length > 0 && (
         <div className="alert alert-bad" style={{ display: 'block' }}>
-          <b>⚠️ Avisos de sincronización ({alertas.length})</b>
+          <div className="row between" style={{ alignItems: 'center', gap: 8 }}>
+            <b>⚠️ Avisos de sincronización ({alertas.length})</b>
+            <button className="btn btn-sm" onClick={descartar}>Descartar</button>
+          </div>
           <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
             {alertas.map((a, i) => (
               <li key={i} style={{ marginBottom: 2 }}><b>{a.titulo}</b>{a.cuerpo ? ` — ${a.cuerpo}` : ''}</li>
