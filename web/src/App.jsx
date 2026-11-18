@@ -13,6 +13,7 @@ import Perfil from './pages/Perfil'
 import Admin from './pages/Admin'
 import Reset from './pages/Reset'
 import Verificar from './pages/Verificar'
+import Baja from './pages/Baja'
 import Legal from './pages/Legal'
 import Equipo from './pages/Equipo'
 import Aceptar from './pages/Aceptar'
@@ -56,6 +57,9 @@ export default function App() {
   useEffect(() => {
     try { document.documentElement.dataset.theme = localStorage.getItem('melihub_tema') || 'dark' } catch { /* ignore */ }
   }, [])
+
+  // El enlace de "darse de baja" del correo debe funcionar con o sin sesión.
+  if (window.location.pathname === '/baja') return <Baja />
 
   if (!auth) return (
     <Routes>

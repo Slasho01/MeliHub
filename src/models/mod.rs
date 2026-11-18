@@ -644,3 +644,9 @@ pub struct NewCuponUso {
     pub cupon_id: Uuid,
     pub vendedor_id: Uuid,
 }
+
+#[derive(Insertable)]
+#[diesel(table_name = crate::schema::promo_bajas)]
+pub struct NewPromoBaja {
+    pub email: String,
+}

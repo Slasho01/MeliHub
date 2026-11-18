@@ -13,6 +13,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(r("/auth/forgot").route(post().to(auth::forgot)))
             .service(r("/auth/verificar").route(post().to(auth::verificar)))
             .service(r("/auth/reenviar-verificacion").route(post().to(auth::reenviar_verificacion)))
+            .service(r("/promo/baja").route(post().to(adm::baja_promo)))
             .service(r("/auth/reset").route(post().to(auth::reset)))
             .service(r("/auth/me").route(get().to(auth::me)))
             .service(r("/auth/logout-all").route(post().to(auth::logout_all)))

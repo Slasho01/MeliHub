@@ -243,6 +243,15 @@ diesel::table! {
 }
 
 diesel::table! {
+    promo_bajas (id) {
+        id -> Uuid,
+        #[max_length = 255]
+        email -> Varchar,
+        creado_at -> Timestamp,
+    }
+}
+
+diesel::table! {
     notificaciones (id) {
         id -> Uuid,
         vendedor_id -> Uuid,
@@ -500,6 +509,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     config_ganancias,
     cupones,
     cupon_usos,
+    promo_bajas,
     facturacion,
     falabella_cuentas,
     falabella_publicaciones,

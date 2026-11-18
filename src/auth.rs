@@ -95,6 +95,24 @@ pub fn crear_verif_token(vendedor_id: Uuid, secret: &str) -> Result<String, ApiE
         .map_err(|e| ApiError::internal(format!("No se pudo emitir el token: {e}")))
 }
 
+/// Token para el enlace "darse de baja" de correos de promoción (lleva el email firmado).
+pub fn crear_baja_token(email: &str, secret: &str) -> Result<String, ApiError> {
+    let exp = (chrono::Utc::now() + chrono::Duration::days(3650)).timestamp() as usize;
+    let claims = VerifClaims { sub: email.to_lowercase(), purpose: "baja".to_string(), exp };
+    encode(&Header::new(Algorithm::HS256), &claims, &EncodingKey::from_secret(secret.as_bytes()))
+        .map_err(|e| ApiError::internal(format!("No se pudo emitir el token: {e}")))
+}
+
+/// Verifica un token de baja y devuelve el email.
+pub fn verificar_baja_token(token: &str, secret: &str) -> Result<String, ApiError> {
+    let data = decode::<VerifClaims>(token, &DecodingKey::from_secret(secret.as_bytes()), &Validation::new(Algorithm::HS256))
+        .map_err(|_| ApiError::unauthorized("Enlace inválido o expirado"))?;
+    if data.claims.purpose != "baja" {
+        return Err(ApiError::unauthorized("Token inválido"));
+    }
+    Ok(data.claims.sub)
+}
+
 /// Verifica un token de verificación de correo y devuelve el vendedor id.
 pub fn verificar_verif_token(token: &str, secret: &str) -> Result<Uuid, ApiError> {
     let data = decode::<VerifClaims>(token, &DecodingKey::from_secret(secret.as_bytes()), &Validation::new(Algorithm::HS256))

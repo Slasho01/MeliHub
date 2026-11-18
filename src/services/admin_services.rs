@@ -126,6 +126,23 @@ pub fn eliminar_boleta(conn: &mut PgConnection, id: Uuid) -> ApiResult<()> {
     Ok(())
 }
 
+/// Correos que se dieron de baja de los envíos de promoción (lista de supresión).
+pub fn bajas_emails(conn: &mut PgConnection) -> ApiResult<Vec<String>> {
+    use crate::schema::promo_bajas;
+    promo_bajas::table.select(promo_bajas::email).load::<String>(conn).map_err(ApiError::from)
+}
+
+/// Registra una baja (idempotente: si ya estaba, no falla).
+pub fn registrar_baja(conn: &mut PgConnection, email: &str) -> ApiResult<()> {
+    use crate::schema::promo_bajas;
+    diesel::insert_into(promo_bajas::table)
+        .values(crate::models::NewPromoBaja { email: email.trim().to_lowercase() })
+        .on_conflict(promo_bajas::email)
+        .do_nothing()
+        .execute(conn)?;
+    Ok(())
+}
+
 /// (nombre, email) de todas las cuentas activas — para envíos de promoción.
 pub fn emails_promo(conn: &mut PgConnection) -> ApiResult<Vec<(String, String)>> {
     vendedores::table

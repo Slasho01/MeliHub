@@ -41,7 +41,7 @@ pub struct PromoBody {
 
 /// Envía un correo de promoción con la plantilla de la marca. Modo prueba (a una
 /// sola dirección) o difusión a todas las cuentas activas.
-pub async fn enviar_promo(user: AuthVendedor, body: web::Json<PromoBody>, pool: web::Data<DbPool>) -> ApiResult<HttpResponse> {
+pub async fn enviar_promo(user: AuthVendedor, body: web::Json<PromoBody>, pool: web::Data<DbPool>, cfg: web::Data<crate::config::Config>) -> ApiResult<HttpResponse> {
     exigir_admin(&user)?;
     let PromoBody { asunto, titulo, cuerpo, cta_texto, cta_url, prueba_a, destino, emails } = body.into_inner();
     if asunto.trim().is_empty() || titulo.trim().is_empty() || cuerpo.trim().is_empty() {
@@ -67,10 +67,20 @@ pub async fn enviar_promo(user: AuthVendedor, body: web::Json<PromoBody>, pool: 
         cuerpo_html,
         boton_html
     );
-    let html = crate::email::plantilla(&contenido);
+    // Arma el HTML por destinatario, con su enlace de baja firmado (email en el token).
+    let armar_html = |email: &str| -> ApiResult<String> {
+        let token = crate::auth::crear_baja_token(email, &cfg.jwt_secret)?;
+        let link = format!("{}/baja?t={}", cfg.app_url, token);
+        let unsub = format!(
+            "<div style=\"margin-top:26px;padding-top:14px;border-top:1px solid #f0f2f6;text-align:center\">\
+             <a href=\"{link}\" style=\"color:#9aa0b0;font-size:12px;text-decoration:underline\">Darse de baja de estos correos</a></div>"
+        );
+        Ok(crate::email::plantilla(&format!("{contenido}{unsub}")))
+    };
 
     // Modo prueba: una sola dirección.
     if let Some(dir) = prueba_a.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        let html = armar_html(dir)?;
         crate::email::enviar_sistema(&pool, dir, asunto.trim(), &html).await?;
         return Ok(HttpResponse::Ok().json(json!({ "prueba": true, "total": 1, "enviados": 1, "fallidos": 0 })));
     }
@@ -95,16 +105,46 @@ pub async fn enviar_promo(user: AuthVendedor, body: web::Json<PromoBody>, pool: 
     } else {
         db::run(&pool, adm::emails_promo).await?.into_iter().map(|(_n, e)| e).collect()
     };
+    // Excluye los que se dieron de baja (y deduplica por si acaso).
+    let bajas: std::collections::HashSet<String> = db::run(&pool, adm::bajas_emails).await?.into_iter().collect();
+    let mut vistos: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let destinatarios: Vec<String> = destinatarios
+        .into_iter()
+        .filter(|e| {
+            let k = e.trim().to_lowercase();
+            !bajas.contains(&k) && vistos.insert(k)
+        })
+        .collect();
     let total = destinatarios.len();
     let mut enviados = 0usize;
     let mut fallidos = 0usize;
     for email in destinatarios {
+        let html = match armar_html(&email) {
+            Ok(h) => h,
+            Err(_) => {
+                fallidos += 1;
+                continue;
+            }
+        };
         match crate::email::enviar_sistema(&pool, &email, asunto.trim(), &html).await {
             Ok(_) => enviados += 1,
             Err(_) => fallidos += 1,
         }
     }
     Ok(HttpResponse::Ok().json(json!({ "prueba": false, "total": total, "enviados": enviados, "fallidos": fallidos })))
+}
+
+#[derive(Deserialize)]
+pub struct BajaBody {
+    pub token: String,
+}
+
+/// Público: procesa un "darse de baja" desde el enlace del correo (el email va firmado en el token).
+pub async fn baja_promo(body: web::Json<BajaBody>, pool: web::Data<DbPool>, cfg: web::Data<crate::config::Config>) -> ApiResult<HttpResponse> {
+    let email = crate::auth::verificar_baja_token(body.into_inner().token.trim(), &cfg.jwt_secret)?;
+    let email2 = email.clone();
+    db::run(&pool, move |conn| adm::registrar_baja(conn, &email2)).await?;
+    Ok(HttpResponse::Ok().json(json!({ "ok": true, "email": email })))
 }
 
 /// Lista de vendedores (clientes) con su uso.
