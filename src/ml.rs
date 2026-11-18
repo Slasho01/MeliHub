@@ -121,13 +121,6 @@ pub struct MlItem {
     pub deposito_stock: Option<i64>,
 }
 
-/// Envoltorio del multiget: [{ "code": 200, "body": {item} }, ...]
-#[derive(Deserialize)]
-struct MultiGet {
-    code: i32,
-    body: serde_json::Value,
-}
-
 impl MlClient {
     pub fn new(cfg: MlConfig) -> Self {
         MlClient {
@@ -204,25 +197,28 @@ impl MlClient {
         Ok(serde_json::from_value(v).unwrap_or_default())
     }
 
-    /// Trae el detalle de varias publicaciones (multiget, hasta 20 por llamada).
+    /// Trae el detalle de varias publicaciones. Mercado Libre DEPRECÓ el multiget
+    /// `GET /items?ids=...` (responde `ResourceDeprecated`), así que se consulta cada
+    /// ítem por separado (`GET /items/{id}`), con concurrencia acotada para no saturar.
     pub async fn get_items(&self, access_token: &str, ids: &[String]) -> ApiResult<Vec<MlItem>> {
         if ids.is_empty() {
             return Ok(vec![]);
         }
-        let attrs = "id,title,price,available_quantity,status,permalink,thumbnail,pictures,video_id,category_id,currency_id,variations,attributes,catalog_product_id,catalog_listing,shipping,user_product_id";
-        let v: serde_json::Value = self
-            .get(access_token, &format!("/items?ids={}&attributes={attrs}", ids.join(",")))
-            .await?;
-        // Puede venir como multiget [{code,body}] o como lista directa de items.
-        if let Ok(multi) = serde_json::from_value::<Vec<MultiGet>>(v.clone()) {
-            Ok(multi
-                .into_iter()
-                .filter(|m| m.code == 200)
-                .filter_map(|m| serde_json::from_value::<MlItem>(m.body).ok())
-                .collect())
-        } else {
-            Ok(serde_json::from_value::<Vec<MlItem>>(v).unwrap_or_default())
-        }
+        const ATTRS: &str = "id,title,price,available_quantity,status,permalink,thumbnail,pictures,video_id,category_id,currency_id,variations,attributes,catalog_product_id,catalog_listing,shipping,user_product_id";
+        use futures_util::stream::StreamExt;
+        let items: Vec<MlItem> = futures_util::stream::iter(ids.iter().cloned())
+            .map(|id| async move {
+                let v: serde_json::Value = self
+                    .get(access_token, &format!("/items/{id}?attributes={ATTRS}"))
+                    .await
+                    .ok()?;
+                serde_json::from_value::<MlItem>(v).ok()
+            })
+            .buffer_unordered(5)
+            .filter_map(|x| async move { x })
+            .collect()
+            .await;
+        Ok(items)
     }
 
     /// Descripción en texto plano de una publicación (endpoint aparte del item).
