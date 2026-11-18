@@ -124,7 +124,7 @@ impl FalabellaClient {
                 let filtro = format!("[\"{s}\"]");
                 self.request(user_id, api_key, "GetProducts", &[("SkuSellerList", &filtro)], None).await
             }
-            None => self.request(user_id, api_key, "GetProducts", &[("Limit", "10")], None).await,
+            None => self.request(user_id, api_key, "GetProducts", &[("Limit", "100")], None).await,
         }
     }
 

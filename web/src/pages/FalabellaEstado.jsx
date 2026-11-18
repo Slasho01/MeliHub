@@ -9,40 +9,46 @@ const qcBadge = (qc) => {
 }
 
 export default function FalabellaEstado({ cuenta }) {
-  const [pubs, setPubs] = useState(null)
-  const [fp, setFp] = useState({})
+  const [prods, setProds] = useState(null) // productos REALES de Falabella (de su API)
+  const [mapa, setMapa] = useState({}) // seller_sku -> { producto_id, titulo } (mapeo local, para acciones)
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState('')
 
   const cargar = () => {
     if (!cuenta) return
     setError(null)
-    get(`/falabella/publicaciones?cuenta=${cuenta.id}`).then(setPubs).catch((e) => setError(e.message))
+    // Mapeo local: para vincular acciones (republicar/pausar) y el título del hub.
+    get(`/falabella/publicaciones?cuenta=${cuenta.id}`)
+      .then((pubs) => {
+        const m = {}
+        ;(pubs || []).forEach((p) => { m[p.seller_sku] = { producto_id: p.producto_id, titulo: p.titulo } })
+        setMapa(m)
+      })
+      .catch(() => {})
+    // Catálogo real en Falabella (su API GetProducts).
     get(`/falabella/productos?cuenta=${cuenta.id}`)
       .then((d) => {
         let pr = d?.SuccessResponse?.Body?.Products?.Product
         pr = Array.isArray(pr) ? pr : pr ? [pr] : []
-        const m = {}
-        pr.forEach((p) => {
-          const bu = Array.isArray(p.BusinessUnits?.BusinessUnit) ? p.BusinessUnits.BusinessUnit[0] : p.BusinessUnits?.BusinessUnit
-          m[p.SellerSku] = { qc: p.QCStatus, publicado: bu?.IsPublished === '1', stock: bu?.Stock, img: !!(p.MainImage) }
-        })
-        setFp(m)
+        setProds(
+          pr.map((p) => {
+            const bu = Array.isArray(p.BusinessUnits?.BusinessUnit) ? p.BusinessUnits.BusinessUnit[0] : p.BusinessUnits?.BusinessUnit
+            return { sku: p.SellerSku, nombre: p.Name, qc: p.QCStatus, publicado: bu?.IsPublished === '1', stock: bu?.Stock, img: !!p.MainImage }
+          })
+        )
       })
-      .catch(() => {})
+      .catch((e) => { setError('No se pudieron traer tus productos de Falabella: ' + (e.message || 'error')); setProds([]) })
   }
   useEffect(() => { cargar() }, [cuenta]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const cambiar = async (row, activo) => {
-    setBusy(row.producto_id)
-    setError(null)
-    try { await post('/falabella/estado', { producto_id: row.producto_id, cuenta_id: cuenta.id, activo }); setTimeout(cargar, 1800) }
+  const cambiar = async (producto_id, activo) => {
+    setBusy(producto_id); setError(null)
+    try { await post('/falabella/estado', { producto_id, cuenta_id: cuenta.id, activo }); setTimeout(cargar, 1800) }
     catch (e) { setError(e.message) } finally { setBusy('') }
   }
-  const republicar = async (row) => {
-    setBusy(row.producto_id)
-    setError(null)
-    try { await post('/falabella/republicar', { producto_id: row.producto_id, cuenta_id: cuenta.id }); setTimeout(cargar, 2500) }
+  const republicar = async (producto_id) => {
+    setBusy(producto_id); setError(null)
+    try { await post('/falabella/republicar', { producto_id, cuenta_id: cuenta.id }); setTimeout(cargar, 2500) }
     catch (e) { setError(e.message) } finally { setBusy('') }
   }
 
@@ -52,29 +58,37 @@ export default function FalabellaEstado({ cuenta }) {
     <div className="card stack" style={{ gap: 10 }}>
       <div className="row between"><div className="strong">Mis publicaciones en Falabella</div><button className="btn btn-sm" onClick={cargar}>↻ Actualizar</button></div>
       {error && <div className="alert alert-bad">{error}</div>}
-      {pubs == null ? (
+      {prods == null ? (
         <div className="muted">Cargando…</div>
-      ) : pubs.length === 0 ? (
-        <div className="muted sm">Aún no has publicado productos en Falabella.</div>
+      ) : prods.length === 0 ? (
+        <div className="muted sm">No se encontraron productos en tu cuenta de Falabella. Si recién publicaste, dale a «Actualizar» en unos minutos.</div>
       ) : (
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%' }}>
-            <thead><tr><th>Producto</th><th>SKU</th><th>Estado (QC)</th><th>Img</th><th>Publicado</th><th></th></tr></thead>
+            <thead><tr><th>Producto</th><th>SKU</th><th>Estado (QC)</th><th>Stock</th><th>Img</th><th>Publicado</th><th></th></tr></thead>
             <tbody>
-              {pubs.map((r) => {
-                const s = fp[r.seller_sku] || {}
+              {prods.map((p) => {
+                const link = mapa[p.sku] // vínculo con el hub (si se publicó desde Ventoki)
+                const pid = link?.producto_id
                 return (
-                  <tr key={r.producto_id}>
-                    <td className="strong">{r.titulo}</td>
-                    <td className="sm muted">{r.seller_sku}</td>
-                    <td>{qcBadge(s.qc)}</td>
-                    <td className="sm">{s.img ? '✓' : '—'}</td>
-                    <td className="sm">{s.publicado ? 'Sí' : 'No'}</td>
+                  <tr key={p.sku}>
+                    <td className="strong">{link?.titulo || p.nombre || '—'}</td>
+                    <td className="sm muted">{p.sku}</td>
+                    <td>{qcBadge(p.qc)}</td>
+                    <td className="sm">{p.stock ?? '—'}</td>
+                    <td className="sm">{p.img ? '✓' : '—'}</td>
+                    <td className="sm">{p.publicado ? 'Sí' : 'No'}</td>
                     <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                      <button className="btn btn-sm" disabled={busy === r.producto_id} onClick={() => republicar(r)} title="Volver a publicar reusando la categoría/marca guardadas">↻ Republicar</button>{' '}
-                      {s.publicado
-                        ? <button className="btn btn-sm" disabled={busy === r.producto_id} onClick={() => cambiar(r, false)}>Pausar</button>
-                        : <button className="btn btn-sm btn-accent" disabled={busy === r.producto_id} onClick={() => cambiar(r, true)}>Reactivar</button>}
+                      {pid ? (
+                        <>
+                          <button className="btn btn-sm" disabled={busy === pid} onClick={() => republicar(pid)} title="Volver a publicar reusando la categoría/marca guardadas">↻ Republicar</button>{' '}
+                          {p.publicado
+                            ? <button className="btn btn-sm" disabled={busy === pid} onClick={() => cambiar(pid, false)}>Pausar</button>
+                            : <button className="btn btn-sm btn-accent" disabled={busy === pid} onClick={() => cambiar(pid, true)}>Reactivar</button>}
+                        </>
+                      ) : (
+                        <span className="muted xs" title="Publicado fuera de Ventoki — no se puede gestionar desde aquí">No vinculado</span>
+                      )}
                     </td>
                   </tr>
                 )
@@ -83,7 +97,7 @@ export default function FalabellaEstado({ cuenta }) {
           </table>
         </div>
       )}
-      <p className="muted xs" style={{ margin: 0 }}>«En revisión» = Falabella está validando; «Rechazado» = revisa la categoría/atributos y vuelve a publicar.</p>
+      <p className="muted xs" style={{ margin: 0 }}>«En revisión» = Falabella está validando; «Rechazado» = revisa la categoría/atributos y vuelve a publicar. «No vinculado» = lo publicaste fuera de Ventoki.</p>
     </div>
   )
 }
