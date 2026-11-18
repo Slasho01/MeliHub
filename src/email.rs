@@ -1,7 +1,9 @@
 //! Envío de correos con dos proveedores: **Resend** (HTTP, funciona en Render) o **SMTP** propio
 //! (lettre; requiere host sin bloqueo de SMTP saliente, p. ej. un VPS). La config vive en la BD.
 
+use crate::db::{self, DbPool};
 use crate::errors::{ApiError, ApiResult};
+use actix_web::web;
 use serde_json::json;
 
 /// Datos de correo ya descifrados, listos para enviar.
@@ -14,6 +16,55 @@ pub struct DatosCorreo {
     pub smtp_password: String,
     pub smtp_tls: bool,
     pub remitente: String,
+}
+
+impl DatosCorreo {
+    /// ¿Tiene lo mínimo para enviar? (Resend con key, o SMTP con host.)
+    pub fn usable(&self) -> bool {
+        if self.proveedor == "smtp" {
+            !self.smtp_host.trim().is_empty()
+        } else {
+            !self.resend_api_key.trim().is_empty()
+        }
+    }
+    /// Config de Resend tomada del entorno (fallback si el panel no está configurado).
+    pub fn desde_env(resend_key: &str, remitente: &str) -> Self {
+        DatosCorreo {
+            proveedor: "resend".to_string(),
+            resend_api_key: resend_key.to_string(),
+            remitente: remitente.to_string(),
+            smtp_host: String::new(),
+            smtp_port: 587,
+            smtp_usuario: String::new(),
+            smtp_password: String::new(),
+            smtp_tls: true,
+        }
+    }
+}
+
+/// Resuelve la configuración de correo: primero la del panel admin (BD `config_correo`);
+/// si no hay o no es usable, cae al entorno (`RESEND_API_KEY` / `MAIL_FROM`).
+pub async fn resolver(pool: &web::Data<DbPool>, resend_env: &str, from_env: &str) -> Option<DatosCorreo> {
+    if let Ok(Some(d)) = db::run(pool, crate::services::correo_services::datos).await {
+        if d.usable() {
+            return Some(d);
+        }
+    }
+    let env = DatosCorreo::desde_env(resend_env, from_env);
+    env.usable().then_some(env)
+}
+
+/// ¿Hay alguna configuración de correo activa (panel o entorno)?
+pub async fn hay_config(pool: &web::Data<DbPool>, resend_env: &str, from_env: &str) -> bool {
+    resolver(pool, resend_env, from_env).await.is_some()
+}
+
+/// Envía un correo resolviendo la config automáticamente (panel admin o entorno).
+pub async fn enviar_auto(pool: &web::Data<DbPool>, resend_env: &str, from_env: &str, to: &str, subject: &str, html: &str) -> ApiResult<()> {
+    let d = resolver(pool, resend_env, from_env)
+        .await
+        .ok_or_else(|| ApiError::internal("El envío de correos no está configurado (configura Resend en el panel o define RESEND_API_KEY)."))?;
+    enviar(&d, to, subject, html).await
 }
 
 /// Envía un correo HTML según el proveedor configurado.

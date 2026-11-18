@@ -2,7 +2,6 @@ use crate::auth::{crear_reset_token, crear_token, verificar_reset_token, AuthVen
 use crate::config::Config;
 use crate::db::{self, DbPool};
 use crate::errors::ApiResult;
-use crate::mailer::Mailer;
 use crate::services::auth_services::{self as svc, LoginRequest, PasswordUpdate, PerfilUpdate, RegistroRequest};
 use actix_web::{web, HttpResponse};
 use serde::Deserialize;
@@ -23,7 +22,6 @@ pub async fn forgot(
     body: web::Json<ForgotBody>,
     pool: web::Data<DbPool>,
     cfg: web::Data<Config>,
-    mailer: web::Data<Mailer>,
     limiter: web::Data<crate::auth::LoginLimiter>,
 ) -> ApiResult<HttpResponse> {
     // Anti-spam: limita por IP (bucket propio) el envío de correos de reseteo.
@@ -45,7 +43,7 @@ pub async fn forgot(
                  <p>El enlace vence en 1 hora. Si no lo pediste, ignora este correo.</p>",
                 esc(&v.nombre)
             );
-            if let Err(e) = mailer.enviar(&v.email, "Restablecer contraseña · Ventoki", &html).await {
+            if let Err(e) = crate::email::enviar_auto(&pool, &cfg.resend_api_key, &cfg.mail_from, &v.email, "Restablecer contraseña · Ventoki", &html).await {
                 log::warn!("No se pudo enviar el correo de reseteo: {e}");
             }
         }

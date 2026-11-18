@@ -165,7 +165,6 @@ pub async fn webhook(
     body: web::Bytes,
     pool: web::Data<DbPool>,
     mp: web::Data<MercadoPago>,
-    mailer: web::Data<crate::mailer::Mailer>,
     cfg: web::Data<Config>,
 ) -> HttpResponse {
     // El id del preapproval puede venir por query (?id= / ?data.id=) o en el body.
@@ -202,7 +201,7 @@ pub async fn webhook(
                 let (id_c, estado_c) = (id.clone(), estado.clone());
                 let _ = db::run(&pool, move |conn| subs::aplicar_estado(conn, &id_c, &estado_c)).await;
                 // Correo según el estado: activación o aviso de pago fallido (dunning).
-                if (estado == "authorized" || estado == "paused") && mailer.configurado() {
+                if (estado == "authorized" || estado == "paused") && crate::email::hay_config(&pool, &cfg.resend_api_key, &cfg.mail_from).await {
                     let id_mail = id.clone();
                     if let Ok(Some((email, plan))) = db::run(&pool, move |conn| subs::email_y_plan(conn, &id_mail)).await {
                         let (asunto, html) = if estado == "authorized" {
@@ -216,7 +215,7 @@ pub async fn webhook(
                                  <p>Revisa tu medio de pago o vuelve a suscribirte desde <a href=\"{}/plan\">tu panel</a> para no perder el acceso.</p>",
                                 cfg.app_url))
                         };
-                        let _ = mailer.enviar(&email, &asunto, &html).await;
+                        let _ = crate::email::enviar_auto(&pool, &cfg.resend_api_key, &cfg.mail_from, &email, &asunto, &html).await;
                     }
                 }
                 }

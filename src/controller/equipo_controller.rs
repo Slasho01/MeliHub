@@ -2,7 +2,6 @@ use crate::auth::AuthVendedor;
 use crate::config::Config;
 use crate::db::{self, DbPool};
 use crate::errors::ApiResult;
-use crate::mailer::Mailer;
 use crate::services::equipo_services as svc;
 use actix_web::{web, HttpResponse};
 use serde::Deserialize;
@@ -34,25 +33,25 @@ pub async fn invitar(
     body: web::Json<InvitarBody>,
     pool: web::Data<DbPool>,
     cfg: web::Data<Config>,
-    mailer: web::Data<Mailer>,
 ) -> ApiResult<HttpResponse> {
     user.exigir_owner()?;
     let org = user.id;
     let InvitarBody { nombre, email, rol } = body.into_inner();
     let (m, token) = db::run(&pool, move |conn| svc::invitar(conn, org, &nombre, &email, &rol)).await?;
     let link = format!("{}/aceptar?token={}", cfg.app_url, token);
-    if mailer.configurado() {
+    let correo_ok = crate::email::hay_config(&pool, &cfg.resend_api_key, &cfg.mail_from).await;
+    if correo_ok {
         let html = format!(
             "<p>Hola {},</p><p>Te invitaron a colaborar en <b>Ventoki</b>. Crea tu contraseña para entrar:</p>\
              <p><a href=\"{link}\" style=\"background:#111;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none\">Aceptar invitación</a></p>\
              <p>El enlace vence en 7 días.</p>",
             esc(&m.nombre)
         );
-        let _ = mailer.enviar(&m.email, "Invitación a Ventoki", &html).await;
+        let _ = crate::email::enviar_auto(&pool, &cfg.resend_api_key, &cfg.mail_from, &m.email, "Invitación a Ventoki", &html).await;
     }
     let (actor, det) = (user.actor_id, format!("{} ({})", m.email, m.rol));
     let _ = db::run(&pool, move |conn| crate::services::auditoria_services::log(conn, org, actor, "equipo_invitar".into(), det)).await;
-    Ok(HttpResponse::Ok().json(json!({ "miembro": m, "enlace": link, "correo_enviado": mailer.configurado() })))
+    Ok(HttpResponse::Ok().json(json!({ "miembro": m, "enlace": link, "correo_enviado": correo_ok })))
 }
 
 /// Reenvía la invitación (nuevo token) a un miembro pendiente (solo dueño).
@@ -61,20 +60,20 @@ pub async fn reinvitar(
     path: web::Path<Uuid>,
     pool: web::Data<DbPool>,
     cfg: web::Data<Config>,
-    mailer: web::Data<Mailer>,
 ) -> ApiResult<HttpResponse> {
     user.exigir_owner()?;
     let (org, mid) = (user.id, path.into_inner());
     let (m, token) = db::run(&pool, move |conn| svc::reinvitar(conn, org, mid)).await?;
     let link = format!("{}/aceptar?token={}", cfg.app_url, token);
-    if mailer.configurado() {
+    let correo_ok = crate::email::hay_config(&pool, &cfg.resend_api_key, &cfg.mail_from).await;
+    if correo_ok {
         let html = format!(
             "<p>Hola {},</p><p>Aquí tienes de nuevo tu invitación a Ventoki:</p><p><a href=\"{link}\">Aceptar invitación</a></p>",
             esc(&m.nombre)
         );
-        let _ = mailer.enviar(&m.email, "Invitación a Ventoki", &html).await;
+        let _ = crate::email::enviar_auto(&pool, &cfg.resend_api_key, &cfg.mail_from, &m.email, "Invitación a Ventoki", &html).await;
     }
-    Ok(HttpResponse::Ok().json(json!({ "enlace": link, "correo_enviado": mailer.configurado() })))
+    Ok(HttpResponse::Ok().json(json!({ "enlace": link, "correo_enviado": correo_ok })))
 }
 
 #[derive(Deserialize)]
