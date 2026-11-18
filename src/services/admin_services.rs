@@ -126,6 +126,16 @@ pub fn eliminar_boleta(conn: &mut PgConnection, id: Uuid) -> ApiResult<()> {
     Ok(())
 }
 
+/// (nombre, email) de todas las cuentas activas — para envíos de promoción.
+pub fn emails_promo(conn: &mut PgConnection) -> ApiResult<Vec<(String, String)>> {
+    vendedores::table
+        .filter(vendedores::activo.eq(true))
+        .select((vendedores::nombre, vendedores::email))
+        .order(vendedores::created_at.asc())
+        .load::<(String, String)>(conn)
+        .map_err(ApiError::from)
+}
+
 pub fn listar_vendedores(conn: &mut PgConnection) -> ApiResult<Vec<VendedorAdmin>> {
     let vends: Vec<Vendedor> = vendedores::table
         .order(vendedores::created_at.asc())

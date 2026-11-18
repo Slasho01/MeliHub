@@ -26,12 +26,16 @@ fn parse_fecha(s: &str) -> ApiResult<NaiveDateTime> {
 #[derive(Deserialize)]
 pub struct ValidarBody {
     pub codigo: String,
+    #[serde(default)]
+    pub ciclo: Option<String>,
 }
 
 /// Valida un cupón y devuelve su info, para previsualizar el descuento. Requiere login.
-pub async fn validar(_user: AuthVendedor, body: web::Json<ValidarBody>, pool: web::Data<DbPool>) -> ApiResult<HttpResponse> {
-    let codigo = body.into_inner().codigo;
-    let d = db::run(&pool, move |conn| svc::info(conn, &codigo)).await?;
+pub async fn validar(user: AuthVendedor, body: web::Json<ValidarBody>, pool: web::Data<DbPool>) -> ApiResult<HttpResponse> {
+    let ValidarBody { codigo, ciclo } = body.into_inner();
+    let ciclo = crate::planes::ciclo_valido(ciclo.as_deref().unwrap_or("mensual")).to_string();
+    let vid = user.id;
+    let d = db::run(&pool, move |conn| svc::info(conn, &codigo, &ciclo, vid)).await?;
     Ok(HttpResponse::Ok().json(d))
 }
 
@@ -49,6 +53,8 @@ pub struct CrearBody {
     pub tipo: String,
     pub valor: i64,
     #[serde(default)]
+    pub ciclo: Option<String>,
+    #[serde(default)]
     pub vence: Option<String>,
     #[serde(default)]
     pub usos_max: Option<i32>,
@@ -56,12 +62,13 @@ pub struct CrearBody {
 
 pub async fn crear(user: AuthVendedor, body: web::Json<CrearBody>, pool: web::Data<DbPool>) -> ApiResult<HttpResponse> {
     exigir_admin(&user)?;
-    let CrearBody { codigo, tipo, valor, vence, usos_max } = body.into_inner();
+    let CrearBody { codigo, tipo, valor, ciclo, vence, usos_max } = body.into_inner();
+    let ciclo = ciclo.unwrap_or_else(|| "ambos".to_string());
     let vence_dt = match vence.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
         Some(s) => Some(parse_fecha(s)?),
         None => None,
     };
-    let c = db::run(&pool, move |conn| svc::crear(conn, &codigo, &tipo, valor, vence_dt, usos_max)).await?;
+    let c = db::run(&pool, move |conn| svc::crear(conn, &codigo, &tipo, valor, &ciclo, vence_dt, usos_max)).await?;
     Ok(HttpResponse::Ok().json(c))
 }
 

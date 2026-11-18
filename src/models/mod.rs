@@ -584,6 +584,7 @@ pub struct Cupon {
     pub codigo: String,
     pub tipo: String,
     pub valor: i64,
+    pub ciclo: String,
     pub activo: bool,
     pub vence: Option<NaiveDateTime>,
     pub usos_max: Option<i32>,
@@ -632,6 +633,14 @@ pub struct NewCupon {
     pub codigo: String,
     pub tipo: String,
     pub valor: i64,
+    pub ciclo: String,
     pub vence: Option<NaiveDateTime>,
     pub usos_max: Option<i32>,
+}
+
+#[derive(Insertable)]
+#[diesel(table_name = crate::schema::cupon_usos)]
+pub struct NewCuponUso {
+    pub cupon_id: Uuid,
+    pub vendedor_id: Uuid,
 }

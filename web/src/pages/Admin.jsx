@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react'
 import { get, money, put, post, del } from '../api'
 
 const PLANES = ['free', 'pro', 'business']
-const CUPON_INI = { codigo: '', tipo: 'porcentaje', valor: '', vence: '', usos_max: '' }
+const CUPON_INI = { codigo: '', tipo: 'porcentaje', valor: '', ciclo: 'ambos', vence: '', usos_max: '' }
+const PROMO_INI = { asunto: '', titulo: '', cuerpo: '', cta_texto: '', cta_url: '' }
+const cicloLabel = (c) => ({ ambos: 'Mensual y anual', mensual: 'Solo mensual', anual: 'Solo anual' }[c] || c || '—')
 
 function Kpi({ label, value }) {
   return (
@@ -19,6 +21,10 @@ export default function Admin() {
   const [cupones, setCupones] = useState(null)
   const [cupForm, setCupForm] = useState(CUPON_INI)
   const [error, setError] = useState(null)
+  const [promo, setPromo] = useState(PROMO_INI)
+  const [promoMsg, setPromoMsg] = useState(null)
+  const [promoBusy, setPromoBusy] = useState(false)
+  const [pruebaEmail, setPruebaEmail] = useState('')
 
   const cargar = () => {
     get('/admin/metricas').then(setMetricas).catch((e) => setError(e.message))
@@ -35,6 +41,7 @@ export default function Admin() {
         codigo: cupForm.codigo,
         tipo: cupForm.tipo,
         valor: Number(cupForm.valor),
+        ciclo: cupForm.ciclo,
         vence: cupForm.vence || null,
         usos_max: cupForm.usos_max === '' ? null : Number(cupForm.usos_max),
       })
@@ -43,6 +50,17 @@ export default function Admin() {
   }
   const toggleCupon = async (c) => { try { await put(`/admin/cupones/${c.id}`, { activo: !c.activo }); cargar() } catch (e) { setError(e.message) } }
   const borrarCupon = async (c) => { if (!window.confirm(`¿Eliminar el cupón ${c.codigo}?`)) return; try { await del(`/admin/cupones/${c.id}`); cargar() } catch (e) { setError(e.message) } }
+
+  const setPromoK = (k) => (e) => setPromo({ ...promo, [k]: e.target.value })
+  const enviarPromo = async (prueba_a) => {
+    if (!promo.asunto.trim() || !promo.titulo.trim() || !promo.cuerpo.trim()) { setError('Completa asunto, título y cuerpo.'); return }
+    if (!prueba_a && !window.confirm('¿Enviar este correo a TODAS las cuentas activas? No se puede deshacer.')) return
+    setError(null); setPromoMsg(null); setPromoBusy(true)
+    try {
+      const r = await post('/admin/correo/promo', { ...promo, prueba_a: prueba_a || undefined })
+      setPromoMsg(r.prueba ? `✅ Prueba enviada a ${prueba_a}.` : `✅ Enviado a ${r.enviados} de ${r.total} cuenta(s)${r.fallidos ? ` · ${r.fallidos} con error` : ''}.`)
+    } catch (e) { setError(e.message) } finally { setPromoBusy(false) }
+  }
 
   const cambiarPlan = async (v, plan) => {
     try { await put(`/admin/vendedores/${v.id}/plan`, { plan }); cargar() } catch (e) { setError(e.message) }
@@ -108,6 +126,13 @@ export default function Admin() {
           </select>
         </div>
         <div style={{ flex: '0 1 110px' }}><label>Valor</label><input className="input" type="number" min="1" value={cupForm.valor} onChange={setCup('valor')} required /></div>
+        <div style={{ flex: '0 1 150px' }}><label>Aplica a</label>
+          <select className="input" value={cupForm.ciclo} onChange={setCup('ciclo')} title="En qué suscripción se puede usar">
+            <option value="ambos">Mensual y anual</option>
+            <option value="mensual">Solo mensual</option>
+            <option value="anual">Solo anual</option>
+          </select>
+        </div>
         <div style={{ flex: '0 1 150px' }}><label>Vence (opcional)</label><input className="input" type="date" value={cupForm.vence} onChange={setCup('vence')} /></div>
         <div style={{ flex: '0 1 110px' }}><label>Usos máx.</label><input className="input" type="number" min="1" placeholder="∞" value={cupForm.usos_max} onChange={setCup('usos_max')} /></div>
         <button className="btn btn-accent">Crear cupón</button>
@@ -118,12 +143,13 @@ export default function Admin() {
           <div className="empty">Sin cupones. Crea uno arriba.</div>
         ) : (
           <table style={{ minWidth: 720 }}>
-            <thead><tr><th>Código</th><th>Descuento</th><th>Vence</th><th>Usos</th><th>Estado</th><th></th></tr></thead>
+            <thead><tr><th>Código</th><th>Descuento</th><th>Aplica a</th><th>Vence</th><th>Usos</th><th>Estado</th><th></th></tr></thead>
             <tbody>
               {cupones.map((c) => (
                 <tr key={c.id} style={!c.activo ? { opacity: 0.55 } : undefined}>
                   <td><b>{c.codigo}</b></td>
                   <td>{c.tipo === 'porcentaje' ? `${c.valor}%` : money(c.valor)}</td>
+                  <td className="muted sm">{cicloLabel(c.ciclo)}</td>
                   <td className="muted sm">{c.vence ? new Date(c.vence + 'Z').toLocaleDateString('es-CL') : '—'}</td>
                   <td>{c.usos}{c.usos_max != null ? ` / ${c.usos_max}` : ''}</td>
                   <td>{c.activo ? <span className="tag tag-ok">activo</span> : <span className="tag">inactivo</span>}</td>
@@ -136,6 +162,26 @@ export default function Admin() {
             </tbody>
           </table>
         )}
+      </div>
+
+      <h2 style={{ fontSize: 16, margin: '8px 0 0' }}>Correo de promoción</h2>
+      <div className="card stack" style={{ gap: 10 }}>
+        <p className="muted sm" style={{ margin: 0 }}>Envía un correo con la plantilla de Ventoki a todas las cuentas activas. Prueba primero contigo antes de enviar a todos.</p>
+        {promoMsg && <div className="alert alert-ok">{promoMsg}</div>}
+        <div><label>Asunto</label><input className="input" value={promo.asunto} onChange={setPromoK('asunto')} placeholder="Novedades de Ventoki este mes" /></div>
+        <div><label>Título (dentro del correo)</label><input className="input" value={promo.titulo} onChange={setPromoK('titulo')} placeholder="Nuevas funciones para tu e-commerce 🚀" /></div>
+        <div><label>Cuerpo</label><textarea className="input" rows={6} value={promo.cuerpo} onChange={setPromoK('cuerpo')} placeholder="Escribe tu mensaje. Deja una línea en blanco para separar párrafos." style={{ resize: 'vertical' }} /></div>
+        <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+          <div style={{ flex: '1 1 160px' }}><label>Texto del botón (opcional)</label><input className="input" value={promo.cta_texto} onChange={setPromoK('cta_texto')} placeholder="Ver novedades" /></div>
+          <div style={{ flex: '1 1 220px' }}><label>Enlace del botón (opcional)</label><input className="input" value={promo.cta_url} onChange={setPromoK('cta_url')} placeholder="https://ventoki.com" /></div>
+        </div>
+        <div className="row between" style={{ flexWrap: 'wrap', gap: 10, alignItems: 'flex-end' }}>
+          <div className="row" style={{ gap: 6, alignItems: 'flex-end' }}>
+            <div style={{ flex: '1 1 200px' }}><label>Enviar prueba a</label><input className="input" type="email" value={pruebaEmail} onChange={(e) => setPruebaEmail(e.target.value)} placeholder="tu@correo.com" /></div>
+            <button className="btn" disabled={promoBusy || !pruebaEmail.trim()} onClick={() => enviarPromo(pruebaEmail.trim())}>Enviar prueba</button>
+          </div>
+          <button className="btn btn-accent" disabled={promoBusy} onClick={() => enviarPromo(null)}>{promoBusy ? 'Enviando…' : '📣 Enviar a todos'}</button>
+        </div>
       </div>
     </div>
   )

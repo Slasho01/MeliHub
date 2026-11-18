@@ -222,12 +222,23 @@ diesel::table! {
         #[max_length = 12]
         tipo -> Varchar,
         valor -> Int8,
+        #[max_length = 12]
+        ciclo -> Varchar,
         activo -> Bool,
         vence -> Nullable<Timestamp>,
         usos_max -> Nullable<Int4>,
         usos -> Int4,
         created_at -> Timestamp,
         updated_at -> Timestamp,
+    }
+}
+
+diesel::table! {
+    cupon_usos (id) {
+        id -> Uuid,
+        cupon_id -> Uuid,
+        vendedor_id -> Uuid,
+        usado_at -> Timestamp,
     }
 }
 
@@ -488,6 +499,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     auditoria,
     config_ganancias,
     cupones,
+    cupon_usos,
     facturacion,
     falabella_cuentas,
     falabella_publicaciones,

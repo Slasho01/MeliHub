@@ -56,9 +56,19 @@ export default function Plan() {
     setCupError(null)
     const codigo = cupInput.trim()
     if (!codigo) { setCupon(null); return }
-    try { const d = await post('/cupon/validar', { codigo }); setCupon(d) }
+    try { const d = await post('/cupon/validar', { codigo, ciclo }); setCupon(d) }
     catch (e) { setCupon(null); setCupError(e.message) }
   }
+
+  // Si cambia el ciclo y había un cupón aplicado, revalidarlo (puede no servir para el nuevo ciclo).
+  useEffect(() => {
+    if (!cupon) return
+    let vivo = true
+    post('/cupon/validar', { codigo: cupon.codigo, ciclo })
+      .then((d) => { if (vivo) { setCupon(d); setCupError(null) } })
+      .catch((e) => { if (vivo) { setCupon(null); setCupError(e.message) } })
+    return () => { vivo = false }
+  }, [ciclo]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const suscribir = async (planId) => {
     setBusy(planId); setError(null)

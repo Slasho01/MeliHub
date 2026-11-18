@@ -2,8 +2,8 @@
 //! el precio de la suscripción (porcentaje o monto fijo).
 
 use crate::errors::{ApiError, ApiResult};
-use crate::models::{Cupon, NewCupon};
-use crate::schema::cupones;
+use crate::models::{Cupon, NewCupon, NewCuponUso};
+use crate::schema::{cupon_usos, cupones};
 use crate::services::common::now;
 use chrono::NaiveDateTime;
 use diesel::prelude::*;
@@ -30,8 +30,9 @@ fn descripcion(c: &Cupon) -> String {
     }
 }
 
-/// Valida un cupón por código (activo, no vencido, con usos disponibles).
-pub fn validar(conn: &mut PgConnection, codigo: &str) -> ApiResult<Cupon> {
+/// Valida un cupón por código para un vendedor y ciclo concretos: activo, no vencido,
+/// con usos disponibles, del ciclo correcto (mensual/anual) y no usado antes por ese vendedor.
+pub fn validar(conn: &mut PgConnection, codigo: &str, ciclo: &str, vendedor_id: Uuid) -> ApiResult<Cupon> {
     let codigo = normalizar(codigo);
     if codigo.is_empty() {
         return Err(ApiError::bad_request("Código vacío"));
@@ -55,6 +56,21 @@ pub fn validar(conn: &mut PgConnection, codigo: &str) -> ApiResult<Cupon> {
             return Err(ApiError::bad_request("Ese código alcanzó su límite de usos"));
         }
     }
+    // Alcance por ciclo de cobro.
+    if c.ciclo != "ambos" && c.ciclo != ciclo {
+        let destino = if c.ciclo == "anual" { "la suscripción anual" } else { "la suscripción mensual" };
+        return Err(ApiError::bad_request(format!("Ese código solo aplica a {destino}")));
+    }
+    // Un solo uso por usuario.
+    let ya_usado: bool = diesel::select(diesel::dsl::exists(
+        cupon_usos::table
+            .filter(cupon_usos::cupon_id.eq(c.id))
+            .filter(cupon_usos::vendedor_id.eq(vendedor_id)),
+    ))
+    .get_result(conn)?;
+    if ya_usado {
+        return Err(ApiError::bad_request("Ya usaste este código antes"));
+    }
     Ok(c)
 }
 
@@ -68,17 +84,25 @@ pub fn aplicar(precio: i64, c: &Cupon) -> i64 {
     (precio - desc).max(0)
 }
 
-/// Valida un cupón y devuelve su info (para mostrar en el panel).
-pub fn info(conn: &mut PgConnection, codigo: &str) -> ApiResult<Descuento> {
-    let c = validar(conn, codigo)?;
+/// Valida un cupón y devuelve su info (para previsualizar el descuento en el panel).
+pub fn info(conn: &mut PgConnection, codigo: &str, ciclo: &str, vendedor_id: Uuid) -> ApiResult<Descuento> {
+    let c = validar(conn, codigo, ciclo, vendedor_id)?;
     Ok(Descuento { codigo: c.codigo.clone(), tipo: c.tipo.clone(), valor: c.valor, descripcion: descripcion(&c) })
 }
 
-/// Marca un uso del cupón (tras concretar el pago).
-pub fn consumir(conn: &mut PgConnection, cupon_id: Uuid) -> ApiResult<()> {
-    diesel::update(cupones::table.find(cupon_id))
-        .set((cupones::usos.eq(cupones::usos + 1), cupones::updated_at.eq(now())))
+/// Marca un uso del cupón para el vendedor (tras concretar el pago). Uno por usuario:
+/// si ya lo había usado, no vuelve a incrementar el contador.
+pub fn consumir(conn: &mut PgConnection, cupon_id: Uuid, vendedor_id: Uuid) -> ApiResult<()> {
+    let insertadas = diesel::insert_into(cupon_usos::table)
+        .values(NewCuponUso { cupon_id, vendedor_id })
+        .on_conflict((cupon_usos::cupon_id, cupon_usos::vendedor_id))
+        .do_nothing()
         .execute(conn)?;
+    if insertadas > 0 {
+        diesel::update(cupones::table.find(cupon_id))
+            .set((cupones::usos.eq(cupones::usos + 1), cupones::updated_at.eq(now())))
+            .execute(conn)?;
+    }
     Ok(())
 }
 
@@ -88,7 +112,7 @@ pub fn listar(conn: &mut PgConnection) -> ApiResult<Vec<Cupon>> {
     cupones::table.order(cupones::created_at.desc()).select(Cupon::as_select()).load(conn).map_err(ApiError::from)
 }
 
-pub fn crear(conn: &mut PgConnection, codigo: &str, tipo: &str, valor: i64, vence: Option<NaiveDateTime>, usos_max: Option<i32>) -> ApiResult<Cupon> {
+pub fn crear(conn: &mut PgConnection, codigo: &str, tipo: &str, valor: i64, ciclo: &str, vence: Option<NaiveDateTime>, usos_max: Option<i32>) -> ApiResult<Cupon> {
     let codigo = normalizar(codigo);
     if codigo.is_empty() || codigo.len() > 40 {
         return Err(ApiError::bad_request("Código inválido"));
@@ -99,8 +123,12 @@ pub fn crear(conn: &mut PgConnection, codigo: &str, tipo: &str, valor: i64, venc
     if valor <= 0 || (tipo == "porcentaje" && valor > 100) {
         return Err(ApiError::bad_request("Valor inválido"));
     }
+    let ciclo = ciclo.trim().to_lowercase();
+    if !["ambos", "mensual", "anual"].contains(&ciclo.as_str()) {
+        return Err(ApiError::bad_request("Ciclo inválido (ambos | mensual | anual)"));
+    }
     diesel::insert_into(cupones::table)
-        .values(NewCupon { codigo, tipo: tipo.to_string(), valor, vence, usos_max })
+        .values(NewCupon { codigo, tipo: tipo.to_string(), valor, ciclo, vence, usos_max })
         .returning(Cupon::as_returning())
         .get_result(conn)
         .map_err(|e| match ApiError::from(e) {

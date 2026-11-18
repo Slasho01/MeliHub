@@ -14,6 +14,75 @@ fn exigir_admin(user: &AuthVendedor) -> ApiResult<()> {
     Ok(())
 }
 
+/// Escapa HTML para incrustar texto del admin sin romper la plantilla.
+fn escapar(s: &str) -> String {
+    s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
+}
+
+#[derive(Deserialize)]
+pub struct PromoBody {
+    pub asunto: String,
+    pub titulo: String,
+    pub cuerpo: String,
+    #[serde(default)]
+    pub cta_texto: Option<String>,
+    #[serde(default)]
+    pub cta_url: Option<String>,
+    /// Si viene, envía SOLO a esa dirección (prueba); si no, a todas las cuentas activas.
+    #[serde(default)]
+    pub prueba_a: Option<String>,
+}
+
+/// Envía un correo de promoción con la plantilla de la marca. Modo prueba (a una
+/// sola dirección) o difusión a todas las cuentas activas.
+pub async fn enviar_promo(user: AuthVendedor, body: web::Json<PromoBody>, pool: web::Data<DbPool>) -> ApiResult<HttpResponse> {
+    exigir_admin(&user)?;
+    let PromoBody { asunto, titulo, cuerpo, cta_texto, cta_url, prueba_a } = body.into_inner();
+    if asunto.trim().is_empty() || titulo.trim().is_empty() || cuerpo.trim().is_empty() {
+        return Err(ApiError::bad_request("Completa asunto, título y cuerpo."));
+    }
+    // Cuerpo en párrafos (doble salto) con saltos simples como <br>, todo escapado.
+    let cuerpo_html: String = cuerpo
+        .split("\n\n")
+        .filter(|p| !p.trim().is_empty())
+        .map(|p| format!("<p style=\"margin:0 0 14px\">{}</p>", escapar(p.trim()).replace('\n', "<br>")))
+        .collect();
+    // Botón opcional (solo si hay texto y una URL http válida).
+    let boton_html = match (
+        cta_texto.as_deref().map(str::trim).filter(|s| !s.is_empty()),
+        cta_url.as_deref().map(str::trim).filter(|s| s.starts_with("http")),
+    ) {
+        (Some(t), Some(u)) => crate::email::boton(&escapar(t), &u.replace('"', "%22")),
+        _ => String::new(),
+    };
+    let contenido = format!(
+        "<h2 style=\"margin:0 0 14px;color:#1f2733;font-size:20px\">{}</h2>{}{}",
+        escapar(titulo.trim()),
+        cuerpo_html,
+        boton_html
+    );
+    let html = crate::email::plantilla(&contenido);
+
+    // Modo prueba: una sola dirección.
+    if let Some(dir) = prueba_a.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        crate::email::enviar_sistema(&pool, dir, asunto.trim(), &html).await?;
+        return Ok(HttpResponse::Ok().json(json!({ "prueba": true, "total": 1, "enviados": 1, "fallidos": 0 })));
+    }
+
+    // Difusión a todas las cuentas activas.
+    let destinatarios = db::run(&pool, adm::emails_promo).await?;
+    let total = destinatarios.len();
+    let mut enviados = 0usize;
+    let mut fallidos = 0usize;
+    for (_nombre, email) in destinatarios {
+        match crate::email::enviar_sistema(&pool, &email, asunto.trim(), &html).await {
+            Ok(_) => enviados += 1,
+            Err(_) => fallidos += 1,
+        }
+    }
+    Ok(HttpResponse::Ok().json(json!({ "prueba": false, "total": total, "enviados": enviados, "fallidos": fallidos })))
+}
+
 /// Lista de vendedores (clientes) con su uso.
 pub async fn vendedores(user: AuthVendedor, pool: web::Data<DbPool>) -> ApiResult<HttpResponse> {
     exigir_admin(&user)?;

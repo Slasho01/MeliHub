@@ -1,0 +1,2 @@
+DROP TABLE IF EXISTS cupon_usos;
+ALTER TABLE cupones DROP COLUMN IF EXISTS ciclo;

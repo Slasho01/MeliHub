@@ -51,7 +51,8 @@ pub async fn suscribir(
     // Cupón de descuento (opcional): valida y aplica sobre el precio base.
     let codigo = cupon.as_deref().map(str::trim).filter(|s| !s.is_empty()).map(|s| s.to_string());
     let (monto, cupon_id, cupon_norm): (i64, Option<Uuid>, Option<String>) = if let Some(code) = codigo {
-        let c = db::run(&pool, move |conn| cupon_services::validar(conn, &code)).await?;
+        let (ciclo_c, vid0) = (ciclo.to_string(), user.id);
+        let c = db::run(&pool, move |conn| cupon_services::validar(conn, &code, &ciclo_c, vid0)).await?;
         (cupon_services::aplicar(base, &c), Some(c.id), Some(c.codigo))
     } else {
         (base, None, None)
@@ -78,7 +79,7 @@ pub async fn suscribir(
     let (pid, plan_id, ciclo_s, cupon_s) = (pre.id.clone(), plan.id.to_string(), ciclo.to_string(), cupon_norm.clone());
     db::run(&pool, move |conn| subs::registrar(conn, vid, &plan_id, monto, &pid, &ciclo_s, cupon_s.as_deref())).await?;
     if let Some(cid) = cupon_id {
-        let _ = db::run(&pool, move |conn| cupon_services::consumir(conn, cid)).await;
+        let _ = db::run(&pool, move |conn| cupon_services::consumir(conn, cid, vid)).await;
     }
     Ok(HttpResponse::Ok().json(json!({ "init_point": pre.init_point, "monto": monto })))
 }
