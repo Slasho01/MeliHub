@@ -25,6 +25,8 @@ export default function Admin() {
   const [promoMsg, setPromoMsg] = useState(null)
   const [promoBusy, setPromoBusy] = useState(false)
   const [pruebaEmail, setPruebaEmail] = useState('')
+  const [destino, setDestino] = useState('usuarios') // 'usuarios' | 'lista'
+  const [listaEmails, setListaEmails] = useState('')
 
   const cargar = () => {
     get('/admin/metricas').then(setMetricas).catch((e) => setError(e.message))
@@ -52,13 +54,21 @@ export default function Admin() {
   const borrarCupon = async (c) => { if (!window.confirm(`¿Eliminar el cupón ${c.codigo}?`)) return; try { await del(`/admin/cupones/${c.id}`); cargar() } catch (e) { setError(e.message) } }
 
   const setPromoK = (k) => (e) => setPromo({ ...promo, [k]: e.target.value })
+  const parseEmails = (s) => [...new Set(s.split(/[\s,;]+/).map((x) => x.trim().toLowerCase()).filter((x) => x.includes('@') && x.length >= 5))]
   const enviarPromo = async (prueba_a) => {
     if (!promo.asunto.trim() || !promo.titulo.trim() || !promo.cuerpo.trim()) { setError('Completa asunto, título y cuerpo.'); return }
-    if (!prueba_a && !window.confirm('¿Enviar este correo a TODAS las cuentas activas? No se puede deshacer.')) return
+    let emails
+    if (!prueba_a) {
+      if (destino === 'lista') {
+        emails = parseEmails(listaEmails)
+        if (!emails.length) { setError('Agrega al menos un correo válido en la lista de posibles clientes.'); return }
+        if (!window.confirm(`¿Enviar este correo a ${emails.length} posible(s) cliente(s)?`)) return
+      } else if (!window.confirm('¿Enviar este correo a TODAS las cuentas activas? No se puede deshacer.')) return
+    }
     setError(null); setPromoMsg(null); setPromoBusy(true)
     try {
-      const r = await post('/admin/correo/promo', { ...promo, prueba_a: prueba_a || undefined })
-      setPromoMsg(r.prueba ? `✅ Prueba enviada a ${prueba_a}.` : `✅ Enviado a ${r.enviados} de ${r.total} cuenta(s)${r.fallidos ? ` · ${r.fallidos} con error` : ''}.`)
+      const r = await post('/admin/correo/promo', { ...promo, prueba_a: prueba_a || undefined, destino, emails })
+      setPromoMsg(r.prueba ? `✅ Prueba enviada a ${prueba_a}.` : `✅ Enviado a ${r.enviados} de ${r.total} destinatario(s)${r.fallidos ? ` · ${r.fallidos} con error` : ''}.`)
     } catch (e) { setError(e.message) } finally { setPromoBusy(false) }
   }
 
@@ -175,12 +185,26 @@ export default function Admin() {
           <div style={{ flex: '1 1 160px' }}><label>Texto del botón (opcional)</label><input className="input" value={promo.cta_texto} onChange={setPromoK('cta_texto')} placeholder="Ver novedades" /></div>
           <div style={{ flex: '1 1 220px' }}><label>Enlace del botón (opcional)</label><input className="input" value={promo.cta_url} onChange={setPromoK('cta_url')} placeholder="https://ventoki.com" /></div>
         </div>
+        <div>
+          <label>Enviar a</label>
+          <div className="row" style={{ gap: 16, marginTop: 4, flexWrap: 'wrap' }}>
+            <label className="row sm" style={{ gap: 6, alignItems: 'center' }}><input type="radio" name="destino" checked={destino === 'usuarios'} onChange={() => setDestino('usuarios')} /> Usuarios existentes <span className="muted">(cuentas activas)</span></label>
+            <label className="row sm" style={{ gap: 6, alignItems: 'center' }}><input type="radio" name="destino" checked={destino === 'lista'} onChange={() => setDestino('lista')} /> Posibles clientes <span className="muted">(lista de correos)</span></label>
+          </div>
+        </div>
+        {destino === 'lista' && (
+          <div>
+            <label>Correos de posibles clientes</label>
+            <textarea className="input" rows={4} value={listaEmails} onChange={(e) => setListaEmails(e.target.value)} placeholder="Pega los correos separados por coma, espacio o salto de línea" style={{ resize: 'vertical' }} />
+            <span className="muted xs">{parseEmails(listaEmails).length} correo(s) válido(s) detectado(s).</span>
+          </div>
+        )}
         <div className="row between" style={{ flexWrap: 'wrap', gap: 10, alignItems: 'flex-end' }}>
           <div className="row" style={{ gap: 6, alignItems: 'flex-end' }}>
             <div style={{ flex: '1 1 200px' }}><label>Enviar prueba a</label><input className="input" type="email" value={pruebaEmail} onChange={(e) => setPruebaEmail(e.target.value)} placeholder="tu@correo.com" /></div>
             <button className="btn" disabled={promoBusy || !pruebaEmail.trim()} onClick={() => enviarPromo(pruebaEmail.trim())}>Enviar prueba</button>
           </div>
-          <button className="btn btn-accent" disabled={promoBusy} onClick={() => enviarPromo(null)}>{promoBusy ? 'Enviando…' : '📣 Enviar a todos'}</button>
+          <button className="btn btn-accent" disabled={promoBusy} onClick={() => enviarPromo(null)}>{promoBusy ? 'Enviando…' : (destino === 'lista' ? '📣 Enviar a la lista' : '📣 Enviar a todos')}</button>
         </div>
       </div>
     </div>

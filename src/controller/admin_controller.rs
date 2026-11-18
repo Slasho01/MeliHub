@@ -28,16 +28,22 @@ pub struct PromoBody {
     pub cta_texto: Option<String>,
     #[serde(default)]
     pub cta_url: Option<String>,
-    /// Si viene, envía SOLO a esa dirección (prueba); si no, a todas las cuentas activas.
+    /// Si viene, envía SOLO a esa dirección (prueba); si no, según `destino`.
     #[serde(default)]
     pub prueba_a: Option<String>,
+    /// "usuarios" (cuentas activas, por defecto) | "lista" (correos de `emails`).
+    #[serde(default)]
+    pub destino: Option<String>,
+    /// Lista de correos para `destino = "lista"` (posibles clientes).
+    #[serde(default)]
+    pub emails: Option<Vec<String>>,
 }
 
 /// Envía un correo de promoción con la plantilla de la marca. Modo prueba (a una
 /// sola dirección) o difusión a todas las cuentas activas.
 pub async fn enviar_promo(user: AuthVendedor, body: web::Json<PromoBody>, pool: web::Data<DbPool>) -> ApiResult<HttpResponse> {
     exigir_admin(&user)?;
-    let PromoBody { asunto, titulo, cuerpo, cta_texto, cta_url, prueba_a } = body.into_inner();
+    let PromoBody { asunto, titulo, cuerpo, cta_texto, cta_url, prueba_a, destino, emails } = body.into_inner();
     if asunto.trim().is_empty() || titulo.trim().is_empty() || cuerpo.trim().is_empty() {
         return Err(ApiError::bad_request("Completa asunto, título y cuerpo."));
     }
@@ -69,12 +75,30 @@ pub async fn enviar_promo(user: AuthVendedor, body: web::Json<PromoBody>, pool: 
         return Ok(HttpResponse::Ok().json(json!({ "prueba": true, "total": 1, "enviados": 1, "fallidos": 0 })));
     }
 
-    // Difusión a todas las cuentas activas.
-    let destinatarios = db::run(&pool, adm::emails_promo).await?;
+    // Difusión: usuarios existentes (cuentas activas) o una lista de posibles clientes.
+    let destinatarios: Vec<String> = if destino.as_deref() == Some("lista") {
+        let mut v: Vec<String> = emails
+            .unwrap_or_default()
+            .into_iter()
+            .map(|e| e.trim().to_lowercase())
+            .filter(|e| e.contains('@') && e.len() >= 5)
+            .collect();
+        v.sort();
+        v.dedup();
+        if v.is_empty() {
+            return Err(ApiError::bad_request("Agrega al menos un correo válido en la lista."));
+        }
+        if v.len() > 2000 {
+            return Err(ApiError::bad_request("Máximo 2000 correos por envío."));
+        }
+        v
+    } else {
+        db::run(&pool, adm::emails_promo).await?.into_iter().map(|(_n, e)| e).collect()
+    };
     let total = destinatarios.len();
     let mut enviados = 0usize;
     let mut fallidos = 0usize;
-    for (_nombre, email) in destinatarios {
+    for email in destinatarios {
         match crate::email::enviar_sistema(&pool, &email, asunto.trim(), &html).await {
             Ok(_) => enviados += 1,
             Err(_) => fallidos += 1,
