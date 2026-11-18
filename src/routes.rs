@@ -148,6 +148,9 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(r("/admin/vendedores/{id}/plan").route(put().to(adm::set_plan)))
             .service(r("/admin/vendedores/{id}/estado").route(put().to(adm::set_estado)))
             .service(r("/admin/metricas").route(get().to(adm::metricas)))
+            .service(r("/admin/suscripciones").route(get().to(adm::suscripciones)))
+            .service(r("/admin/vendedores/{id}/boleta").route(post().to(adm::subir_boleta)))
+            .service(r("/admin/boletas/{id}").route(get().to(adm::descargar_boleta)).route(delete().to(adm::eliminar_boleta)))
             // Configuración de correo (admin): proveedor Resend/SMTP + prueba
             .service(r("/admin/correo").route(get().to(correo::obtener)).route(put().to(correo::guardar)))
             .service(r("/admin/correo/test").route(post().to(correo::probar)))

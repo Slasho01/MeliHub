@@ -29,6 +29,7 @@ import Dte from './pages/Dte'
 import Reportes from './pages/Reportes'
 import Resumen from './pages/Resumen'
 import Correo from './pages/Correo'
+import AdminSuscripciones from './pages/AdminSuscripciones'
 import Despachos from './pages/Despachos'
 import Devoluciones from './pages/Devoluciones'
 import Shopify from './pages/Shopify'
@@ -115,6 +116,7 @@ export default function App() {
           <NavLink to="/perfil" className={cls}>Mi cuenta</NavLink>
           {me?.es_admin && <NavLink to="/correo" className={cls}>Correo</NavLink>}
           {me?.es_admin && <NavLink to="/admin" className={cls}>Admin</NavLink>}
+          {me?.es_admin && <NavLink to="/admin/suscripciones" className={cls}>Suscripciones</NavLink>}
         </nav>
         <div className="sidebar-foot">
           {me?.es_owner && (me.plan !== 'business'
@@ -164,6 +166,7 @@ export default function App() {
           <Route path="/correo" element={me && !me.es_admin ? <Navigate to="/" replace /> : <Correo />} />
           <Route path="/perfil" element={<Perfil />} />
           <Route path="/admin" element={me && !me.es_admin ? <Navigate to="/" replace /> : <Admin />} />
+          <Route path="/admin/suscripciones" element={me && !me.es_admin ? <Navigate to="/" replace /> : <AdminSuscripciones />} />
           <Route path="/legal" element={<Legal />} />
           <Route path="/docs" element={<Docs />} />
           <Route path="/aceptar" element={<Aceptar />} />

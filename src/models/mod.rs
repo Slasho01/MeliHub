@@ -1,4 +1,4 @@
-use crate::schema::{auditoria, config_correo, cupones, dte_cuentas, facturacion, falabella_cuentas, falabella_publicaciones, historial_producto, kit_componentes, miembros, ml_cuentas, notificaciones, ordenes_ml, paris_cuentas, paris_publicaciones, paris_ventas, productos, shopify_cuentas, shopify_publicaciones, suscripciones, vendedores};
+use crate::schema::{auditoria, config_correo, cupones, dte_cuentas, facturacion, falabella_cuentas, falabella_publicaciones, boletas, historial_producto, kit_componentes, miembros, ml_cuentas, notificaciones, ordenes_ml, paris_cuentas, paris_publicaciones, paris_ventas, productos, shopify_cuentas, shopify_publicaciones, suscripciones, vendedores};
 use chrono::NaiveDateTime;
 use diesel::prelude::*;
 use serde::Serialize;
@@ -237,6 +237,15 @@ pub struct KitComponente {
     pub componente_producto_id: Uuid,
     pub cantidad: i32,
     pub created_at: NaiveDateTime,
+}
+
+#[derive(Insertable)]
+#[diesel(table_name = boletas)]
+pub struct NewBoleta {
+    pub vendedor_id: Uuid,
+    pub periodo: String,
+    pub nombre_archivo: String,
+    pub archivo: String,
 }
 
 #[derive(Insertable)]

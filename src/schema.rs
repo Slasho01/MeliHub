@@ -445,6 +445,19 @@ diesel::table! {
 }
 
 diesel::table! {
+    boletas (id) {
+        id -> Uuid,
+        vendedor_id -> Uuid,
+        #[max_length = 20]
+        periodo -> Varchar,
+        #[max_length = 255]
+        nombre_archivo -> Varchar,
+        archivo -> Text,
+        subida_at -> Timestamp,
+    }
+}
+
+diesel::table! {
     kit_componentes (id) {
         id -> Uuid,
         vendedor_id -> Uuid,

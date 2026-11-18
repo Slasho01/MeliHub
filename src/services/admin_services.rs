@@ -2,8 +2,8 @@
 //! Solo accesible por el rol admin.
 
 use crate::errors::{ApiError, ApiResult};
-use crate::models::Vendedor;
-use crate::schema::{ml_cuentas, ordenes_ml, productos, vendedores};
+use crate::models::{NewBoleta, Vendedor};
+use crate::schema::{boletas, ml_cuentas, ordenes_ml, productos, suscripciones, vendedores};
 use diesel::dsl::count_star;
 use diesel::prelude::*;
 use serde::Serialize;
@@ -19,6 +19,113 @@ pub struct VendedorAdmin {
 }
 
 /// Lista todos los vendedores con su uso (cuentas ML y productos).
+// ----------------------------- Suscripciones + boletas -----------------------------
+
+#[derive(Serialize, Clone)]
+pub struct BoletaMeta {
+    pub id: Uuid,
+    pub periodo: String,
+    pub nombre_archivo: String,
+    pub subida_at: chrono::NaiveDateTime,
+}
+
+#[derive(Serialize)]
+pub struct SuscripcionAdmin {
+    pub vendedor_id: Uuid,
+    pub email: String,
+    pub nombre: String,
+    pub plan: String,
+    pub estado: String,
+    pub ciclo: String,
+    pub monto: i64,
+    pub vigente_hasta: Option<chrono::NaiveDateTime>,
+    pub created_at: chrono::NaiveDateTime,
+    pub boletas: Vec<BoletaMeta>,
+}
+
+/// Lista todas las suscripciones (con el vendedor) y sus boletas subidas (metadatos, sin archivo).
+pub fn listar_suscripciones(conn: &mut PgConnection) -> ApiResult<Vec<SuscripcionAdmin>> {
+    let rows: Vec<(Uuid, String, String, String, String, String, i64, Option<chrono::NaiveDateTime>, chrono::NaiveDateTime)> = suscripciones::table
+        .inner_join(vendedores::table)
+        .order(suscripciones::created_at.desc())
+        .select((
+            suscripciones::vendedor_id,
+            vendedores::email,
+            vendedores::nombre,
+            suscripciones::plan,
+            suscripciones::estado,
+            suscripciones::ciclo,
+            suscripciones::monto,
+            suscripciones::vigente_hasta,
+            suscripciones::created_at,
+        ))
+        .load(conn)?;
+    let bols: Vec<(Uuid, Uuid, String, String, chrono::NaiveDateTime)> = boletas::table
+        .order(boletas::subida_at.desc())
+        .select((boletas::id, boletas::vendedor_id, boletas::periodo, boletas::nombre_archivo, boletas::subida_at))
+        .load(conn)?;
+    let mut bmap: HashMap<Uuid, Vec<BoletaMeta>> = HashMap::new();
+    for (id, vid, periodo, nombre_archivo, subida_at) in bols {
+        bmap.entry(vid).or_default().push(BoletaMeta { id, periodo, nombre_archivo, subida_at });
+    }
+    Ok(rows
+        .into_iter()
+        .map(|(vid, email, nombre, plan, estado, ciclo, monto, vigente_hasta, created_at)| SuscripcionAdmin {
+            boletas: bmap.get(&vid).cloned().unwrap_or_default(),
+            vendedor_id: vid,
+            email,
+            nombre,
+            plan,
+            estado,
+            ciclo,
+            monto,
+            vigente_hasta,
+            created_at,
+        })
+        .collect())
+}
+
+/// Guarda una boleta/factura (archivo como data-URL base64) para un vendedor+período.
+pub fn guardar_boleta(conn: &mut PgConnection, vendedor_id: Uuid, periodo: &str, nombre_archivo: &str, archivo: &str) -> ApiResult<Uuid> {
+    let periodo = periodo.trim();
+    if periodo.is_empty() {
+        return Err(ApiError::bad_request("Indica el período (ej. 2026-11 o 2026)."));
+    }
+    if !archivo.starts_with("data:") {
+        return Err(ApiError::bad_request("Archivo inválido."));
+    }
+    // El vendedor debe existir.
+    let existe: bool = diesel::select(diesel::dsl::exists(vendedores::table.find(vendedor_id))).get_result(conn)?;
+    if !existe {
+        return Err(ApiError::not_found("Vendedor"));
+    }
+    diesel::insert_into(boletas::table)
+        .values(NewBoleta {
+            vendedor_id,
+            periodo: periodo.to_string(),
+            nombre_archivo: nombre_archivo.chars().take(255).collect(),
+            archivo: archivo.to_string(),
+        })
+        .returning(boletas::id)
+        .get_result(conn)
+        .map_err(ApiError::from)
+}
+
+/// Devuelve (nombre_archivo, data-URL) de una boleta para descargarla.
+pub fn boleta_archivo(conn: &mut PgConnection, id: Uuid) -> ApiResult<(String, String)> {
+    boletas::table
+        .find(id)
+        .select((boletas::nombre_archivo, boletas::archivo))
+        .first(conn)
+        .optional()?
+        .ok_or_else(|| ApiError::not_found("Boleta"))
+}
+
+pub fn eliminar_boleta(conn: &mut PgConnection, id: Uuid) -> ApiResult<()> {
+    diesel::delete(boletas::table.find(id)).execute(conn)?;
+    Ok(())
+}
+
 pub fn listar_vendedores(conn: &mut PgConnection) -> ApiResult<Vec<VendedorAdmin>> {
     let vends: Vec<Vendedor> = vendedores::table
         .order(vendedores::created_at.asc())

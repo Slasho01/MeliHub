@@ -4,6 +4,7 @@ use crate::errors::{ApiError, ApiResult};
 use crate::services::admin_services as adm;
 use actix_web::{web, HttpResponse};
 use serde::Deserialize;
+use serde_json::json;
 use uuid::Uuid;
 
 fn exigir_admin(user: &AuthVendedor) -> ApiResult<()> {
@@ -50,4 +51,47 @@ pub async fn set_estado(user: AuthVendedor, path: web::Path<Uuid>, body: web::Js
         return Err(ApiError::bad_request("No puedes suspender tu propia cuenta"));
     }
     Ok(HttpResponse::Ok().json(db::run(&pool, move |conn| adm::set_activo(conn, id, activo)).await?))
+}
+
+// ----------------------------- Suscripciones + boletas -----------------------------
+
+/// Lista todas las suscripciones con sus boletas (solo admin).
+pub async fn suscripciones(user: AuthVendedor, pool: web::Data<DbPool>) -> ApiResult<HttpResponse> {
+    exigir_admin(&user)?;
+    Ok(HttpResponse::Ok().json(db::run(&pool, adm::listar_suscripciones).await?))
+}
+
+#[derive(Deserialize)]
+pub struct BoletaBody {
+    pub periodo: String,
+    pub nombre_archivo: String,
+    pub archivo: String, // data:...;base64,...
+}
+
+/// Sube una boleta/factura para un vendedor (solo admin).
+pub async fn subir_boleta(user: AuthVendedor, path: web::Path<Uuid>, body: web::Json<BoletaBody>, pool: web::Data<DbPool>) -> ApiResult<HttpResponse> {
+    exigir_admin(&user)?;
+    let vid = path.into_inner();
+    let BoletaBody { periodo, nombre_archivo, archivo } = body.into_inner();
+    if archivo.len() > 7_500_000 {
+        return Err(ApiError::bad_request("El archivo es muy grande (máx. ~5 MB)."));
+    }
+    let id = db::run(&pool, move |conn| adm::guardar_boleta(conn, vid, &periodo, &nombre_archivo, &archivo)).await?;
+    Ok(HttpResponse::Ok().json(json!({ "id": id })))
+}
+
+/// Descarga una boleta: devuelve nombre + data-URL para que el front la baje.
+pub async fn descargar_boleta(user: AuthVendedor, path: web::Path<Uuid>, pool: web::Data<DbPool>) -> ApiResult<HttpResponse> {
+    exigir_admin(&user)?;
+    let id = path.into_inner();
+    let (nombre_archivo, archivo) = db::run(&pool, move |conn| adm::boleta_archivo(conn, id)).await?;
+    Ok(HttpResponse::Ok().json(json!({ "nombre_archivo": nombre_archivo, "archivo": archivo })))
+}
+
+/// Borra una boleta (solo admin).
+pub async fn eliminar_boleta(user: AuthVendedor, path: web::Path<Uuid>, pool: web::Data<DbPool>) -> ApiResult<HttpResponse> {
+    exigir_admin(&user)?;
+    let id = path.into_inner();
+    db::run(&pool, move |conn| adm::eliminar_boleta(conn, id)).await?;
+    Ok(HttpResponse::Ok().json(json!({ "ok": true })))
 }
