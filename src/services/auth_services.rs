@@ -24,6 +24,8 @@ pub struct RegistroRequest {
     pub email: String,
     pub password: String,
     pub nombre: String,
+    #[serde(default)]
+    pub captcha: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -32,6 +34,8 @@ pub struct LoginRequest {
     pub password: String,
     #[serde(default)]
     pub codigo: Option<String>,
+    #[serde(default)]
+    pub captcha: Option<String>,
 }
 
 /// Resultado del login: sesión lista, o se requiere el código 2FA.

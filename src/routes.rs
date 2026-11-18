@@ -5,6 +5,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::scope("/api")
             .service(r("/health").route(get().to(health)))
+            .service(r("/config").route(get().to(auth::config_publico)))
             // Auth del hub
             .service(r("/auth/registro").route(post().to(auth::registrar)))
             .service(r("/auth/login").route(post().to(auth::login)))

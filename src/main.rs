@@ -1,4 +1,5 @@
 mod auth;
+mod captcha;
 mod config;
 mod crypto;
 mod controller;
@@ -120,9 +121,9 @@ async fn main() -> std::io::Result<()> {
 fn security_headers() -> DefaultHeaders {
     // CSP: scripts/estilos propios (estilos inline del panel permitidos), imágenes
     // propias + data: (QR 2FA) + https (imágenes de Mercado Libre), nada de iframes.
-    const CSP: &str = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; \
-        img-src 'self' data: https:; font-src 'self' data:; connect-src 'self'; \
-        object-src 'none'; base-uri 'self'; frame-ancestors 'none'";
+    const CSP: &str = "default-src 'self'; script-src 'self' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; \
+        img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://challenges.cloudflare.com; \
+        frame-src https://challenges.cloudflare.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'";
     DefaultHeaders::new()
         .add(("X-Content-Type-Options", "nosniff"))
         .add(("X-Frame-Options", "DENY"))

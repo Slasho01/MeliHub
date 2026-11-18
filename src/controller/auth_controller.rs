@@ -16,6 +16,11 @@ pub struct ForgotBody {
     pub email: String,
 }
 
+/// Config pública para el frontend (sin autenticación): ej. la site key del CAPTCHA.
+pub async fn config_publico(cfg: web::Data<Config>) -> ApiResult<HttpResponse> {
+    Ok(HttpResponse::Ok().json(json!({ "turnstile_site_key": cfg.turnstile_site_key })))
+}
+
 /// Solicita recuperar contraseña: envía un correo con enlace (si el email existe).
 pub async fn forgot(
     req: actix_web::HttpRequest,
@@ -83,7 +88,9 @@ pub async fn registrar(
         return Ok(HttpResponse::TooManyRequests().json(json!({ "error": "Demasiados intentos. Espera unos minutos." })));
     }
     limiter.fallo(&key);
-    let v = db::run(&pool, move |conn| svc::registrar(conn, body.into_inner())).await?;
+    let req = body.into_inner();
+    crate::captcha::verificar(&cfg.turnstile_secret, req.captcha.as_deref().unwrap_or(""), &ip).await?;
+    let v = db::run(&pool, move |conn| svc::registrar(conn, req)).await?;
     if v.email_verificado {
         // Admin (primer usuario): no necesita verificar, entra directo.
         let token = crear_token(v.id, &v.rol, v.id, "owner", v.session_version, &cfg.jwt_secret)?;
@@ -162,6 +169,7 @@ pub async fn login(
         return Ok(HttpResponse::TooManyRequests()
             .json(json!({ "error": "Demasiados intentos. Espera unos minutos e intenta de nuevo." })));
     }
+    crate::captcha::verificar(&cfg.turnstile_secret, body.captcha.as_deref().unwrap_or(""), &ip).await?;
     let email = body.email.clone();
     match db::run(&pool, move |conn| svc::login(conn, body.into_inner())).await {
         Ok(svc::LoginOutcome::TwoFaRequerido) => {

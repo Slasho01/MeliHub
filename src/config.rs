@@ -22,6 +22,10 @@ pub struct Config {
     pub shopify_api_key: String,
     pub shopify_api_secret: String,
     pub shopify_scopes: String,
+    /// Cloudflare Turnstile (CAPTCHA): site key (pública, va al frontend) y secret (backend).
+    /// Si el secret está vacío, el CAPTCHA queda deshabilitado (no bloquea).
+    pub turnstile_site_key: String,
+    pub turnstile_secret: String,
 }
 
 impl Config {
@@ -91,6 +95,8 @@ impl Config {
             shopify_api_key: var("SHOPIFY_API_KEY", ""),
             shopify_api_secret: var("SHOPIFY_API_SECRET", ""),
             shopify_scopes: var("SHOPIFY_SCOPES", "read_products,write_products,read_inventory,write_inventory,read_locations,read_orders"),
+            turnstile_site_key: var("TURNSTILE_SITE_KEY", ""),
+            turnstile_secret: var("TURNSTILE_SECRET", ""),
         })
     }
 }

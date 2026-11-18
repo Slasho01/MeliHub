@@ -1,6 +1,7 @@
-import { useState } from 'react'
-import { post, setToken } from '../api'
+import { useEffect, useState } from 'react'
+import { get, post, setToken } from '../api'
 import PasswordMeter from '../components/PasswordMeter'
+import Turnstile from '../components/Turnstile'
 
 export default function Login({ onAuth }) {
   const [modo, setModo] = useState(() => (new URLSearchParams(window.location.search).get('r') === '1' ? 'registro' : 'login')) // login | registro | forgot
@@ -12,6 +13,11 @@ export default function Login({ onAuth }) {
   const [codigo, setCodigo] = useState('')
   const [pending, setPending] = useState('') // token temporal del 2FA (no se reenvía la contraseña)
   const [reenviar, setReenviar] = useState(null) // email al que reenviar la verificación
+  const [siteKey, setSiteKey] = useState('') // Turnstile site key (vacío = CAPTCHA off)
+  const [captcha, setCaptcha] = useState('')
+  const [capKey, setCapKey] = useState(0) // remonta el widget para resetear el token
+  useEffect(() => { get('/config').then((c) => setSiteKey(c?.turnstile_site_key || '')).catch(() => {}) }, [])
+  const resetCaptcha = () => { setCaptcha(''); setCapKey((k) => k + 1) }
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value })
   const ir = (m) => { setModo(m); setError(null); setMsg(null); setNeed2fa(false); setCodigo(''); setPending(''); setReenviar(null) }
 
@@ -37,10 +43,11 @@ export default function Login({ onAuth }) {
         onAuth()
         return
       }
+      if (siteKey && !captcha) { setError('Completa el CAPTCHA para continuar.'); setBusy(false); return }
       const path = modo === 'login' ? '/auth/login' : '/auth/registro'
       const body = modo === 'login'
-        ? { email: form.email, password: form.password }
-        : { nombre: form.nombre, email: form.email, password: form.password }
+        ? { email: form.email, password: form.password, captcha }
+        : { nombre: form.nombre, email: form.email, password: form.password, captcha }
       const r = await post(path, body)
       if (modo === 'login' && r.twofa_required) { setNeed2fa(true); setPending(r.pending || ''); setBusy(false); return }
       if (modo === 'registro' && r.requiere_verificacion) {
@@ -52,6 +59,7 @@ export default function Login({ onAuth }) {
     } catch (err) {
       setError(err.message)
       if (err.message && /verifica tu correo/i.test(err.message)) setReenviar(form.email)
+      resetCaptcha()
     } finally { setBusy(false) }
   }
 
@@ -76,6 +84,9 @@ export default function Login({ onAuth }) {
           {need2fa && modo === 'login' && (
             <div><label>Código de verificación (2FA)</label>
               <input className="input" inputMode="numeric" autoComplete="one-time-code" placeholder="6 dígitos" value={codigo} onChange={(e) => setCodigo(e.target.value)} autoFocus /></div>
+          )}
+          {siteKey && modo !== 'forgot' && !need2fa && (
+            <Turnstile key={capKey} siteKey={siteKey} onToken={setCaptcha} />
           )}
           {error && <div className="alert alert-bad">{error}</div>}
           {reenviar && <div className="center sm"><button type="button" className="link-btn" onClick={reenviarVerif}>Reenviar correo de verificación</button></div>}
