@@ -386,6 +386,8 @@ pub fn start(pool: web::Data<DbPool>, client: web::Data<MlClient>, falabella: we
             // Shopify: traer ventas (descuenta stock + empuja a ML) y empujar stock/precio.
             procesar_ventas_shopify(&pool, &client, true).await;
             sincronizar_shopify(&pool).await;
+            // Baja a free las suscripciones canceladas/pausadas cuyo período ya venció.
+            let _ = db::run(&pool, crate::services::suscripcion_services::downgrade_expiradas).await;
             // Repricing automático de Buy Box (solo vendedores que lo activaron).
             if let Ok(vends) = db::run(&pool, |conn| crate::services::inventario_services::vendedores_con_repricing(conn)).await {
                 for vid in vends {

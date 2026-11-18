@@ -30,6 +30,21 @@ pub struct Preapproval {
     pub status: Option<String>, // pending | authorized | paused | cancelled
     #[serde(default)]
     pub external_reference: Option<String>,
+    /// Fecha del próximo cobro: hasta cuándo es válido el acceso actual. Durante el trial
+    /// es el fin del trial; en una suscripción pagada, el fin del ciclo.
+    #[serde(default)]
+    pub next_payment_date: Option<String>,
+}
+
+impl Preapproval {
+    /// `next_payment_date` como fecha UTC naive (hasta cuándo vale el acceso). None si no viene.
+    pub fn vigencia(&self) -> Option<chrono::NaiveDateTime> {
+        let s = self.next_payment_date.as_deref()?.trim();
+        if s.is_empty() {
+            return None;
+        }
+        chrono::DateTime::parse_from_rfc3339(s).ok().map(|d| d.naive_utc())
+    }
 }
 
 impl MercadoPago {

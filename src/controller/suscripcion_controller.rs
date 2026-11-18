@@ -94,9 +94,10 @@ pub async fn estado(user: AuthVendedor, pool: web::Data<DbPool>, mp: web::Data<M
         if pendiente && mp.configurado() {
             if let Some(pid) = s.preapproval_id.clone() {
                 if let Ok(pre) = mp.get_preapproval(&pid).await {
+                    let vig = pre.vigencia();
                     if let Some(estado_mp) = pre.status {
                         let (pid2, est2) = (pid.clone(), estado_mp.clone());
-                        let _ = db::run(&pool, move |conn| subs::aplicar_estado(conn, &pid2, &est2)).await;
+                        let _ = db::run(&pool, move |conn| subs::aplicar_estado(conn, &pid2, &est2, vig)).await;
                         sub = db::run(&pool, move |conn| subs::actual(conn, vid)).await?;
                     }
                 }
@@ -196,10 +197,11 @@ pub async fn webhook(
             match mp.get_preapproval(&id).await {
                 Err(e) => log::warn!("[MP webhook] no se pudo leer preapproval {id}: {e}"),
                 Ok(pre) => {
+                let vig = pre.vigencia();
                 let estado = pre.status.unwrap_or_default();
                 log::info!("[MP webhook] preapproval {id} estado={estado}");
                 let (id_c, estado_c) = (id.clone(), estado.clone());
-                let _ = db::run(&pool, move |conn| subs::aplicar_estado(conn, &id_c, &estado_c)).await;
+                let _ = db::run(&pool, move |conn| subs::aplicar_estado(conn, &id_c, &estado_c, vig)).await;
                 // Correo según el estado: activación o aviso de pago fallido (dunning).
                 if (estado == "authorized" || estado == "paused") && crate::email::hay_config(&pool, &cfg.resend_api_key, &cfg.mail_from).await {
                     let id_mail = id.clone();
