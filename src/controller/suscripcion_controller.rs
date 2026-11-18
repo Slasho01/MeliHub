@@ -204,17 +204,20 @@ pub async fn webhook(
                 if (estado == "authorized" || estado == "paused") && crate::email::hay_config(&pool, &cfg.resend_api_key, &cfg.mail_from).await {
                     let id_mail = id.clone();
                     if let Ok(Some((email, plan))) = db::run(&pool, move |conn| subs::email_y_plan(conn, &id_mail)).await {
-                        let (asunto, html) = if estado == "authorized" {
+                        let (asunto, cuerpo) = if estado == "authorized" {
                             ("Suscripción activada · Ventoki".to_string(), format!(
-                                "<p>¡Tu suscripción al plan <b>{plan}</b> de Ventoki está activa!</p>\
-                                 <p>Gracias por suscribirte. Puedes gestionarla desde <a href=\"{}/suscripcion\">tu panel</a>.</p>",
-                                cfg.app_url))
+                                "<h2 style=\"margin:0 0 12px;color:#13233b;font-size:21px\">¡Suscripción activa! 🎉</h2>\
+                                 <p>Tu suscripción al plan <b>{plan}</b> de Ventoki está activa. ¡Gracias por suscribirte!</p>\
+                                 {}",
+                                crate::email::boton("Ir a mi panel", &format!("{}/suscripcion", cfg.app_url))))
                         } else {
                             ("Problema con tu pago · Ventoki".to_string(), format!(
-                                "<p>No pudimos cobrar tu suscripción al plan <b>{plan}</b> y quedó <b>pausada</b>.</p>\
-                                 <p>Revisa tu medio de pago o vuelve a suscribirte desde <a href=\"{}/plan\">tu panel</a> para no perder el acceso.</p>",
-                                cfg.app_url))
+                                "<h2 style=\"margin:0 0 12px;color:#13233b;font-size:21px\">Problema con tu pago</h2>\
+                                 <p>No pudimos cobrar tu suscripción al plan <b>{plan}</b> y quedó <b>pausada</b>. Revisa tu medio de pago para no perder el acceso.</p>\
+                                 {}",
+                                crate::email::boton("Revisar mi suscripción", &format!("{}/plan", cfg.app_url))))
                         };
+                        let html = crate::email::plantilla(&cuerpo);
                         let _ = crate::email::enviar_auto(&pool, &cfg.resend_api_key, &cfg.mail_from, &email, &asunto, &html).await;
                     }
                 }

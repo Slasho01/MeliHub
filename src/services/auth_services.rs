@@ -79,7 +79,7 @@ pub fn registrar(conn: &mut PgConnection, req: RegistroRequest) -> ApiResult<Ven
     let (rol, plan) = if total == 0 { ("admin", "business") } else { ("vendedor", "free") };
 
     diesel::insert_into(vendedores::table)
-        .values(NewVendedor { email, password_hash: hash, nombre: nombre.to_string(), rol: rol.to_string(), plan: plan.to_string() })
+        .values(NewVendedor { email, password_hash: hash, nombre: nombre.to_string(), rol: rol.to_string(), plan: plan.to_string(), email_verificado: total == 0 })
         .returning(Vendedor::as_returning())
         .get_result(conn)
         .map_err(|e| match ApiError::from(e) {
@@ -179,6 +179,9 @@ pub fn login(conn: &mut PgConnection, req: LoginRequest) -> ApiResult<LoginOutco
         }
         if !v.activo {
             return Err(ApiError::forbidden("Tu cuenta está desactivada"));
+        }
+        if !v.email_verificado {
+            return Err(ApiError::forbidden("Verifica tu correo para entrar. Te enviamos un enlace al registrarte (puedes reenviarlo)."));
         }
         // 2FA: si está activo, exige el código TOTP.
         if v.twofa_enabled {
@@ -331,6 +334,15 @@ pub fn cambiar_password(conn: &mut PgConnection, org_id: Uuid, actor_id: Uuid, r
 }
 
 /// Busca un vendedor por email (para recuperar contraseña). None si no existe.
+/// Marca el correo de un vendedor como verificado. Devuelve el vendedor actualizado.
+pub fn marcar_verificado(conn: &mut PgConnection, id: Uuid) -> ApiResult<Vendedor> {
+    diesel::update(vendedores::table.find(id))
+        .set(vendedores::email_verificado.eq(true))
+        .returning(Vendedor::as_returning())
+        .get_result(conn)
+        .map_err(ApiError::from)
+}
+
 pub fn buscar_por_email(conn: &mut PgConnection, email: &str) -> ApiResult<Option<Vendedor>> {
     let email = email.trim().to_lowercase();
     vendedores::table

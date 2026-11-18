@@ -24,6 +24,7 @@ pub struct Vendedor {
     pub twofa_enabled: bool,
     #[serde(skip_serializing)]
     pub session_version: i32,
+    pub email_verificado: bool,
 }
 
 #[derive(Insertable)]
@@ -34,6 +35,7 @@ pub struct NewVendedor {
     pub nombre: String,
     pub rol: String,
     pub plan: String,
+    pub email_verificado: bool,
 }
 
 // ----------------------------- Auditoría -----------------------------

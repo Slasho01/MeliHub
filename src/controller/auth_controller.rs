@@ -1,4 +1,4 @@
-use crate::auth::{crear_reset_token, crear_token, verificar_reset_token, AuthVendedor};
+use crate::auth::{crear_reset_token, crear_token, crear_verif_token, verificar_reset_token, verificar_verif_token, AuthVendedor};
 use crate::config::Config;
 use crate::db::{self, DbPool};
 use crate::errors::ApiResult;
@@ -37,12 +37,15 @@ pub async fn forgot(
     if let Some(v) = found {
         if let Ok(token) = crear_reset_token(v.id, &v.password_hash, &cfg.jwt_secret) {
             let link = format!("{}/reset?token={}", cfg.app_url, token);
-            let html = format!(
-                "<p>Hola {},</p><p>Para restablecer tu contraseña de Ventoki, haz clic en el botón:</p>\
-                 <p><a href=\"{link}\" style=\"background:#111;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none\">Restablecer contraseña</a></p>\
-                 <p>El enlace vence en 1 hora. Si no lo pediste, ignora este correo.</p>",
-                esc(&v.nombre)
+            let contenido = format!(
+                "<h2 style=\"margin:0 0 12px;color:#13233b;font-size:21px\">Restablecer contraseña</h2>\
+                 <p>Hola {}, recibimos una solicitud para restablecer tu contraseña de Ventoki. Haz clic en el botón para crear una nueva:</p>\
+                 {}\
+                 <p style=\"color:#8d93a3;font-size:13px\">El enlace vence en 1 hora. Si no lo pediste, ignora este correo.</p>",
+                esc(&v.nombre),
+                crate::email::boton("Restablecer contraseña", &link)
             );
+            let html = crate::email::plantilla(&contenido);
             if let Err(e) = crate::email::enviar_auto(&pool, &cfg.resend_api_key, &cfg.mail_from, &v.email, "Restablecer contraseña · Ventoki", &html).await {
                 log::warn!("No se pudo enviar el correo de reseteo: {e}");
             }
@@ -81,8 +84,69 @@ pub async fn registrar(
     }
     limiter.fallo(&key);
     let v = db::run(&pool, move |conn| svc::registrar(conn, body.into_inner())).await?;
+    if v.email_verificado {
+        // Admin (primer usuario): no necesita verificar, entra directo.
+        let token = crear_token(v.id, &v.rol, v.id, "owner", v.session_version, &cfg.jwt_secret)?;
+        return Ok(HttpResponse::Created().json(json!({ "token": token, "vendedor": v })));
+    }
+    // Resto: enviar bienvenida + verificación y pedir que confirmen el correo (sin auto-login).
+    enviar_bienvenida(&pool, &cfg, &v).await;
+    Ok(HttpResponse::Created().json(json!({ "requiere_verificacion": true, "email": v.email })))
+}
+
+/// Envía el correo de bienvenida con el enlace de verificación de cuenta.
+async fn enviar_bienvenida(pool: &web::Data<DbPool>, cfg: &web::Data<Config>, v: &crate::models::Vendedor) {
+    let Ok(token) = crear_verif_token(v.id, &cfg.jwt_secret) else { return };
+    let link = format!("{}/verificar?token={}", cfg.app_url, token);
+    let contenido = format!(
+        "<h2 style=\"margin:0 0 12px;color:#13233b;font-size:21px\">¡Bienvenido a Ventoki, {}! 👋</h2>\
+         <p>Tu cuenta está casi lista. Confirma tu correo para activarla y empezar a centralizar y sincronizar tu e-commerce (Mercado Libre, Falabella, Shopify y tu tienda) en un solo panel.</p>\
+         {}\
+         <p style=\"color:#8d93a3;font-size:13px\">Si el botón no funciona, copia este enlace en tu navegador:<br><a href=\"{link}\" style=\"color:#5B4FE0;word-break:break-all\">{link}</a></p>\
+         <p style=\"color:#8d93a3;font-size:13px\">El enlace vence en 7 días. Si no creaste esta cuenta, ignora este correo.</p>",
+        esc(&v.nombre),
+        crate::email::boton("Verificar mi correo", &link)
+    );
+    let html = crate::email::plantilla(&contenido);
+    let _ = crate::email::enviar_auto(pool, &cfg.resend_api_key, &cfg.mail_from, &v.email, "Verifica tu cuenta · Ventoki", &html).await;
+}
+
+#[derive(Deserialize)]
+pub struct VerifBody {
+    pub token: String,
+}
+
+/// Verifica el correo de una cuenta con el token del enlace del email.
+pub async fn verificar(body: web::Json<VerifBody>, pool: web::Data<DbPool>, cfg: web::Data<Config>) -> ApiResult<HttpResponse> {
+    let id = verificar_verif_token(&body.into_inner().token, &cfg.jwt_secret)?;
+    let v = db::run(&pool, move |conn| svc::marcar_verificado(conn, id)).await?;
+    // Entra directo tras verificar (emite sesión).
     let token = crear_token(v.id, &v.rol, v.id, "owner", v.session_version, &cfg.jwt_secret)?;
-    Ok(HttpResponse::Created().json(json!({ "token": token, "vendedor": v })))
+    Ok(HttpResponse::Ok().json(json!({ "ok": true, "token": token, "vendedor": v })))
+}
+
+/// Reenvía el correo de verificación (si la cuenta existe y no está verificada).
+pub async fn reenviar_verificacion(
+    req: actix_web::HttpRequest,
+    body: web::Json<ForgotBody>,
+    pool: web::Data<DbPool>,
+    cfg: web::Data<Config>,
+    limiter: web::Data<crate::auth::LoginLimiter>,
+) -> ApiResult<HttpResponse> {
+    let ip = req.connection_info().realip_remote_addr().unwrap_or("desconocida").to_string();
+    let key = format!("verif|{ip}");
+    if !limiter.permitido(&key) {
+        return Ok(HttpResponse::TooManyRequests().json(json!({ "error": "Demasiados intentos. Espera unos minutos." })));
+    }
+    limiter.fallo(&key);
+    let email = body.into_inner().email;
+    if let Some(v) = db::run(&pool, move |conn| svc::buscar_por_email(conn, &email)).await? {
+        if !v.email_verificado {
+            enviar_bienvenida(&pool, &cfg, &v).await;
+        }
+    }
+    // Siempre 200 (no revela si el email existe).
+    Ok(HttpResponse::Ok().json(json!({ "ok": true })))
 }
 
 pub async fn login(

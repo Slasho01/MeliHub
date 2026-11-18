@@ -11,8 +11,14 @@ export default function Login({ onAuth }) {
   const [need2fa, setNeed2fa] = useState(false)
   const [codigo, setCodigo] = useState('')
   const [pending, setPending] = useState('') // token temporal del 2FA (no se reenvía la contraseña)
+  const [reenviar, setReenviar] = useState(null) // email al que reenviar la verificación
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value })
-  const ir = (m) => { setModo(m); setError(null); setMsg(null); setNeed2fa(false); setCodigo(''); setPending('') }
+  const ir = (m) => { setModo(m); setError(null); setMsg(null); setNeed2fa(false); setCodigo(''); setPending(''); setReenviar(null) }
+
+  const reenviarVerif = async () => {
+    try { await post('/auth/reenviar-verificacion', { email: reenviar }); setMsg('Te reenviamos el correo de verificación. Revisa tu bandeja (y la carpeta de spam).'); setError(null); setReenviar(null) }
+    catch (e) { setError(e.message) }
+  }
 
   const submit = async (e) => {
     e.preventDefault()
@@ -37,9 +43,16 @@ export default function Login({ onAuth }) {
         : { nombre: form.nombre, email: form.email, password: form.password }
       const r = await post(path, body)
       if (modo === 'login' && r.twofa_required) { setNeed2fa(true); setPending(r.pending || ''); setBusy(false); return }
+      if (modo === 'registro' && r.requiere_verificacion) {
+        setMsg(`¡Cuenta creada! Te enviamos un correo de verificación a ${r.email || form.email}. Revísalo (y la carpeta de spam) para activar tu cuenta.`)
+        setModo('login'); setForm({ ...form, password: '' }); setBusy(false); return
+      }
       setToken(r.token)
       onAuth()
-    } catch (err) { setError(err.message) } finally { setBusy(false) }
+    } catch (err) {
+      setError(err.message)
+      if (err.message && /verifica tu correo/i.test(err.message)) setReenviar(form.email)
+    } finally { setBusy(false) }
   }
 
   const titulo = { login: 'Entrar', registro: 'Crear cuenta', forgot: 'Enviar enlace' }[modo]
@@ -65,6 +78,7 @@ export default function Login({ onAuth }) {
               <input className="input" inputMode="numeric" autoComplete="one-time-code" placeholder="6 dígitos" value={codigo} onChange={(e) => setCodigo(e.target.value)} autoFocus /></div>
           )}
           {error && <div className="alert alert-bad">{error}</div>}
+          {reenviar && <div className="center sm"><button type="button" className="link-btn" onClick={reenviarVerif}>Reenviar correo de verificación</button></div>}
           {msg && <div className="alert alert-ok">{msg}</div>}
           <button className="btn btn-accent" disabled={busy}>{busy ? '…' : titulo}</button>
         </form>

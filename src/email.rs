@@ -6,6 +6,34 @@ use crate::errors::{ApiError, ApiResult};
 use actix_web::web;
 use serde_json::json;
 
+/// Envuelve el contenido en una plantilla HTML con la marca Ventoki (header violeta + footer).
+/// Estilos inline + layout simple para máxima compatibilidad con clientes de correo.
+pub fn plantilla(contenido: &str) -> String {
+    format!(
+        "<!doctype html><html><body style=\"margin:0;padding:0;background:#f4f5f8\">\
+         <div style=\"background:#f4f5f8;padding:32px 16px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;\">\
+           <div style=\"max-width:480px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e8ebf2;box-shadow:0 6px 24px rgba(25,20,60,.06)\">\
+             <div style=\"background:#5B4FE0;padding:26px 24px;text-align:center\">\
+               <span style=\"color:#ffffff;font-size:23px;font-weight:800;letter-spacing:-.6px\">Ventoki</span>\
+             </div>\
+             <div style=\"padding:30px 30px 10px;color:#1f2733;font-size:15px;line-height:1.6\">{contenido}</div>\
+             <div style=\"padding:18px 30px 26px;color:#9aa0b0;font-size:12px;line-height:1.5;text-align:center;border-top:1px solid #f0f2f6;margin-top:14px\">\
+               Ventoki · Hub multicanal para Mercado Libre y tu e-commerce<br>No afiliado a Mercado Libre.\
+             </div>\
+           </div>\
+         </div></body></html>"
+    )
+}
+
+/// Botón de acción con la marca (violeta). Centrado.
+pub fn boton(texto: &str, url: &str) -> String {
+    format!(
+        "<div style=\"text-align:center;margin:24px 0\">\
+         <a href=\"{url}\" style=\"display:inline-block;background:#5B4FE0;color:#ffffff;padding:13px 28px;border-radius:10px;text-decoration:none;font-weight:700;font-size:15px\">{texto}</a>\
+         </div>"
+    )
+}
+
 /// Datos de correo ya descifrados, listos para enviar.
 pub struct DatosCorreo {
     pub proveedor: String,

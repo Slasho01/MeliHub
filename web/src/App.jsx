@@ -12,6 +12,7 @@ import Plan from './pages/Plan'
 import Perfil from './pages/Perfil'
 import Admin from './pages/Admin'
 import Reset from './pages/Reset'
+import Verificar from './pages/Verificar'
 import Legal from './pages/Legal'
 import Equipo from './pages/Equipo'
 import Aceptar from './pages/Aceptar'
@@ -59,6 +60,7 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<Login onAuth={() => setAuth(true)} />} />
       <Route path="/reset" element={<Reset />} />
+      <Route path="/verificar" element={<Verificar onAuth={() => setAuth(true)} />} />
       <Route path="/aceptar" element={<Aceptar />} />
       <Route path="/legal" element={<Legal />} />
       <Route path="/docs" element={<Docs />} />

@@ -41,12 +41,15 @@ pub async fn invitar(
     let link = format!("{}/aceptar?token={}", cfg.app_url, token);
     let correo_ok = crate::email::hay_config(&pool, &cfg.resend_api_key, &cfg.mail_from).await;
     if correo_ok {
-        let html = format!(
-            "<p>Hola {},</p><p>Te invitaron a colaborar en <b>Ventoki</b>. Crea tu contraseña para entrar:</p>\
-             <p><a href=\"{link}\" style=\"background:#111;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none\">Aceptar invitación</a></p>\
-             <p>El enlace vence en 7 días.</p>",
-            esc(&m.nombre)
+        let contenido = format!(
+            "<h2 style=\"margin:0 0 12px;color:#13233b;font-size:21px\">Te invitaron a Ventoki</h2>\
+             <p>Hola {}, te invitaron a colaborar en <b>Ventoki</b>. Crea tu contraseña para entrar al panel:</p>\
+             {}\
+             <p style=\"color:#8d93a3;font-size:13px\">El enlace vence en 7 días.</p>",
+            esc(&m.nombre),
+            crate::email::boton("Aceptar invitación", &link)
         );
+        let html = crate::email::plantilla(&contenido);
         let _ = crate::email::enviar_auto(&pool, &cfg.resend_api_key, &cfg.mail_from, &m.email, "Invitación a Ventoki", &html).await;
     }
     let (actor, det) = (user.actor_id, format!("{} ({})", m.email, m.rol));
@@ -67,10 +70,13 @@ pub async fn reinvitar(
     let link = format!("{}/aceptar?token={}", cfg.app_url, token);
     let correo_ok = crate::email::hay_config(&pool, &cfg.resend_api_key, &cfg.mail_from).await;
     if correo_ok {
-        let html = format!(
-            "<p>Hola {},</p><p>Aquí tienes de nuevo tu invitación a Ventoki:</p><p><a href=\"{link}\">Aceptar invitación</a></p>",
-            esc(&m.nombre)
+        let contenido = format!(
+            "<h2 style=\"margin:0 0 12px;color:#13233b;font-size:21px\">Tu invitación a Ventoki</h2>\
+             <p>Hola {}, aquí tienes de nuevo tu invitación para colaborar en Ventoki:</p>{}",
+            esc(&m.nombre),
+            crate::email::boton("Aceptar invitación", &link)
         );
+        let html = crate::email::plantilla(&contenido);
         let _ = crate::email::enviar_auto(&pool, &cfg.resend_api_key, &cfg.mail_from, &m.email, "Invitación a Ventoki", &html).await;
     }
     Ok(HttpResponse::Ok().json(json!({ "enlace": link, "correo_enviado": correo_ok })))

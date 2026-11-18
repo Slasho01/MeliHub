@@ -81,6 +81,31 @@ pub fn verificar_reset_token(token: &str, secret: &str) -> Result<(Uuid, String)
 }
 
 #[derive(Serialize, Deserialize)]
+struct VerifClaims {
+    sub: String,
+    purpose: String, // "verif"
+    exp: usize,
+}
+
+/// Token para verificar el correo al registrarse (válido 7 días).
+pub fn crear_verif_token(vendedor_id: Uuid, secret: &str) -> Result<String, ApiError> {
+    let exp = (chrono::Utc::now() + chrono::Duration::days(7)).timestamp() as usize;
+    let claims = VerifClaims { sub: vendedor_id.to_string(), purpose: "verif".to_string(), exp };
+    encode(&Header::new(Algorithm::HS256), &claims, &EncodingKey::from_secret(secret.as_bytes()))
+        .map_err(|e| ApiError::internal(format!("No se pudo emitir el token: {e}")))
+}
+
+/// Verifica un token de verificación de correo y devuelve el vendedor id.
+pub fn verificar_verif_token(token: &str, secret: &str) -> Result<Uuid, ApiError> {
+    let data = decode::<VerifClaims>(token, &DecodingKey::from_secret(secret.as_bytes()), &Validation::new(Algorithm::HS256))
+        .map_err(|_| ApiError::unauthorized("Enlace inválido o expirado"))?;
+    if data.claims.purpose != "verif" {
+        return Err(ApiError::unauthorized("Token inválido"));
+    }
+    Uuid::parse_str(&data.claims.sub).map_err(|_| ApiError::unauthorized("Token inválido"))
+}
+
+#[derive(Serialize, Deserialize)]
 struct Pending2faClaims {
     sub: String,     // email (en minúsculas) que ya pasó la contraseña
     purpose: String, // "2fa"

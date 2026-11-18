@@ -19,6 +19,7 @@ diesel::table! {
         twofa_secret -> Nullable<Varchar>,
         twofa_enabled -> Bool,
         session_version -> Int4,
+        email_verificado -> Bool,
     }
 }
 
