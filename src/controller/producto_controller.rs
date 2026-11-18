@@ -4,6 +4,7 @@ use crate::db::{self, DbPool};
 use crate::errors::{ApiError, ApiResult};
 use crate::ml::MlClient;
 use crate::services::inventario_services::{self as inv, ConfigUpdate, InventarioUpdate};
+use crate::services::ml_services;
 use crate::services::producto_services::{self as prod, ProductoFiltro};
 use actix_web::{web, HttpResponse};
 use serde::Deserialize;
@@ -142,6 +143,105 @@ pub async fn inventario_masivo(user: AuthVendedor, body: web::Json<InvMasivo>, p
     let InvMasivo { ids, costo, precio_jarstore } = body.into_inner();
     let n = db::run(&pool, move |conn| prod::set_inventario_masivo(conn, vid, admin, &ids, costo, precio_jarstore)).await?;
     Ok(HttpResponse::Ok().json(json!({ "afectados": n })))
+}
+
+#[derive(Deserialize)]
+pub struct FilaImportReq {
+    pub sku: String,
+    #[serde(default)]
+    pub costo: Option<i64>,
+    #[serde(default)]
+    pub precio_jarstore: Option<i64>,
+    #[serde(default)]
+    pub precio_falabella: Option<i64>,
+    #[serde(default)]
+    pub stock: Option<i32>,
+    #[serde(default)]
+    pub precio: Option<i64>,
+}
+
+/// Importación masiva por SKU (desde un CSV). Actualiza costo/precios/stock en bloque
+/// y empuja los cambios de stock/precio ML a Mercado Libre (agrupados por cuenta).
+pub async fn importar(
+    user: AuthVendedor,
+    body: web::Json<Vec<FilaImportReq>>,
+    pool: web::Data<DbPool>,
+    client: web::Data<MlClient>,
+) -> ApiResult<HttpResponse> {
+    user.exigir_edicion()?;
+    let vid = user.id;
+    let filas: Vec<prod::FilaImport> = body
+        .into_inner()
+        .into_iter()
+        .map(|f| prod::FilaImport {
+            sku: f.sku,
+            costo: f.costo,
+            precio_jarstore: f.precio_jarstore,
+            precio_falabella: f.precio_falabella,
+            stock: f.stock,
+            precio: f.precio,
+        })
+        .collect();
+    if filas.is_empty() {
+        return Err(ApiError::bad_request("El archivo no tiene filas."));
+    }
+    let (actualizados, no_encontrados, push) =
+        db::run(&pool, move |conn| prod::importar_csv(conn, vid, filas)).await?;
+
+    // Empujar stock/precio a Mercado Libre, agrupado por cuenta para reusar el token.
+    use std::collections::HashMap;
+    let mut por_cuenta: HashMap<Uuid, Vec<prod::PushMl>> = HashMap::new();
+    for pm in push {
+        por_cuenta.entry(pm.ml_cuenta_id).or_default().push(pm);
+    }
+    let mut ml_ok = 0usize;
+    let mut ml_err = 0usize;
+    for (cid, items) in por_cuenta {
+        let cuenta = match db::run(&pool, move |conn| ml_services::cuenta_por_id(conn, cid)).await {
+            Ok(Some(c)) => c,
+            _ => {
+                ml_err += items.len();
+                continue;
+            }
+        };
+        let token = match crate::sync::access_token_valido(&pool, &client, &cuenta).await {
+            Ok(t) => t,
+            Err(_) => {
+                ml_err += items.len();
+                continue;
+            }
+        };
+        for pm in items {
+            let mut ok = true;
+            if let Some(st) = pm.stock {
+                let r = match &pm.user_product_id {
+                    Some(u) => client.update_deposito_stock(&token, u, st).await,
+                    None => client.update_stock(&token, &pm.ml_item_id, st).await,
+                };
+                if r.is_err() {
+                    ok = false;
+                }
+            }
+            if ok {
+                if let Some(pr) = pm.precio {
+                    if client.update_price(&token, &pm.ml_item_id, pr).await.is_err() {
+                        ok = false;
+                    }
+                }
+            }
+            if ok {
+                ml_ok += 1;
+            } else {
+                ml_err += 1;
+            }
+        }
+    }
+    Ok(HttpResponse::Ok().json(json!({
+        "actualizados": actualizados,
+        "no_encontrados": no_encontrados,
+        "ml_actualizados": ml_ok,
+        "ml_errores": ml_err,
+    })))
 }
 
 /// Catálogo unificado con ganancia/margen calculados por canal.

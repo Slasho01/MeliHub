@@ -1,5 +1,42 @@
-import { Fragment, useEffect, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { get, money, post, put, csvLocal } from '../api'
+
+// Encabezados aceptados en el CSV → campo interno. Sirve también para reimportar el export.
+const HEADER_MAP = {
+  'sku': 'sku', 'ml id': 'sku', 'ml_id': 'sku', 'mlid': 'sku', 'seller_sku': 'sku', 'id': 'sku',
+  'costo': 'costo',
+  'mi precio': 'precio_jarstore', 'precio_jarstore': 'precio_jarstore', 'precio propio': 'precio_jarstore', 'precio jarstore': 'precio_jarstore',
+  'precio_falabella': 'precio_falabella', 'precio falabella': 'precio_falabella',
+  'stock': 'stock',
+  'precio ml': 'precio', 'precio_ml': 'precio', 'precio': 'precio',
+}
+// Entero desde texto (quita $, puntos de miles, espacios). Vacío → null.
+const aEntero = (v) => {
+  const s = String(v ?? '').replace(/[^\d-]/g, '')
+  if (!s || s === '-') return null
+  const n = parseInt(s, 10)
+  return Number.isFinite(n) ? n : null
+}
+// Parser CSV simple con comillas; delimitador coma o punto y coma.
+function parseCsv(text) {
+  const head = (text.split(/\r?\n/)[0] || '')
+  const delim = (head.split(';').length > head.split(',').length) ? ';' : ','
+  const filas = []
+  let campo = '', fila = [], enComillas = false
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i]
+    if (enComillas) {
+      if (c === '"') { if (text[i + 1] === '"') { campo += '"'; i++ } else enComillas = false }
+      else campo += c
+    } else if (c === '"') enComillas = true
+    else if (c === delim) { fila.push(campo); campo = '' }
+    else if (c === '\n') { fila.push(campo); filas.push(fila); fila = []; campo = '' }
+    else if (c === '\r') { /* ignore */ }
+    else campo += c
+  }
+  if (campo !== '' || fila.length) { fila.push(campo); filas.push(fila) }
+  return filas.filter((f) => f.some((x) => (x || '').trim() !== ''))
+}
 
 const CAMPO_LABEL = { precio: 'Precio', stock: 'Stock', estado: 'Estado' }
 const FUENTE_LABEL = { sync: 'sincronización', venta: 'venta', manual: 'manual' }
@@ -120,6 +157,44 @@ export default function Inventario({ me }) {
     csvLocal('inventario-ventoki.csv', rows)
   }
 
+  const fileRef = useRef(null)
+  const [importando, setImportando] = useState(false)
+  const [impRep, setImpRep] = useState(null)
+
+  const importarCsv = async (file) => {
+    if (!file) return
+    setError(null); setMsg(null); setImpRep(null); setImportando(true)
+    try {
+      const text = await file.text()
+      const lineas = parseCsv(text)
+      if (lineas.length < 2) throw new Error('El archivo no tiene filas de datos.')
+      const campos = lineas[0].map((h) => HEADER_MAP[h.trim().toLowerCase()] || null)
+      if (!campos.includes('sku')) throw new Error('Falta la columna «SKU» (o «ML ID») para identificar cada producto.')
+      const otros = campos.filter((c) => c && c !== 'sku')
+      if (!otros.length) throw new Error('No hay columnas para actualizar (costo, stock, precio, mi precio o precio Falabella).')
+      const filas = []
+      for (let i = 1; i < lineas.length; i++) {
+        const cel = lineas[i]
+        const obj = {}
+        campos.forEach((campo, j) => {
+          if (!campo) return
+          if (campo === 'sku') { obj.sku = String(cel[j] ?? '').trim(); return }
+          const n = aEntero(cel[j])
+          if (n != null) obj[campo] = n
+        })
+        if (obj.sku && Object.keys(obj).length > 1) filas.push(obj)
+      }
+      if (!filas.length) throw new Error('No hay filas con SKU y al menos un valor para importar.')
+      if (filas.length > 2000) throw new Error('Máximo 2000 filas por importación.')
+      const r = await post('/productos/importar', filas)
+      setImpRep({ ...r, enviadas: filas.length })
+      cargar()
+    } catch (e) { setError(e.message) } finally {
+      setImportando(false)
+      if (fileRef.current) fileRef.current.value = ''
+    }
+  }
+
   const aplicarMasivo = async () => {
     const ids = [...sel]
     if (!ids.length) return
@@ -157,10 +232,29 @@ export default function Inventario({ me }) {
             <input type="checkbox" checked={ocultarSinStock} onChange={(e) => setOcultarSinStock(e.target.checked)} /> Ocultar sin stock
           </label>
           <button className="btn btn-sm" disabled={!items?.length} onClick={exportarCsv}>Exportar CSV</button>
+          {!soloLectura && (
+            <>
+              <input ref={fileRef} type="file" accept=".csv,text/csv" style={{ display: 'none' }} onChange={(e) => importarCsv(e.target.files?.[0])} />
+              <button className="btn btn-sm btn-accent" disabled={importando} title="Sube un CSV con columna SKU (o ML ID) y las columnas a cambiar: costo, stock, precio, mi precio, precio Falabella. Consejo: exporta, edita en Excel y vuelve a subir." onClick={() => fileRef.current?.click()}>
+                {importando ? 'Importando…' : '⬆ Importar CSV'}
+              </button>
+            </>
+          )}
         </div>
       </div>
       {error && <div className="alert alert-bad">{error}</div>}
       {msg && <div className="alert alert-ok">{msg}</div>}
+      {impRep && (
+        <div className="alert alert-ok" style={{ display: 'block' }} onClick={() => setImpRep(null)} role="button" title="Cerrar">
+          <b>✅ Importación completada</b> — {impRep.actualizados} de {impRep.enviadas} fila(s) actualizada(s).
+          {(impRep.ml_actualizados > 0 || impRep.ml_errores > 0) && <> · Mercado Libre: {impRep.ml_actualizados} ok{impRep.ml_errores > 0 ? `, ${impRep.ml_errores} con error` : ''}.</>}
+          {Array.isArray(impRep.no_encontrados) && impRep.no_encontrados.length > 0 && (
+            <div className="sm" style={{ marginTop: 6 }}>
+              ⚠️ {impRep.no_encontrados.length} SKU no encontrado(s): <span className="muted">{impRep.no_encontrados.slice(0, 15).join(', ')}{impRep.no_encontrados.length > 15 ? '…' : ''}</span>
+            </div>
+          )}
+        </div>
+      )}
       {soloLectura && <div className="alert">👁️ Modo solo lectura: puedes consultar, pero no modificar.</div>}
 
       {alertas.length > 0 && (

@@ -65,7 +65,7 @@ export default function Equipo() {
 
       <div className="card">
         {data.miembros.length === 0 ? (
-          <div className="muted">Aún no has invitado a nadie.</div>
+          <div className="empty">Aún no has invitado a nadie.<br /><span className="sm">Agrega operadores (pueden gestionar) o usuarios de solo lectura para tu equipo.</span></div>
         ) : (
           <table className="table">
             <thead><tr><th>Nombre</th><th>Email</th><th>Rol</th><th>Estado</th>{gest && <th></th>}</tr></thead>

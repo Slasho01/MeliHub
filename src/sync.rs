@@ -28,6 +28,16 @@ pub async fn empujar_stock_ml(pool: &web::Data<DbPool>, client: &MlClient, venta
         Ok(()) => true,
         Err(e) => {
             log::warn!("No se pudo empujar stock a ML ({}): {e}", venta.ml_item_id);
+            let cid = venta.ml_cuenta_id;
+            let _ = db::run(pool, move |conn| {
+                use crate::schema::ml_cuentas;
+                use diesel::prelude::*;
+                if let Ok(vid) = ml_cuentas::table.find(cid).select(ml_cuentas::vendedor_id).first::<uuid::Uuid>(conn) {
+                    crate::services::saas_services::notificar_una_vez(conn, vid, "sync_error", "No se pudo actualizar el stock en Mercado Libre", Some("Revisa la conexión de tu cuenta de ML (quizá haya que reconectarla). Mientras no se resuelva, el stock en ML puede quedar desactualizado y causar sobreventa.".into()));
+                }
+                Ok::<(), crate::errors::ApiError>(())
+            })
+            .await;
             false
         }
     }
@@ -84,7 +94,44 @@ pub async fn access_token_valido(pool: &web::Data<DbPool>, client: &MlClient, cu
         return Ok(crate::crypto::descifrar(&cuenta.access_token));
     }
     let refresh_plano = crate::crypto::descifrar(&cuenta.refresh_token);
-    let tokens = client.refresh(&refresh_plano).await?;
+    let tokens = match client.refresh(&refresh_plano).await {
+        Ok(t) => t,
+        Err(e) => {
+            // Token/refresh muerto: la cuenta quedó desconectada → nada se sincroniza. Avisar
+            // (in-app + email, una sola vez por cada episodio gracias al dedup).
+            let vid = cuenta.vendedor_id;
+            let nick = cuenta.nickname.clone().unwrap_or_default();
+            let correo: Option<String> = db::run(pool, move |conn| {
+                let cuerpo = format!(
+                    "No pudimos renovar la sesión de tu cuenta de Mercado Libre{}. Ve a «Cuentas» y vuelve a conectarla para que el stock y las ventas se sigan sincronizando (si no, el stock puede desactualizarse y causar sobreventa).",
+                    if nick.is_empty() { String::new() } else { format!(" ({nick})") }
+                );
+                let nueva = crate::services::saas_services::notificar_una_vez(conn, vid, "reconectar", "Reconecta tu cuenta de Mercado Libre", Some(cuerpo));
+                let email = if nueva {
+                    use crate::schema::vendedores;
+                    use diesel::prelude::*;
+                    vendedores::table.find(vid).select(vendedores::email).first::<String>(conn).ok()
+                } else {
+                    None
+                };
+                Ok::<Option<String>, crate::errors::ApiError>(email)
+            })
+            .await
+            .ok()
+            .flatten();
+            if let Some(to) = correo {
+                let app = std::env::var("APP_URL").unwrap_or_default();
+                let cuerpo = format!(
+                    "<h2 style=\"margin:0 0 12px;color:#13233b;font-size:21px\">Reconecta tu cuenta de Mercado Libre</h2>\
+                     <p>Tu sesión de Mercado Libre expiró y no pudimos renovarla. Mientras esté desconectada, <b>el stock y las ventas no se sincronizan</b> (riesgo de sobreventa).</p>{}",
+                    crate::email::boton("Ir a Cuentas", &format!("{app}/cuentas"))
+                );
+                let html = crate::email::plantilla(&cuerpo);
+                let _ = crate::email::enviar_sistema(pool, &to, "Reconecta tu cuenta de Mercado Libre · Ventoki", &html).await;
+            }
+            return Err(e);
+        }
+    };
     let expira = now() + Duration::seconds(tokens.expires_in.max(0));
     let refresh = if tokens.refresh_token.is_empty() { refresh_plano } else { tokens.refresh_token.clone() };
     let access = tokens.access_token.clone();

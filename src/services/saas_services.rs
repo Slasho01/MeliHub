@@ -23,6 +23,40 @@ pub fn notificar(conn: &mut PgConnection, vendedor_id: Uuid, tipo: &str, titulo:
         .execute(conn);
 }
 
+/// Notifica SOLO si no hubo un aviso con el mismo título en las últimas 12 h (evita spam
+/// de errores recurrentes de sincronización). Devuelve `true` si creó una notificación nueva.
+pub fn notificar_una_vez(conn: &mut PgConnection, vendedor_id: Uuid, tipo: &str, titulo: &str, cuerpo: Option<String>) -> bool {
+    let titulo: String = titulo.chars().take(255).collect();
+    let corte = crate::services::common::now() - chrono::Duration::hours(12);
+    let ya: i64 = notificaciones::table
+        .filter(notificaciones::vendedor_id.eq(vendedor_id))
+        .filter(notificaciones::titulo.eq(&titulo))
+        .filter(notificaciones::created_at.gt(corte))
+        .count()
+        .get_result(conn)
+        .unwrap_or(0);
+    if ya == 0 {
+        notificar(conn, vendedor_id, tipo, &titulo, cuerpo);
+        true
+    } else {
+        false
+    }
+}
+
+/// Avisos de salud recientes (sin leer, últimas 48h) para el panel de Conexiones.
+pub fn alertas_conexiones(conn: &mut PgConnection, vendedor_id: Uuid) -> Vec<(String, Option<String>)> {
+    let corte = crate::services::common::now() - chrono::Duration::hours(48);
+    notificaciones::table
+        .filter(notificaciones::vendedor_id.eq(vendedor_id))
+        .filter(notificaciones::leida.eq(false))
+        .filter(notificaciones::created_at.gt(corte))
+        .filter(notificaciones::tipo.eq_any(["reconectar", "sync_error", "falabella_sync", "paris_sync", "shopify_sync"]))
+        .order(notificaciones::created_at.desc())
+        .select((notificaciones::titulo, notificaciones::cuerpo))
+        .load::<(String, Option<String>)>(conn)
+        .unwrap_or_default()
+}
+
 pub fn listar(conn: &mut PgConnection, vendedor_id: Uuid, solo_no_leidas: bool, limit: i64) -> ApiResult<Vec<Notificacion>> {
     let mut q = notificaciones::table.filter(notificaciones::vendedor_id.eq(vendedor_id)).into_boxed();
     if solo_no_leidas {

@@ -32,6 +32,16 @@ const STEPS = [
   { n: 3, t: 'Vende más', d: 'Distribuye a más canales, gana la Buy Box y mantén el stock sincronizado solo.' },
 ]
 
+const FAQ = [
+  { q: '¿Necesito saber de programación?', a: 'No. Conectas tus cuentas con unos clics (OAuth) y Ventoki hace el resto. Si usas tu propia tienda, instalas un plugin y listo.' },
+  { q: '¿Cómo evita la sobreventa?', a: 'Mantiene un stock central y lo sincroniza en todos tus canales en dos vías. Si una conexión falla, te avisa al instante (campana + correo) para que no vendas lo que no tienes.' },
+  { q: '¿Funciona con varias cuentas de Mercado Libre?', a: 'Sí. Conecta cuantas cuentas quieras (según tu plan) y gestiónalas desde un solo panel.' },
+  { q: '¿Qué canales soporta?', a: 'Mercado Libre, Falabella, Shopify y tu propia tienda (WooCommerce). Más canales en camino.' },
+  { q: '¿Puedo probarlo gratis?', a: 'Sí. El plan Free es gratis para siempre, y los planes pagados incluyen 3 días de prueba.' },
+  { q: '¿Qué pasa si cancelo?', a: 'Mantienes tu plan hasta que termine el período ya pagado (o el trial). No se corta de inmediato.' },
+  { q: '¿Mis datos están seguros?', a: 'Sí. Tus tokens se guardan cifrados, con verificación en dos pasos (2FA) y registro de actividad de tu equipo.' },
+]
+
 function Precio({ p, destacado, bullets }) {
   return (
     <div className={`lp-price ${destacado ? 'featured' : ''}`}>
@@ -68,6 +78,7 @@ export default function Landing() {
           <a href="#features">Características</a>
           <a href="#como">Cómo funciona</a>
           <a href="#precios">Precios</a>
+          <a href="#faq">FAQ</a>
           <Link to="/docs">API</Link>
           <ThemeToggle className="btn btn-sm" />
           <Link to="/login" className="btn btn-sm">Entrar</Link>
@@ -151,10 +162,23 @@ export default function Landing() {
         </div>
       </section>
 
+      <section id="faq" className="lp-section lp-section-alt">
+        <h2 className="lp-h2">Preguntas frecuentes</h2>
+        <div style={{ maxWidth: 720, margin: '0 auto' }}>
+          {FAQ.map((f, i) => (
+            <details key={i} style={{ borderBottom: '1px solid var(--line)', padding: '16px 4px' }}>
+              <summary style={{ cursor: 'pointer', fontWeight: 700, fontSize: 16, listStyle: 'none' }}>{f.q}</summary>
+              <p className="muted" style={{ margin: '10px 0 0', lineHeight: 1.6 }}>{f.a}</p>
+            </details>
+          ))}
+        </div>
+      </section>
+
       <section className="lp-final">
         <h2 className="lp-h2">Centraliza tu e-commerce hoy</h2>
         <p className="lp-lead">Conecta tu primera cuenta en menos de un minuto.</p>
         <Link to="/login?r=1" className="btn btn-accent btn-lg">Crear mi cuenta gratis</Link>
+        <p className="muted sm" style={{ marginTop: 12 }}>Gratis para empezar · Sin tarjeta · Cancela cuando quieras</p>
       </section>
 
       <footer className="lp-footer">

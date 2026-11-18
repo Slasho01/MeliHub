@@ -119,7 +119,7 @@ async fn sincronizar_falabella(pool: &web::Data<DbPool>, fala: &web::Data<Falabe
                     log::warn!("Falabella {}: error sync precio/stock: {e}", cuenta.user_id);
                     let (vid, msg) = (cuenta.vendedor_id, e.to_string());
                     let _ = db::run(pool, move |conn| {
-                        crate::services::saas_services::notificar(conn, vid, "falabella_sync", "Error sincronizando con Falabella", Some(msg));
+                        crate::services::saas_services::notificar_una_vez(conn, vid, "falabella_sync", "Falla al sincronizar con Falabella", Some(format!("No pudimos actualizar stock/precio en Falabella: {msg}. Revisa la conexión/credenciales — el stock allí puede quedar desactualizado.")));
                         Ok::<_, crate::errors::ApiError>(())
                     })
                     .await;
@@ -228,6 +228,12 @@ async fn sincronizar_paris(pool: &web::Data<DbPool>, paris: &web::Data<ParisClie
             let body = pp::build_stock(chunk);
             if let Err(e) = paris.update_stock_sku_seller(cuenta.sandbox, &api_key, &body).await {
                 log::warn!("Paris {}: error sync stock: {e}", cuenta.id);
+                let (vid, msg) = (cuenta.vendedor_id, e.to_string());
+                let _ = db::run(pool, move |conn| {
+                    crate::services::saas_services::notificar_una_vez(conn, vid, "paris_sync", "Falla al sincronizar con Paris", Some(format!("No pudimos actualizar el stock en Paris: {msg}. Revisa la conexión — el stock allí puede quedar desactualizado.")));
+                    Ok::<_, crate::errors::ApiError>(())
+                })
+                .await;
             }
         }
         // PRECIO: por sku del PRODUCTO (paris_sku), con store + tipo.
@@ -345,7 +351,7 @@ pub fn start(pool: web::Data<DbPool>, client: web::Data<MlClient>, falabella: we
                         log::warn!("Error sincronizando cuenta {}: {e}", cuenta.ml_user_id);
                         let (vid, msg) = (cuenta.vendedor_id, e.to_string());
                         let _ = db::run(&pool, move |conn| {
-                            crate::services::saas_services::notificar(conn, vid, "sync_error", "Error de sincronización con Mercado Libre", Some(msg));
+                            crate::services::saas_services::notificar_una_vez(conn, vid, "sync_error", "Error de sincronización con Mercado Libre", Some(msg));
                             Ok::<_, crate::errors::ApiError>(())
                         })
                         .await;

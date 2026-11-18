@@ -303,6 +303,117 @@ pub fn set_inventario_masivo(
     Ok(propios.len())
 }
 
+/// Una fila de la importación masiva por SKU. Cada campo `Some` se aplica; `None` se deja igual.
+pub struct FilaImport {
+    pub sku: String,
+    pub costo: Option<i64>,
+    pub precio_jarstore: Option<i64>,
+    pub precio_falabella: Option<i64>,
+    pub stock: Option<i32>,
+    pub precio: Option<i64>,
+}
+
+/// Un empuje pendiente a Mercado Libre (stock y/o precio cambiaron y ML es la fuente).
+pub struct PushMl {
+    pub ml_cuenta_id: Uuid,
+    pub ml_item_id: String,
+    pub user_product_id: Option<String>,
+    pub stock: Option<i32>,
+    pub precio: Option<i64>,
+}
+
+/// SELLER_SKU de un producto (si lo tiene).
+fn sku_de(p: &Producto) -> Option<String> {
+    p.datos
+        .get("attributes")
+        .and_then(|a| a.as_array())
+        .and_then(|arr| {
+            arr.iter()
+                .find(|a| a.get("id").and_then(|v| v.as_str()) == Some("SELLER_SKU"))
+                .and_then(|a| a.get("value_name").and_then(|v| v.as_str()))
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+        })
+}
+
+/// Importación masiva por SKU: para cada fila busca el producto por su SELLER_SKU
+/// (o por el ID de publicación de ML) y actualiza los campos presentes. Devuelve
+/// (actualizados, skus_no_encontrados, empujes_pendientes_a_ml). Los cambios de
+/// stock/precio ML quedan en `push` porque ML es la fuente y hay que empujárselos.
+pub fn importar_csv(
+    conn: &mut PgConnection,
+    vendedor_id: Uuid,
+    filas: Vec<FilaImport>,
+) -> ApiResult<(usize, Vec<String>, Vec<PushMl>)> {
+    use std::collections::HashMap;
+    if filas.len() > 2000 {
+        return Err(ApiError::bad_request("Máximo 2000 filas por importación."));
+    }
+    // Solo productos del propio vendedor (nunca de otro usuario).
+    let prods: Vec<Producto> = productos::table
+        .inner_join(ml_cuentas::table)
+        .filter(ml_cuentas::vendedor_id.eq(vendedor_id))
+        .select(Producto::as_select())
+        .load(conn)?;
+    // Índice por SKU y por ID de publicación (en minúsculas).
+    let mut idx: HashMap<String, usize> = HashMap::new();
+    for (i, p) in prods.iter().enumerate() {
+        idx.insert(p.ml_item_id.to_lowercase(), i);
+        if let Some(sku) = sku_de(p) {
+            idx.entry(sku.to_lowercase()).or_insert(i);
+        }
+    }
+    let mut actualizados = 0usize;
+    let mut no_encontrados: Vec<String> = Vec::new();
+    let mut push: Vec<PushMl> = Vec::new();
+    conn.transaction::<_, ApiError, _>(|conn| {
+        for f in &filas {
+            let key = f.sku.trim().to_lowercase();
+            if key.is_empty() {
+                continue;
+            }
+            let Some(&i) = idx.get(&key) else {
+                no_encontrados.push(f.sku.trim().to_string());
+                continue;
+            };
+            let p = &prods[i];
+            let pid = p.id;
+            if let Some(c) = f.costo {
+                diesel::update(productos::table.find(pid)).set(productos::costo.eq(Some(c.max(0)))).execute(conn)?;
+            }
+            if let Some(v) = f.precio_jarstore {
+                diesel::update(productos::table.find(pid)).set(productos::precio_jarstore.eq(Some(v.max(0)))).execute(conn)?;
+            }
+            if let Some(v) = f.precio_falabella {
+                diesel::update(productos::table.find(pid)).set(productos::precio_falabella.eq(Some(v.max(0)))).execute(conn)?;
+            }
+            // Stock y precio ML solo se tocan (y se empujan a ML) si de verdad cambian,
+            // para no bombardear ML al reimportar un export completo sin cambios.
+            let stock_nuevo = f.stock.map(|v| v.max(0)).filter(|v| *v != p.stock);
+            let precio_nuevo = f.precio.map(|v| v.max(0)).filter(|v| *v != p.precio);
+            if let Some(v) = stock_nuevo {
+                diesel::update(productos::table.find(pid)).set(productos::stock.eq(v)).execute(conn)?;
+            }
+            if let Some(v) = precio_nuevo {
+                diesel::update(productos::table.find(pid)).set(productos::precio.eq(v)).execute(conn)?;
+            }
+            actualizados += 1;
+            if stock_nuevo.is_some() || precio_nuevo.is_some() {
+                let upid = p.datos.get("user_product_id").and_then(|v| v.as_str()).map(str::trim).filter(|s| !s.is_empty()).map(str::to_string);
+                push.push(PushMl {
+                    ml_cuenta_id: p.ml_cuenta_id,
+                    ml_item_id: p.ml_item_id.clone(),
+                    user_product_id: upid,
+                    stock: stock_nuevo,
+                    precio: precio_nuevo,
+                });
+            }
+        }
+        Ok(())
+    })?;
+    Ok((actualizados, no_encontrados, push))
+}
+
 /// Productos ACTIVOS con stock (depósito) en o por debajo del umbral. Para alertas.
 pub fn stock_bajo(conn: &mut PgConnection, vendedor_id: Uuid, _es_admin: bool, umbral: i32) -> ApiResult<Vec<Producto>> {
     productos::table

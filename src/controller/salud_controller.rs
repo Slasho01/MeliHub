@@ -120,8 +120,76 @@ pub async fn conexiones(user: AuthVendedor, pool: web::Data<DbPool>) -> ApiResul
             }));
         }
 
-        Ok::<_, ApiError>(out)
+        let alertas = crate::services::saas_services::alertas_conexiones(conn, vid);
+        Ok::<_, ApiError>((out, alertas))
     })
     .await?;
-    Ok(HttpResponse::Ok().json(salida))
+    let (conexiones, alertas) = salida;
+    let alertas: Vec<Value> = alertas.into_iter().map(|(t, c)| json!({ "titulo": t, "cuerpo": c })).collect();
+    Ok(HttpResponse::Ok().json(json!({ "conexiones": conexiones, "alertas": alertas })))
+}
+
+/// Prueba EN VIVO cada conexión del vendedor (valida token/credenciales con una llamada real).
+/// Devuelve [{tipo, nombre, ok, mensaje}]. Útil para onboarding y soporte.
+pub async fn probar(
+    user: AuthVendedor,
+    pool: web::Data<DbPool>,
+    mlc: web::Data<crate::ml::MlClient>,
+    falac: web::Data<crate::falabella::FalabellaClient>,
+    parisc: web::Data<crate::paris::ParisClient>,
+) -> ApiResult<HttpResponse> {
+    let (vid, admin) = (user.id, user.es_admin());
+    let (mls, falas, paris, shops) = db::run(&pool, move |conn| {
+        Ok::<_, ApiError>((
+            ml_services::listar_cuentas(conn, vid, admin)?,
+            falabella_services::listar(conn, vid)?,
+            paris_services::listar(conn, vid)?,
+            shopify_services::listar(conn, vid)?,
+        ))
+    })
+    .await?;
+
+    let mut out: Vec<Value> = Vec::new();
+    let res = |tipo: &str, nombre: String, r: Result<(), String>| {
+        let (ok, mensaje) = match r {
+            Ok(()) => (true, "Conexión OK.".to_string()),
+            Err(e) => (false, e),
+        };
+        json!({ "tipo": tipo, "nombre": nombre, "ok": ok, "mensaje": mensaje })
+    };
+
+    for c in mls {
+        let nombre = c.nickname.clone().unwrap_or_else(|| format!("ML {}", c.ml_user_id));
+        let r = crate::sync::access_token_valido(&pool, &mlc, &c).await
+            .map(|_| ())
+            .map_err(|e| format!("Falló: {e}. Reconéctala en «Cuentas»."));
+        out.push(res("Mercado Libre", nombre, r));
+    }
+    for f in falas {
+        let nombre = f.nickname.clone().unwrap_or_else(|| f.user_id.clone());
+        let api_key = crate::crypto::descifrar(&f.api_key);
+        let r = falac.get_products(&f.user_id, &api_key, None).await
+            .map(|_| ())
+            .map_err(|e| format!("Falló: {e}. Revisa el user_id y la API key."));
+        out.push(res("Falabella", nombre, r));
+    }
+    for p in paris {
+        let nombre = p.nombre.clone().unwrap_or_else(|| "Paris".to_string());
+        let api_key = crate::crypto::descifrar(&p.api_key);
+        let r = parisc.get_price_types(p.sandbox, &api_key).await
+            .map(|_| ())
+            .map_err(|e| format!("Falló: {e}. Revisa la API key."));
+        out.push(res("Paris", nombre, r));
+    }
+    let shc = crate::shopify::ShopifyClient::new();
+    for s in shops {
+        let nombre = s.nombre.clone().unwrap_or_else(|| s.shop_domain.clone());
+        let token = crate::crypto::descifrar(&s.access_token);
+        let r = shc.verificar(&s.shop_domain, &token).await
+            .map(|_| ())
+            .map_err(|e| format!("Falló: {e}. Reconecta la tienda."));
+        out.push(res("Shopify", nombre, r));
+    }
+
+    Ok(HttpResponse::Ok().json(out))
 }

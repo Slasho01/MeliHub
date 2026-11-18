@@ -87,6 +87,14 @@ pub async fn hay_config(pool: &web::Data<DbPool>, resend_env: &str, from_env: &s
     resolver(pool, resend_env, from_env).await.is_some()
 }
 
+/// Como `enviar_auto` pero leyendo el entorno por su cuenta (para contextos sin `Config` a
+/// mano, p. ej. el job de fondo o `sync.rs`). Igual prioriza el panel admin (BD).
+pub async fn enviar_sistema(pool: &web::Data<DbPool>, to: &str, subject: &str, html: &str) -> ApiResult<()> {
+    let resend = std::env::var("RESEND_API_KEY").unwrap_or_default();
+    let from = std::env::var("MAIL_FROM").unwrap_or_default();
+    enviar_auto(pool, &resend, &from, to, subject, html).await
+}
+
 /// Envía un correo resolviendo la config automáticamente (panel admin o entorno).
 pub async fn enviar_auto(pool: &web::Data<DbPool>, resend_env: &str, from_env: &str, to: &str, subject: &str, html: &str) -> ApiResult<()> {
     let d = resolver(pool, resend_env, from_env)

@@ -113,7 +113,7 @@ export default function Catalogo() {
       {rows == null ? (
         <div className="muted">Consultando competencia en Mercado Libre…</div>
       ) : rows.length === 0 ? (
-        <div className="empty">No tienes publicaciones de catálogo.</div>
+        <div className="empty">No tienes publicaciones de catálogo.<br /><span className="sm">Las publicaciones que compiten por la Buy Box de Mercado Libre aparecerán aquí. Pulsa «Actualizar» si acabas de crear alguna.</span></div>
       ) : (
         <div className="stack" style={{ gap: 10 }}>
           <div className="sm muted">{rows.length} publicación(es) de catálogo · <b style={{ color: 'var(--ok)' }}>{ganando}</b> ganando la Buy Box</div>

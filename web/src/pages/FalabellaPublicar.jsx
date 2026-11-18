@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { get, post } from '../api'
+import Combobox from '../components/Combobox'
 
 // Atributos que el backend ya arma solo (no se piden en el formulario).
 const AUTO = new Set(['Name', 'Description', 'PrimaryCategory', 'SellerSku', 'Price', 'Quantity', 'Variation', 'Brand', 'ConditionType'])
@@ -135,19 +136,24 @@ export default function FalabellaPublicar({ cuentas }) {
       {error && <div className="alert alert-bad">{error}</div>}
 
       <label className="stack" style={{ gap: 4 }}><span className="sm">Producto del catálogo</span>
-        <select className="input" value={productoId} onChange={(e) => setProductoId(e.target.value)}>
-          <option value="">— Elige un producto —</option>
-          {productos.map((p) => <option key={p.id} value={p.id}>{p.titulo}</option>)}
-        </select>
+        <Combobox
+          options={productos.map((p) => ({ value: p.id, label: p.titulo }))}
+          value={productoId}
+          onChange={setProductoId}
+          placeholder="Busca y elige un producto…"
+        />
       </label>
 
       <div className="stack" style={{ gap: 4 }}>
         <span className="sm">Categoría en Falabella</span>
         {!tree ? <span className="muted sm">Cargando categorías…</span> : niveles.map((nivel, i) => (
-          <select key={i} className="input" value={ruta[i]?.CategoryId || ''} onChange={(e) => elegirNivel(i, e.target.value)}>
-            <option value="">{i === 0 ? '— Categoría —' : '— Subcategoría —'}</option>
-            {nivel.map((n) => <option key={n.CategoryId} value={n.CategoryId}>{n.Name}</option>)}
-          </select>
+          <Combobox
+            key={i}
+            options={nivel.map((n) => ({ value: n.CategoryId, label: n.Name }))}
+            value={ruta[i]?.CategoryId || ''}
+            onChange={(v) => elegirNivel(i, v)}
+            placeholder={i === 0 ? 'Busca la categoría…' : 'Busca la subcategoría…'}
+          />
         ))}
         {hoja && <span className="muted xs">Categoría elegida: [{hoja.CategoryId}] {hoja.Name}</span>}
       </div>

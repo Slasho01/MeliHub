@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { get } from '../api'
+import { get, post } from '../api'
 
 const estadoInfo = (s) => ({
   ok: ['Operativa', 'var(--ok)'],
@@ -12,11 +12,24 @@ const tipoColor = (t) => ({ 'Mercado Libre': '#ffe600', Falabella: '#78be20', Pa
 
 export default function Conexiones() {
   const [rows, setRows] = useState(null)
+  const [alertas, setAlertas] = useState([])
   const [error, setError] = useState('')
   const [cargando, setCargando] = useState(false)
+  const [test, setTest] = useState(null) // resultados de "Probar conexiones"
+  const [probando, setProbando] = useState(false)
 
-  const cargar = () => { setCargando(true); setError(''); get('/salud/conexiones').then(setRows).catch((e) => setError(e.message)).finally(() => setCargando(false)) }
+  const cargar = () => {
+    setCargando(true); setError('')
+    get('/salud/conexiones')
+      .then((d) => { setRows(Array.isArray(d) ? d : (d?.conexiones || [])); setAlertas(Array.isArray(d) ? [] : (d?.alertas || [])) })
+      .catch((e) => setError(e.message)).finally(() => setCargando(false))
+  }
   useEffect(cargar, [])
+
+  const probar = () => {
+    setProbando(true); setError(''); setTest(null)
+    post('/salud/probar').then((d) => setTest(d || [])).catch((e) => setError(e.message)).finally(() => setProbando(false))
+  }
 
   const lista = rows || []
   const ok = lista.filter((r) => r.estado === 'ok').length
@@ -30,10 +43,41 @@ export default function Conexiones() {
           <h1 style={{ margin: 0 }}>Conexiones</h1>
           <p className="muted sm" style={{ margin: 0 }}>Estado de todas tus integraciones. Detecta a tiempo si algo dejó de sincronizar o se desconectó.</p>
         </div>
-        <button className="btn btn-sm" onClick={cargar} disabled={cargando}>↻ Actualizar</button>
+        <div className="row" style={{ gap: 8 }}>
+          <button className="btn btn-sm btn-accent" onClick={probar} disabled={probando}>{probando ? 'Probando…' : '🔍 Probar conexiones'}</button>
+          <button className="btn btn-sm" onClick={cargar} disabled={cargando}>↻ Actualizar</button>
+        </div>
       </div>
 
       {error && <div className="alert alert-bad">{error}</div>}
+
+      {alertas.length > 0 && (
+        <div className="alert alert-bad" style={{ display: 'block' }}>
+          <b>⚠️ Avisos de sincronización ({alertas.length})</b>
+          <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
+            {alertas.map((a, i) => (
+              <li key={i} style={{ marginBottom: 2 }}><b>{a.titulo}</b>{a.cuerpo ? ` — ${a.cuerpo}` : ''}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {test && (
+        <div className="card stack" style={{ gap: 6 }}>
+          <div className="strong">Resultado de la prueba en vivo</div>
+          {test.length === 0 ? (
+            <div className="muted sm">No hay conexiones para probar.</div>
+          ) : (
+            test.map((t, i) => (
+              <div key={i} className="row" style={{ gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
+                <span style={{ color: t.ok ? 'var(--ok)' : 'var(--bad, #d93025)', fontWeight: 800 }}>{t.ok ? '✓' : '✗'}</span>
+                <span className="sm"><b>{t.tipo}</b> · {t.nombre}</span>
+                <span className="muted xs">{t.mensaje}</span>
+              </div>
+            ))
+          )}
+        </div>
+      )}
 
       {rows == null ? (
         <div className="muted">Cargando…</div>
