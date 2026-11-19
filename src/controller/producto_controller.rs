@@ -244,6 +244,16 @@ pub async fn importar(
     })))
 }
 
+/// Agrupa los clones ya existentes por título idéntico entre cuentas (para que compartan stock).
+pub async fn agrupar_clones(user: AuthVendedor, pool: web::Data<DbPool>) -> ApiResult<HttpResponse> {
+    if !user.es_admin() {
+        return Err(ApiError::forbidden("Solo el administrador puede agrupar clones por ahora."));
+    }
+    let vid = user.id;
+    let (grupos, agrupados) = db::run(&pool, move |conn| prod::agrupar_por_titulo(conn, vid)).await?;
+    Ok(HttpResponse::Ok().json(json!({ "grupos": grupos, "agrupados": agrupados })))
+}
+
 /// Catálogo unificado con ganancia/margen calculados por canal.
 pub async fn listar(
     user: AuthVendedor,

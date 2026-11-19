@@ -11,6 +11,18 @@ export default function ClonarML() {
   const [clonando, setClonando] = useState(false)
   const [error, setError] = useState('')
   const [rep, setRep] = useState(null)
+  const [agrupando, setAgrupando] = useState(false)
+  const [agrMsg, setAgrMsg] = useState(null)
+
+  const agrupar = async () => {
+    setAgrupando(true); setError(''); setAgrMsg(null)
+    try {
+      const r = await post('/productos/agrupar-clones')
+      setAgrMsg(r.grupos > 0
+        ? `✅ ${r.grupos} grupo(s) · ${r.agrupados} producto(s) enlazados por título. Ya comparten stock entre cuentas.`
+        : 'No se encontraron clones con el mismo título en distintas cuentas para agrupar.')
+    } catch (e) { setError(e.message) } finally { setAgrupando(false) }
+  }
 
   useEffect(() => { get('/ml/cuentas').then(setCuentas).catch((e) => setError(e.message)) }, [])
 
@@ -47,12 +59,18 @@ export default function ClonarML() {
 
   return (
     <div className="stack">
-      <div>
-        <h1 style={{ margin: 0 }}>Clonar publicaciones</h1>
-        <p className="muted sm" style={{ margin: 0 }}>Copia publicaciones de una cuenta de Mercado Libre a otra. Se crean como publicaciones nuevas en la cuenta destino.</p>
+      <div className="row between" style={{ flexWrap: 'wrap', gap: 10, alignItems: 'flex-start' }}>
+        <div>
+          <h1 style={{ margin: 0 }}>Clonar publicaciones</h1>
+          <p className="muted sm" style={{ margin: 0 }}>Copia publicaciones de una cuenta de Mercado Libre a otra. Se crean como publicaciones nuevas en la cuenta destino.</p>
+        </div>
+        <button className="btn btn-sm" disabled={agrupando} onClick={agrupar} title="Enlaza los clones que YA hiciste: agrupa productos con el mismo título en distintas cuentas para que compartan stock">
+          {agrupando ? 'Agrupando…' : '🔗 Agrupar clones existentes'}
+        </button>
       </div>
 
       {error && <div className="alert alert-bad">{error}</div>}
+      {agrMsg && <div className="alert alert-ok">{agrMsg}</div>}
 
       <div className="card row" style={{ gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
         <label className="stack" style={{ gap: 4, flex: '1 1 220px' }}><span className="sm">Cuenta de origen</span>

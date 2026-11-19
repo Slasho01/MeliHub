@@ -389,6 +389,42 @@ pub fn set_stock_directo(conn: &mut PgConnection, producto_id: Uuid, stock: i32)
     Ok(())
 }
 
+/// Agrupa (comparten stock) los clones YA existentes por título idéntico en DISTINTAS cuentas
+/// de ML del mismo vendedor. Reusa un grupo existente entre los miembros si lo hay. Devuelve
+/// (grupos, productos_agrupados). Pensado para enlazar clones hechos antes de la función de grupos.
+pub fn agrupar_por_titulo(conn: &mut PgConnection, vendedor_id: Uuid) -> ApiResult<(usize, usize)> {
+    use std::collections::{HashMap, HashSet};
+    let rows: Vec<(Uuid, String, Uuid, Option<Uuid>)> = productos::table
+        .inner_join(ml_cuentas::table)
+        .filter(ml_cuentas::vendedor_id.eq(vendedor_id))
+        .select((productos::id, productos::titulo, productos::ml_cuenta_id, productos::grupo_stock))
+        .load(conn)?;
+    let mut por_titulo: HashMap<String, Vec<(Uuid, Uuid, Option<Uuid>)>> = HashMap::new();
+    for (id, titulo, cuenta, grupo) in rows {
+        por_titulo.entry(titulo.trim().to_lowercase()).or_default().push((id, cuenta, grupo));
+    }
+    let mut grupos = 0usize;
+    let mut agrupados = 0usize;
+    conn.transaction::<_, ApiError, _>(|conn| {
+        for (_t, miembros) in por_titulo {
+            // Solo si hay el mismo título en 2+ CUENTAS distintas (clones reales entre cuentas).
+            let cuentas: HashSet<Uuid> = miembros.iter().map(|m| m.1).collect();
+            if miembros.len() < 2 || cuentas.len() < 2 {
+                continue;
+            }
+            let grupo = miembros.iter().find_map(|m| m.2).unwrap_or_else(Uuid::new_v4);
+            let ids: Vec<Uuid> = miembros.iter().map(|m| m.0).collect();
+            diesel::update(productos::table.filter(productos::id.eq_any(&ids)))
+                .set(productos::grupo_stock.eq(Some(grupo)))
+                .execute(conn)?;
+            grupos += 1;
+            agrupados += ids.len();
+        }
+        Ok(())
+    })?;
+    Ok((grupos, agrupados))
+}
+
 /// Devuelve el grupo de stock de un producto, creándolo si no tiene (para enlazar un clon).
 pub fn asegurar_grupo(conn: &mut PgConnection, producto_id: Uuid) -> ApiResult<Uuid> {
     let actual: Option<Uuid> = productos::table.find(producto_id).select(productos::grupo_stock).first(conn)?;
