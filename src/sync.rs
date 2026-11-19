@@ -58,10 +58,15 @@ pub async fn espejar_hermanos(pool: &web::Data<DbPool>, client: &MlClient, produ
             log::warn!("[espejar] sin token para la cuenta destino de {}", h.ml_item_id);
             continue;
         };
-        let r = match &h.user_product_id {
+        let mut r = match &h.user_product_id {
             Some(u) => client.update_deposito_stock(&token, u, h.nuevo_stock).await,
             None => client.update_stock(&token, &h.ml_item_id, h.nuevo_stock).await,
         };
+        // Si el depósito falla (p. ej. el clon NO es FULL pero trae user_product_id), cae al
+        // stock normal del ítem (available_quantity), que aplica a cualquier publicación.
+        if r.is_err() && h.user_product_id.is_some() {
+            r = client.update_stock(&token, &h.ml_item_id, h.nuevo_stock).await;
+        }
         match r {
             Ok(()) => {
                 log::info!("[espejar] {} → stock {} (espejado desde hermano)", h.ml_item_id, h.nuevo_stock);
