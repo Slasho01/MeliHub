@@ -78,14 +78,19 @@ pub fn payload(p: &Producto, con_familia: bool) -> Value {
                     if a.get("value_struct").map(|v| !v.is_null()).unwrap_or(false) {
                         return None;
                     }
+                    // Enviar value_id Y value_name juntos: si ML no resuelve el id, usa el nombre.
+                    let vid = a.get("value_id").and_then(|v| v.as_str()).filter(|s| !s.is_empty());
+                    let vn = a.get("value_name").and_then(|v| v.as_str()).filter(|s| !s.is_empty());
+                    if vid.is_none() && vn.is_none() {
+                        return None; // atributo sin valor → no sirve al crear
+                    }
                     let mut o = Map::new();
                     o.insert("id".into(), json!(id));
-                    if let Some(vid) = a.get("value_id").and_then(|v| v.as_str()).filter(|s| !s.is_empty()) {
-                        o.insert("value_id".into(), json!(vid));
-                    } else if let Some(vn) = a.get("value_name").and_then(|v| v.as_str()).filter(|s| !s.is_empty()) {
-                        o.insert("value_name".into(), json!(vn));
-                    } else {
-                        return None; // atributo sin valor → no sirve al crear
+                    if let Some(v) = vid {
+                        o.insert("value_id".into(), json!(v));
+                    }
+                    if let Some(v) = vn {
+                        o.insert("value_name".into(), json!(v));
                     }
                     Some(Value::Object(o))
                 })
@@ -98,11 +103,6 @@ pub fn payload(p: &Producto, con_familia: bool) -> Value {
         .and_then(|v| v.as_str())
         .filter(|s| !s.is_empty())
         .unwrap_or("gold_special");
-    let free_shipping = d
-        .get("shipping")
-        .and_then(|s| s.get("free_shipping"))
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
 
     let mut body = json!({
         "category_id": p.categoria_ml,
@@ -113,8 +113,10 @@ pub fn payload(p: &Producto, con_familia: bool) -> Value {
         "condition": condition,
         "pictures": pics,
         "attributes": attrs,
-        // Envío normal (Mercado Envíos). No se copia FULL: el stock no está en la bodega destino.
-        "shipping": { "mode": "me2", "local_pick_up": false, "free_shipping": free_shipping },
+        // Envío normal (Mercado Envíos), SIN envío gratis (lo activa el vendedor luego si
+        // le conviene: forzarlo en productos baratos falla por "costo supera la venta").
+        // No se copia FULL: el stock no está en la bodega destino.
+        "shipping": { "mode": "me2", "local_pick_up": false, "free_shipping": false },
     });
 
     // Modo normal: va el título. Modo familia (catálogo): va family_name y ML genera el título.
