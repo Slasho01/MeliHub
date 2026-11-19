@@ -320,6 +320,62 @@ pub fn por_ids_de_cuenta(conn: &mut PgConnection, cuenta_id: Uuid, ids: &[Uuid])
         .map_err(ApiError::from)
 }
 
+/// Un producto "hermano" al que hay que espejarle el stock (misma identidad, otra publicación/cuenta).
+pub struct HermanoStock {
+    pub cuenta: crate::models::MlCuenta,
+    pub producto_id: Uuid,
+    pub ml_item_id: String,
+    pub user_product_id: Option<String>,
+    pub nuevo_stock: i32,
+}
+
+/// Publicaciones "hermanas" de `producto_id`: mismo vendedor + mismo SELLER_SKU, en OTRA
+/// publicación (típicamente otra cuenta de ML tras clonar), cuyo stock DIFIERE del actual.
+/// Permite espejar el stock entre cuentas y evitar sobreventa. Si el producto no tiene
+/// SELLER_SKU, no hay con qué enlazar → lista vacía.
+pub fn hermanos_a_sincronizar(conn: &mut PgConnection, producto_id: Uuid) -> ApiResult<Vec<HermanoStock>> {
+    use crate::models::MlCuenta;
+    let cambiado: Option<(Producto, Uuid)> = productos::table
+        .inner_join(ml_cuentas::table)
+        .filter(productos::id.eq(producto_id))
+        .select((Producto::as_select(), ml_cuentas::vendedor_id))
+        .first(conn)
+        .optional()?;
+    let Some((cambiado, vendedor_id)) = cambiado else {
+        return Ok(vec![]);
+    };
+    let Some(sku) = sku_de(&cambiado) else {
+        return Ok(vec![]);
+    };
+    let objetivo = cambiado.stock;
+    let pred = diesel::dsl::sql::<diesel::sql_types::Bool>(
+        "EXISTS (SELECT 1 FROM jsonb_array_elements(COALESCE(productos.datos->'attributes','[]'::jsonb)) a WHERE a->>'id' = 'SELLER_SKU' AND lower(a->>'value_name') = lower(",
+    )
+    .bind::<diesel::sql_types::Text, _>(sku)
+    .sql("))");
+    let candidatos: Vec<(Producto, MlCuenta)> = productos::table
+        .inner_join(ml_cuentas::table)
+        .filter(ml_cuentas::vendedor_id.eq(vendedor_id))
+        .filter(productos::id.ne(producto_id))
+        .filter(productos::stock.ne(objetivo))
+        .filter(pred)
+        .select((Producto::as_select(), MlCuenta::as_select()))
+        .load(conn)?;
+    Ok(candidatos
+        .into_iter()
+        .map(|(p, c)| {
+            let upid = p.datos.get("user_product_id").and_then(|v| v.as_str()).map(str::trim).filter(|s| !s.is_empty()).map(str::to_string);
+            HermanoStock { cuenta: c, producto_id: p.id, ml_item_id: p.ml_item_id, user_product_id: upid, nuevo_stock: objetivo }
+        })
+        .collect())
+}
+
+/// Fija directamente el stock de un producto (tras espejarlo desde un hermano).
+pub fn set_stock_directo(conn: &mut PgConnection, producto_id: Uuid, stock: i32) -> ApiResult<()> {
+    diesel::update(productos::table.find(producto_id)).set(productos::stock.eq(stock.max(0))).execute(conn)?;
+    Ok(())
+}
+
 /// Una fila de la importación masiva por SKU. Cada campo `Some` se aplica; `None` se deja igual.
 pub struct FilaImport {
     pub sku: String,

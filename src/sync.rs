@@ -25,7 +25,15 @@ pub async fn empujar_stock_ml(pool: &web::Data<DbPool>, client: &MlClient, venta
         None => client.update_stock(&token, &venta.ml_item_id, venta.nuevo_stock).await,
     };
     match res {
-        Ok(()) => true,
+        Ok(()) => {
+            // Tras descontar en esta cuenta, espeja el stock a publicaciones hermanas
+            // (mismo SELLER_SKU en otra cuenta de ML) para no sobrevender entre cuentas.
+            let (cid2, iid2) = (venta.ml_cuenta_id, venta.ml_item_id.clone());
+            if let Ok(Some(pid)) = db::run(pool, move |conn| svc::producto_id_por_item(conn, cid2, &iid2)).await {
+                espejar_hermanos(pool, client, pid).await;
+            }
+            true
+        }
         Err(e) => {
             log::warn!("No se pudo empujar stock a ML ({}): {e}", venta.ml_item_id);
             let cid = venta.ml_cuenta_id;
@@ -39,6 +47,28 @@ pub async fn empujar_stock_ml(pool: &web::Data<DbPool>, client: &MlClient, venta
             })
             .await;
             false
+        }
+    }
+}
+
+/// Espeja el stock de `producto_id` a sus publicaciones HERMANAS (mismo SELLER_SKU en otra
+/// cuenta de ML, típicamente clones) para evitar sobreventa entre cuentas. Solo actualiza las
+/// que difieren → corta el rebote. Best-effort: los errores se loguean y no cortan.
+pub async fn espejar_hermanos(pool: &web::Data<DbPool>, client: &MlClient, producto_id: uuid::Uuid) {
+    let hermanos = db::run(pool, move |conn| crate::services::producto_services::hermanos_a_sincronizar(conn, producto_id))
+        .await
+        .unwrap_or_default();
+    for h in hermanos {
+        let Ok(token) = access_token_valido(pool, client, &h.cuenta).await else { continue };
+        let r = match &h.user_product_id {
+            Some(u) => client.update_deposito_stock(&token, u, h.nuevo_stock).await,
+            None => client.update_stock(&token, &h.ml_item_id, h.nuevo_stock).await,
+        };
+        if r.is_ok() {
+            let (hpid, st) = (h.producto_id, h.nuevo_stock);
+            let _ = db::run(pool, move |conn| crate::services::producto_services::set_stock_directo(conn, hpid, st)).await;
+        } else if let Err(e) = r {
+            log::warn!("No se pudo espejar stock al hermano ({}): {e}", h.ml_item_id);
         }
     }
 }

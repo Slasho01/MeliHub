@@ -269,6 +269,9 @@ async fn procesar_notificacion(pool: &web::Data<DbPool>, client: &web::Data<MlCl
                 for (kid, _) in &kits {
                     crate::sync::empujar_producto_a_canales(pool, *kid, fala, paris).await;
                 }
+                // Espeja el stock a publicaciones hermanas (mismo SELLER_SKU en otra cuenta de ML,
+                // típicamente clones) para no sobrevender entre cuentas.
+                crate::sync::espejar_hermanos(pool, client, pid).await;
             }
         }
     } else if topic == "questions" || resource.starts_with("/questions/") {
