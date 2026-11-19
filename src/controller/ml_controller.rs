@@ -248,7 +248,9 @@ async fn procesar_notificacion(pool: &web::Data<DbPool>, client: &web::Data<MlCl
             log::info!("[Webhook ML] item {item_id} refrescado desde ML ({n} fila(s) actualizada(s))");
             // 2) Propaga ese producto a los demás canales en segundos (sin esperar el ciclo).
             let (cid, iid) = (cuenta.id, item_id.to_string());
-            if let Ok(Some(pid)) = db::run(pool, move |conn| svc::producto_id_por_item(conn, cid, &iid)).await {
+            let pid_opt = db::run(pool, move |conn| svc::producto_id_por_item(conn, cid, &iid)).await.ok().flatten();
+            log::info!("[Webhook ML] producto local para {item_id}: {pid_opt:?}");
+            if let Some(pid) = pid_opt {
                 // Si este producto es componente de kits, recomputa su disponibilidad y empújalos a ML.
                 let kits: Vec<(Uuid, crate::services::pub_services::VentaAplicada)> = db::run(pool, move |conn| {
                     let mut out = Vec::new();

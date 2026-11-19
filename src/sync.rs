@@ -89,14 +89,19 @@ pub async fn empujar_producto_a_canales(
     paris: &crate::paris::ParisClient,
 ) {
     // Falabella (stock + precio).
-    if let Ok(rows) = db::run(pool, move |conn| crate::services::falabella_services::sync_de_producto(conn, producto_id)).await {
-        for (cuenta, sku, precio, stock, op) in rows {
-            let api_key = crate::crypto::descifrar(&cuenta.api_key);
-            let xml = crate::services::falabella_push_services::build_stock_precio_xml(&sku, precio, stock, &op);
-            if let Err(e) = fala.product_update(&cuenta.user_id, &api_key, xml).await {
-                log::warn!("Webhook push Falabella ({sku}): {e}");
+    match db::run(pool, move |conn| crate::services::falabella_services::sync_de_producto(conn, producto_id)).await {
+        Ok(rows) => {
+            log::info!("[canales] producto {producto_id}: {} publicación(es) Falabella", rows.len());
+            for (cuenta, sku, precio, stock, op) in rows {
+                let api_key = crate::crypto::descifrar(&cuenta.api_key);
+                let xml = crate::services::falabella_push_services::build_stock_precio_xml(&sku, precio, stock, &op);
+                match fala.product_update(&cuenta.user_id, &api_key, xml).await {
+                    Ok(_) => log::info!("[canales] Falabella {sku} → stock {stock} precio {precio} ok"),
+                    Err(e) => log::warn!("[canales] Falabella {sku}: {e}"),
+                }
             }
         }
+        Err(e) => log::warn!("[canales] no pude leer publicaciones Falabella de {producto_id}: {e}"),
     }
     // Paris (stock por variante).
     if let Ok(rows) = db::run(pool, move |conn| crate::services::paris_services::sync_de_producto(conn, producto_id)).await {
