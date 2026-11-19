@@ -82,6 +82,11 @@ pub fn payload(p: &Producto) -> Value {
         "shipping": { "mode": "me2", "local_pick_up": false, "free_shipping": free_shipping },
     });
 
+    // ML exige `family_name` al crear sin asociar a catálogo (nombra la "familia" del producto).
+    // Usamos el título (acotado) como nombre de familia.
+    let family: String = p.titulo.chars().take(60).collect();
+    body["family_name"] = json!(family);
+
     // Variaciones: se copian las combinaciones y cantidades (sin picture_ids, que son del origen).
     let variations = d.get("variations").and_then(|v| v.as_array()).filter(|a| !a.is_empty());
     if let Some(vars) = variations {
