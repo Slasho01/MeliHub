@@ -58,8 +58,15 @@ pub async fn clonar(
     let mut resultados = Vec::new();
     let mut creados = 0usize;
     for p in productos {
-        let cuerpo = clon_services::payload(&p);
-        match client.crear_item(&token, &cuerpo).await {
+        // Intento 1: modo normal (con título). Si ML pide family_name (categoría de
+        // catálogo), reintento en modo familia (family_name, sin título).
+        let mut res = client.crear_item(&token, &clon_services::payload(&p, false)).await;
+        if let Err(e) = &res {
+            if e.to_string().contains("family_name") {
+                res = client.crear_item(&token, &clon_services::payload(&p, true)).await;
+            }
+        }
+        match res {
             Ok(creado) => {
                 let new_id = creado.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
                 let permalink = creado.get("permalink").and_then(|v| v.as_str()).map(|s| s.to_string());

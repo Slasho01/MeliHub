@@ -7,7 +7,11 @@ use serde_json::{json, Map, Value};
 
 /// Construye el cuerpo de `POST /items` para recrear `p` en otra cuenta.
 /// La descripción se envía aparte (ver `datos.descripcion`).
-pub fn payload(p: &Producto) -> Value {
+///
+/// `con_familia`: en categorías de catálogo, ML exige `family_name` y GENERA el título
+/// (no se puede enviar `title`). Se intenta primero sin familia (con título) y, si ML
+/// pide `family_name`, se reintenta con `con_familia = true`.
+pub fn payload(p: &Producto, con_familia: bool) -> Value {
     let d = &p.datos;
 
     // Fotos: ML las reingesta por URL de origen.
@@ -69,7 +73,6 @@ pub fn payload(p: &Producto) -> Value {
         .unwrap_or(false);
 
     let mut body = json!({
-        "title": p.titulo,
         "category_id": p.categoria_ml,
         "price": p.precio,
         "currency_id": p.moneda,
@@ -82,10 +85,12 @@ pub fn payload(p: &Producto) -> Value {
         "shipping": { "mode": "me2", "local_pick_up": false, "free_shipping": free_shipping },
     });
 
-    // ML exige `family_name` al crear sin asociar a catálogo (nombra la "familia" del producto).
-    // Usamos el título (acotado) como nombre de familia.
-    let family: String = p.titulo.chars().take(60).collect();
-    body["family_name"] = json!(family);
+    // Modo normal: va el título. Modo familia (catálogo): va family_name y ML genera el título.
+    if con_familia {
+        body["family_name"] = json!(p.titulo.chars().take(60).collect::<String>());
+    } else {
+        body["title"] = json!(p.titulo);
+    }
 
     // Variaciones: se copian las combinaciones y cantidades (sin picture_ids, que son del origen).
     let variations = d.get("variations").and_then(|v| v.as_array()).filter(|a| !a.is_empty());
