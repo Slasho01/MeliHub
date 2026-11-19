@@ -81,6 +81,8 @@ pub fn upsert_items(conn: &mut PgConnection, cuenta_id: Uuid, items: &[MlItem]) 
                 }
             }
         }
+        // Si este item es un clon recién importado con grupo pendiente, lo enlaza al grupo.
+        aplicar_grupo_pendiente(conn, cuenta_id, &it.id);
         n += 1;
     }
     Ok(n)
@@ -344,23 +346,34 @@ pub fn hermanos_a_sincronizar(conn: &mut PgConnection, producto_id: Uuid) -> Api
     let Some((cambiado, vendedor_id)) = cambiado else {
         return Ok(vec![]);
     };
-    let Some(sku) = sku_de(&cambiado) else {
-        return Ok(vec![]);
-    };
     let objetivo = cambiado.stock;
-    let pred = diesel::dsl::sql::<diesel::sql_types::Bool>(
-        "EXISTS (SELECT 1 FROM jsonb_array_elements(COALESCE(productos.datos->'attributes','[]'::jsonb)) a WHERE a->>'id' = 'SELLER_SKU' AND lower(a->>'value_name') = lower(",
-    )
-    .bind::<diesel::sql_types::Text, _>(sku)
-    .sql("))");
-    let candidatos: Vec<(Producto, MlCuenta)> = productos::table
-        .inner_join(ml_cuentas::table)
-        .filter(ml_cuentas::vendedor_id.eq(vendedor_id))
-        .filter(productos::id.ne(producto_id))
-        .filter(productos::stock.ne(objetivo))
-        .filter(pred)
-        .select((Producto::as_select(), MlCuenta::as_select()))
-        .load(conn)?;
+    // Enlace: prefiere el GRUPO de stock (asignado al clonar); si no, cae al SELLER_SKU.
+    let candidatos: Vec<(Producto, MlCuenta)> = if let Some(grupo) = cambiado.grupo_stock {
+        productos::table
+            .inner_join(ml_cuentas::table)
+            .filter(ml_cuentas::vendedor_id.eq(vendedor_id))
+            .filter(productos::id.ne(producto_id))
+            .filter(productos::stock.ne(objetivo))
+            .filter(productos::grupo_stock.eq(grupo))
+            .select((Producto::as_select(), MlCuenta::as_select()))
+            .load(conn)?
+    } else if let Some(sku) = sku_de(&cambiado) {
+        let pred = diesel::dsl::sql::<diesel::sql_types::Bool>(
+            "EXISTS (SELECT 1 FROM jsonb_array_elements(COALESCE(productos.datos->'attributes','[]'::jsonb)) a WHERE a->>'id' = 'SELLER_SKU' AND lower(a->>'value_name') = lower(",
+        )
+        .bind::<diesel::sql_types::Text, _>(sku)
+        .sql("))");
+        productos::table
+            .inner_join(ml_cuentas::table)
+            .filter(ml_cuentas::vendedor_id.eq(vendedor_id))
+            .filter(productos::id.ne(producto_id))
+            .filter(productos::stock.ne(objetivo))
+            .filter(pred)
+            .select((Producto::as_select(), MlCuenta::as_select()))
+            .load(conn)?
+    } else {
+        vec![]
+    };
     Ok(candidatos
         .into_iter()
         .map(|(p, c)| {
@@ -374,6 +387,53 @@ pub fn hermanos_a_sincronizar(conn: &mut PgConnection, producto_id: Uuid) -> Api
 pub fn set_stock_directo(conn: &mut PgConnection, producto_id: Uuid, stock: i32) -> ApiResult<()> {
     diesel::update(productos::table.find(producto_id)).set(productos::stock.eq(stock.max(0))).execute(conn)?;
     Ok(())
+}
+
+/// Devuelve el grupo de stock de un producto, creándolo si no tiene (para enlazar un clon).
+pub fn asegurar_grupo(conn: &mut PgConnection, producto_id: Uuid) -> ApiResult<Uuid> {
+    let actual: Option<Uuid> = productos::table.find(producto_id).select(productos::grupo_stock).first(conn)?;
+    if let Some(g) = actual {
+        return Ok(g);
+    }
+    let g = Uuid::new_v4();
+    diesel::update(productos::table.find(producto_id)).set(productos::grupo_stock.eq(Some(g))).execute(conn)?;
+    Ok(g)
+}
+
+/// Registra que, cuando se importe `ml_item_id` de `ml_cuenta_id` (el clon), se le asigne `grupo`.
+pub fn registrar_grupo_pendiente(conn: &mut PgConnection, ml_cuenta_id: Uuid, ml_item_id: &str, grupo: Uuid) -> ApiResult<()> {
+    use crate::schema::clon_grupo_pendiente as cgp;
+    diesel::insert_into(cgp::table)
+        .values(crate::models::NewClonGrupoPendiente { ml_cuenta_id, ml_item_id: ml_item_id.to_string(), grupo_stock: grupo })
+        .on_conflict((cgp::ml_cuenta_id, cgp::ml_item_id))
+        .do_update()
+        .set(cgp::grupo_stock.eq(grupo))
+        .execute(conn)?;
+    Ok(())
+}
+
+/// Si hay un grupo pendiente para (cuenta, item), lo asigna al producto (si aún no tiene) y lo consume.
+fn aplicar_grupo_pendiente(conn: &mut PgConnection, cuenta_id: Uuid, ml_item_id: &str) {
+    use crate::schema::clon_grupo_pendiente as cgp;
+    let g: Option<Uuid> = cgp::table
+        .filter(cgp::ml_cuenta_id.eq(cuenta_id))
+        .filter(cgp::ml_item_id.eq(ml_item_id))
+        .select(cgp::grupo_stock)
+        .first(conn)
+        .optional()
+        .ok()
+        .flatten();
+    if let Some(grupo) = g {
+        let _ = diesel::update(
+            productos::table
+                .filter(productos::ml_cuenta_id.eq(cuenta_id))
+                .filter(productos::ml_item_id.eq(ml_item_id))
+                .filter(productos::grupo_stock.is_null()),
+        )
+        .set(productos::grupo_stock.eq(Some(grupo)))
+        .execute(conn);
+        let _ = diesel::delete(cgp::table.filter(cgp::ml_cuenta_id.eq(cuenta_id)).filter(cgp::ml_item_id.eq(ml_item_id))).execute(conn);
+    }
 }
 
 /// Una fila de la importación masiva por SKU. Cada campo `Some` se aplica; `None` se deja igual.

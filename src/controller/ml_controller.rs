@@ -73,6 +73,15 @@ pub async fn clonar(
                 if let Some(desc) = p.datos.get("descripcion").and_then(|v| v.as_str()).filter(|s| !s.trim().is_empty()) {
                     let _ = client.set_item_description(&token, &new_id, desc).await;
                 }
+                // Enlaza el clon al grupo de stock del original → compartirán stock entre cuentas.
+                if !new_id.is_empty() {
+                    let (pid_origen, dest, nid) = (p.id, destino_cuenta_id, new_id.clone());
+                    let _ = db::run(&pool, move |conn| {
+                        let g = prod::asegurar_grupo(conn, pid_origen)?;
+                        prod::registrar_grupo_pendiente(conn, dest, &nid, g)
+                    })
+                    .await;
+                }
                 creados += 1;
                 resultados.push(json!({ "producto": p.titulo, "ok": true, "item_id": new_id, "permalink": permalink }));
             }

@@ -380,6 +380,7 @@ pub struct Producto {
     pub precio_falabella: Option<i64>,
     pub comision_pct: Option<f64>,
     pub comision_fija: Option<i64>,
+    pub grupo_stock: Option<Uuid>,
 }
 
 #[derive(Insertable, AsChangeset)]
@@ -654,4 +655,12 @@ pub struct NewCuponUso {
 #[diesel(table_name = crate::schema::promo_bajas)]
 pub struct NewPromoBaja {
     pub email: String,
+}
+
+#[derive(Insertable)]
+#[diesel(table_name = crate::schema::clon_grupo_pendiente)]
+pub struct NewClonGrupoPendiente {
+    pub ml_cuenta_id: Uuid,
+    pub ml_item_id: String,
+    pub grupo_stock: Uuid,
 }

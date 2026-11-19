@@ -95,6 +95,17 @@ diesel::table! {
         precio_falabella -> Nullable<Int8>,
         comision_pct -> Nullable<Float8>,
         comision_fija -> Nullable<Int8>,
+        grupo_stock -> Nullable<Uuid>,
+    }
+}
+
+diesel::table! {
+    clon_grupo_pendiente (ml_cuenta_id, ml_item_id) {
+        ml_cuenta_id -> Uuid,
+        #[max_length = 40]
+        ml_item_id -> Varchar,
+        grupo_stock -> Uuid,
+        creado_at -> Timestamp,
     }
 }
 
@@ -511,6 +522,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     config_ganancias,
     cupones,
     cupon_usos,
+    clon_grupo_pendiente,
     promo_bajas,
     facturacion,
     falabella_cuentas,
