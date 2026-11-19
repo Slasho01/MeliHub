@@ -58,17 +58,23 @@ pub async fn espejar_hermanos(pool: &web::Data<DbPool>, client: &MlClient, produ
     let hermanos = db::run(pool, move |conn| crate::services::producto_services::hermanos_a_sincronizar(conn, producto_id))
         .await
         .unwrap_or_default();
+    log::info!("[espejar] producto {producto_id}: {} hermano(s) con SKU igual y stock distinto en otra cuenta", hermanos.len());
     for h in hermanos {
-        let Ok(token) = access_token_valido(pool, client, &h.cuenta).await else { continue };
+        let Ok(token) = access_token_valido(pool, client, &h.cuenta).await else {
+            log::warn!("[espejar] sin token para la cuenta destino de {}", h.ml_item_id);
+            continue;
+        };
         let r = match &h.user_product_id {
             Some(u) => client.update_deposito_stock(&token, u, h.nuevo_stock).await,
             None => client.update_stock(&token, &h.ml_item_id, h.nuevo_stock).await,
         };
-        if r.is_ok() {
-            let (hpid, st) = (h.producto_id, h.nuevo_stock);
-            let _ = db::run(pool, move |conn| crate::services::producto_services::set_stock_directo(conn, hpid, st)).await;
-        } else if let Err(e) = r {
-            log::warn!("No se pudo espejar stock al hermano ({}): {e}", h.ml_item_id);
+        match r {
+            Ok(()) => {
+                log::info!("[espejar] {} → stock {} (espejado desde hermano)", h.ml_item_id, h.nuevo_stock);
+                let (hpid, st) = (h.producto_id, h.nuevo_stock);
+                let _ = db::run(pool, move |conn| crate::services::producto_services::set_stock_directo(conn, hpid, st)).await;
+            }
+            Err(e) => log::warn!("[espejar] no se pudo espejar stock a {}: {e}", h.ml_item_id),
         }
     }
 }
