@@ -5,13 +5,72 @@ use crate::errors::{ApiError, ApiResult};
 use crate::falabella::FalabellaClient;
 use crate::ml::MlClient;
 use crate::paris::ParisClient;
+use crate::services::clon_services;
 use crate::services::common::now;
 use crate::services::ml_services as svc;
+use crate::services::producto_services as prod;
 use actix_web::{web, HttpResponse};
 use chrono::Duration;
 use serde::Deserialize;
 use serde_json::json;
 use uuid::Uuid;
+
+#[derive(Deserialize)]
+pub struct ClonarBody {
+    pub origen_cuenta_id: Uuid,
+    pub destino_cuenta_id: Uuid,
+    pub producto_ids: Vec<Uuid>,
+}
+
+/// Clona publicaciones de una cuenta de ML a otra (crea cada una con `POST /items`
+/// en la cuenta destino). Devuelve un reporte por producto (ok/permalink o error).
+pub async fn clonar(
+    user: AuthVendedor,
+    body: web::Json<ClonarBody>,
+    pool: web::Data<DbPool>,
+    client: web::Data<MlClient>,
+) -> ApiResult<HttpResponse> {
+    user.exigir_edicion()?;
+    let (vid, admin) = (user.id, user.es_admin());
+    let ClonarBody { origen_cuenta_id, destino_cuenta_id, producto_ids } = body.into_inner();
+    if origen_cuenta_id == destino_cuenta_id {
+        return Err(ApiError::bad_request("La cuenta destino debe ser distinta de la de origen."));
+    }
+    if producto_ids.is_empty() {
+        return Err(ApiError::bad_request("Selecciona al menos un producto para clonar."));
+    }
+    if producto_ids.len() > 200 {
+        return Err(ApiError::bad_request("Máximo 200 productos por operación."));
+    }
+    // Ambas cuentas deben pertenecer al vendedor.
+    let destino = db::run(&pool, move |conn| svc::get_cuenta(conn, destino_cuenta_id, vid, admin)).await?;
+    db::run(&pool, move |conn| svc::get_cuenta(conn, origen_cuenta_id, vid, admin)).await?;
+    let ids = producto_ids.clone();
+    let productos = db::run(&pool, move |conn| prod::por_ids_de_cuenta(conn, origen_cuenta_id, &ids)).await?;
+    if productos.is_empty() {
+        return Err(ApiError::bad_request("No se encontraron esos productos en la cuenta de origen."));
+    }
+    let token = crate::sync::access_token_valido(&pool, &client, &destino).await?;
+
+    let mut resultados = Vec::new();
+    let mut creados = 0usize;
+    for p in productos {
+        let cuerpo = clon_services::payload(&p);
+        match client.crear_item(&token, &cuerpo).await {
+            Ok(creado) => {
+                let new_id = creado.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let permalink = creado.get("permalink").and_then(|v| v.as_str()).map(|s| s.to_string());
+                if let Some(desc) = p.datos.get("descripcion").and_then(|v| v.as_str()).filter(|s| !s.trim().is_empty()) {
+                    let _ = client.set_item_description(&token, &new_id, desc).await;
+                }
+                creados += 1;
+                resultados.push(json!({ "producto": p.titulo, "ok": true, "item_id": new_id, "permalink": permalink }));
+            }
+            Err(e) => resultados.push(json!({ "producto": p.titulo, "ok": false, "error": e.to_string() })),
+        }
+    }
+    Ok(HttpResponse::Ok().json(json!({ "total": resultados.len(), "creados": creados, "resultados": resultados })))
+}
 
 fn exigir_ml(cfg: &Config) -> ApiResult<()> {
     if !cfg.ml.configurado() {

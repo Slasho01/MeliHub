@@ -129,6 +129,27 @@ pub struct MlItem {
     pub deposito_stock: Option<i64>,
 }
 
+/// Resume un cuerpo de error de ML ({message, cause:[{message|code}]}) en una línea legible.
+fn resumen_error_ml(text: &str) -> String {
+    if let Ok(v) = serde_json::from_str::<serde_json::Value>(text) {
+        let msg = v.get("message").and_then(|m| m.as_str()).unwrap_or("").to_string();
+        let causas: Vec<String> = v
+            .get("cause")
+            .and_then(|c| c.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|c| c.get("message").or_else(|| c.get("code")).and_then(|m| m.as_str()).map(|s| s.to_string()))
+                    .collect()
+            })
+            .unwrap_or_default();
+        if causas.is_empty() {
+            return if msg.is_empty() { text.chars().take(300).collect() } else { msg };
+        }
+        return format!("{} ({})", msg, causas.join("; "));
+    }
+    text.chars().take(300).collect()
+}
+
 impl MlClient {
     pub fn new(cfg: MlConfig) -> Self {
         MlClient {
@@ -519,6 +540,44 @@ impl MlClient {
         if !status.is_success() {
             let text = res.text().await.unwrap_or_default();
             return Err(ApiError::bad_request(format!("Mercado Libre rechazó la actualización ({status}): {text}")));
+        }
+        Ok(())
+    }
+
+    /// Crea una publicación nueva en Mercado Libre (POST /items). Devuelve el JSON del
+    /// item creado (`id`, `permalink`) o un error con el mensaje de ML.
+    pub async fn crear_item(&self, access_token: &str, body: &serde_json::Value) -> ApiResult<serde_json::Value> {
+        let res = self
+            .http
+            .post(format!("{}/items", self.cfg.api_base))
+            .bearer_auth(access_token)
+            .header("Accept", "application/json")
+            .json(body)
+            .send()
+            .await
+            .map_err(|e| ApiError::internal(format!("Mercado Libre no respondió: {e}")))?;
+        let status = res.status();
+        let text = res.text().await.unwrap_or_default();
+        if !status.is_success() {
+            return Err(ApiError::bad_request(format!("ML rechazó la publicación ({status}): {}", resumen_error_ml(&text))));
+        }
+        serde_json::from_str(&text).map_err(|e| ApiError::internal(format!("Respuesta de ML no reconocida: {e}")))
+    }
+
+    /// Fija la descripción (texto plano) de una publicación (POST /items/{id}/description).
+    pub async fn set_item_description(&self, access_token: &str, item_id: &str, plain_text: &str) -> ApiResult<()> {
+        let res = self
+            .http
+            .post(format!("{}/items/{item_id}/description", self.cfg.api_base))
+            .bearer_auth(access_token)
+            .header("Accept", "application/json")
+            .json(&serde_json::json!({ "plain_text": plain_text }))
+            .send()
+            .await
+            .map_err(|e| ApiError::internal(format!("Mercado Libre no respondió: {e}")))?;
+        if !res.status().is_success() {
+            let text = res.text().await.unwrap_or_default();
+            return Err(ApiError::bad_request(format!("ML rechazó la descripción: {}", resumen_error_ml(&text))));
         }
         Ok(())
     }

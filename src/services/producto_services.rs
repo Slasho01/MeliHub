@@ -306,6 +306,20 @@ pub fn set_inventario_masivo(
     Ok(propios.len())
 }
 
+/// Productos de UNA cuenta por sus ids (para clonar a otra cuenta). La cuenta ya debe
+/// estar validada como del vendedor por el controlador.
+pub fn por_ids_de_cuenta(conn: &mut PgConnection, cuenta_id: Uuid, ids: &[Uuid]) -> ApiResult<Vec<Producto>> {
+    if ids.is_empty() {
+        return Ok(vec![]);
+    }
+    productos::table
+        .filter(productos::ml_cuenta_id.eq(cuenta_id))
+        .filter(productos::id.eq_any(ids))
+        .select(Producto::as_select())
+        .load(conn)
+        .map_err(ApiError::from)
+}
+
 /// Una fila de la importación masiva por SKU. Cada campo `Some` se aplica; `None` se deja igual.
 pub struct FilaImport {
     pub sku: String,
