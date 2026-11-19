@@ -17,7 +17,7 @@ export default function ClonarML() {
   useEffect(() => {
     setProductos(null); setSel(new Set()); setRep(null)
     if (!origen) return
-    get(`/productos?cuenta=${origen}`).then((d) => setProductos(d || [])).catch((e) => setError(e.message))
+    get(`/productos?cuenta_id=${origen}`).then((d) => setProductos(d || [])).catch((e) => setError(e.message))
   }, [origen])
 
   const visibles = useMemo(() => {

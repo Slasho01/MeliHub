@@ -129,7 +129,9 @@ pub struct MlItem {
     pub deposito_stock: Option<i64>,
 }
 
-/// Resume un cuerpo de error de ML ({message, cause:[{message|code}]}) en una línea legible.
+/// Resume un cuerpo de error de ML ({message, cause:[...]}) en una línea legible.
+/// Incluye código + mensaje + referencias de cada causa; si no hay causas útiles,
+/// adjunta el JSON crudo (acotado) para poder diagnosticar.
 fn resumen_error_ml(text: &str) -> String {
     if let Ok(v) = serde_json::from_str::<serde_json::Value>(text) {
         let msg = v.get("message").and_then(|m| m.as_str()).unwrap_or("").to_string();
@@ -138,16 +140,28 @@ fn resumen_error_ml(text: &str) -> String {
             .and_then(|c| c.as_array())
             .map(|arr| {
                 arr.iter()
-                    .filter_map(|c| c.get("message").or_else(|| c.get("code")).and_then(|m| m.as_str()).map(|s| s.to_string()))
+                    .map(|c| {
+                        let m = c.get("message").and_then(|x| x.as_str()).unwrap_or("");
+                        let code = c.get("code").and_then(|x| x.as_str()).unwrap_or("");
+                        let refs = c
+                            .get("references")
+                            .and_then(|r| r.as_array())
+                            .map(|a| a.iter().filter_map(|x| x.as_str()).collect::<Vec<_>>().join(","))
+                            .unwrap_or_default();
+                        [code, m, &refs].iter().filter(|s| !s.is_empty()).cloned().collect::<Vec<_>>().join(": ")
+                    })
+                    .filter(|s| !s.is_empty())
                     .collect()
             })
             .unwrap_or_default();
-        if causas.is_empty() {
-            return if msg.is_empty() { text.chars().take(300).collect() } else { msg };
+        if !causas.is_empty() {
+            return format!("{} — {}", msg, causas.join(" | "));
         }
-        return format!("{} ({})", msg, causas.join("; "));
+        // Sin causas legibles: adjunta el crudo para diagnosticar.
+        let crudo: String = text.chars().take(500).collect();
+        return if msg.is_empty() { crudo } else { format!("{msg} — {crudo}") };
     }
-    text.chars().take(300).collect()
+    text.chars().take(400).collect()
 }
 
 impl MlClient {
