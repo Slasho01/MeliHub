@@ -126,6 +126,29 @@ pub fn eliminar_boleta(conn: &mut PgConnection, id: Uuid) -> ApiResult<()> {
     Ok(())
 }
 
+/// Diagnóstico de propagación: cuenta publicaciones de canal cuyo `producto_id` ya NO existe
+/// (huérfanas) — pasa si se recrearon los productos (p. ej. reconectar una cuenta de ML),
+/// lo que rompe TODA la sincronización de stock a ese canal.
+pub fn diagnostico(conn: &mut PgConnection) -> ApiResult<serde_json::Value> {
+    use crate::schema::{falabella_publicaciones, paris_publicaciones, productos, shopify_publicaciones};
+    use std::collections::HashSet;
+    let prod_ids: HashSet<Uuid> = productos::table.select(productos::id).load::<Uuid>(conn)?.into_iter().collect();
+    let cuenta = |pids: Vec<Uuid>| -> (usize, usize) {
+        let total = pids.len();
+        let huerfanas = pids.iter().filter(|id| !prod_ids.contains(id)).count();
+        (total, huerfanas)
+    };
+    let (f_t, f_h) = cuenta(falabella_publicaciones::table.select(falabella_publicaciones::producto_id).load(conn)?);
+    let (s_t, s_h) = cuenta(shopify_publicaciones::table.select(shopify_publicaciones::producto_id).load(conn)?);
+    let (p_t, p_h) = cuenta(paris_publicaciones::table.select(paris_publicaciones::producto_id).load(conn)?);
+    Ok(serde_json::json!({
+        "productos": prod_ids.len(),
+        "falabella": { "total": f_t, "huerfanas": f_h },
+        "shopify": { "total": s_t, "huerfanas": s_h },
+        "paris": { "total": p_t, "huerfanas": p_h },
+    }))
+}
+
 /// Correos que se dieron de baja de los envíos de promoción (lista de supresión).
 pub fn bajas_emails(conn: &mut PgConnection) -> ApiResult<Vec<String>> {
     use crate::schema::promo_bajas;

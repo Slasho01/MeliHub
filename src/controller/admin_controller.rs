@@ -7,6 +7,21 @@ use serde::Deserialize;
 use serde_json::json;
 use uuid::Uuid;
 
+/// Marcador de build: sube cada vez que cambiamos algo relevante, para confirmar
+/// desde `/api/admin/diag` qué versión del backend está realmente corriendo en Render.
+pub const BUILD: &str = "2026-11-19-diag+stock-sync+canales-log";
+
+/// Diagnóstico de propagación de stock (solo admin). Confirma la versión desplegada y
+/// cuántos mapeos de canal quedaron huérfanos (producto recreado → se rompe el push).
+pub async fn diagnostico(user: AuthVendedor, pool: web::Data<DbPool>) -> ApiResult<HttpResponse> {
+    exigir_admin(&user)?;
+    let mut d = db::run(&pool, adm::diagnostico).await?;
+    if let Some(obj) = d.as_object_mut() {
+        obj.insert("build".into(), json!(BUILD));
+    }
+    Ok(HttpResponse::Ok().json(d))
+}
+
 fn exigir_admin(user: &AuthVendedor) -> ApiResult<()> {
     if !user.es_admin() {
         return Err(ApiError::forbidden("Solo el administrador de la plataforma puede acceder aquí"));

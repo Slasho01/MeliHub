@@ -27,11 +27,13 @@ export default function Admin() {
   const [pruebaEmail, setPruebaEmail] = useState('')
   const [destino, setDestino] = useState('usuarios') // 'usuarios' | 'lista'
   const [listaEmails, setListaEmails] = useState('')
+  const [diag, setDiag] = useState(null)
 
   const cargar = () => {
     get('/admin/metricas').then(setMetricas).catch((e) => setError(e.message))
     get('/admin/vendedores').then(setVends).catch((e) => setError(e.message))
     get('/admin/cupones').then(setCupones).catch(() => {})
+    get('/admin/diag').then(setDiag).catch(() => {})
   }
   useEffect(() => { cargar() }, [])
 
@@ -84,6 +86,32 @@ export default function Admin() {
   return (
     <div className="stack">
       <div><h1>Administración (plataforma)</h1><p className="muted sm" style={{ margin: 0 }}>Clientes, planes y métricas globales.</p></div>
+
+      {diag && (
+        <div className="card" style={{ borderLeft: '4px solid var(--accent)' }}>
+          <div className="row between" style={{ flexWrap: 'wrap', gap: 8, alignItems: 'baseline' }}>
+            <b className="sm">🩺 Diagnóstico de sincronización</b>
+            <span className="muted xs">build: <code>{diag.build}</code> · {diag.productos} productos</span>
+          </div>
+          <div className="row" style={{ gap: 14, flexWrap: 'wrap', marginTop: 8 }}>
+            {['falabella', 'shopify', 'paris'].map((canal) => {
+              const c = diag[canal] || { total: 0, huerfanas: 0 }
+              const malo = c.huerfanas > 0
+              return (
+                <div key={canal} style={{ minWidth: 150 }}>
+                  <div className="muted xs" style={{ textTransform: 'capitalize' }}>{canal}</div>
+                  <div className="sm">{c.total} mapeo(s){c.total > 0 && <> · <b style={{ color: malo ? 'var(--bad, #d93025)' : 'var(--ok)' }}>{c.huerfanas} huérfano(s)</b></>}</div>
+                </div>
+              )
+            })}
+          </div>
+          {(diag.falabella?.huerfanas > 0 || diag.shopify?.huerfanas > 0 || diag.paris?.huerfanas > 0) && (
+            <div className="alert alert-bad" style={{ marginTop: 8, display: 'block' }}>
+              ⚠️ Hay mapeos de canal <b>huérfanos</b> (apuntan a productos que ya no existen, típicamente por reconectar una cuenta de ML). Esos canales <b>no reciben el stock</b> hasta volver a publicar/enlazar esos productos. Esta es casi seguro la causa de que no se propague el stock.
+            </div>
+          )}
+        </div>
+      )}
       {error && <div className="alert alert-bad">{error}</div>}
 
       {metricas && (
