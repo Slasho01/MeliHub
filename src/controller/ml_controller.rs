@@ -30,10 +30,7 @@ pub async fn clonar(
     pool: web::Data<DbPool>,
     client: web::Data<MlClient>,
 ) -> ApiResult<HttpResponse> {
-    // Por ahora la clonación es solo para el administrador.
-    if !user.es_admin() {
-        return Err(ApiError::forbidden("La clonación de publicaciones está disponible solo para el administrador por ahora."));
-    }
+    user.exigir_edicion()?;
     let (vid, admin) = (user.id, user.es_admin());
     let ClonarBody { origen_cuenta_id, destino_cuenta_id, producto_ids } = body.into_inner();
     if origen_cuenta_id == destino_cuenta_id {

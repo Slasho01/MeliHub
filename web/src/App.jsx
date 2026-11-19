@@ -88,7 +88,7 @@ export default function App() {
           <div className="sidebar-section">Mercado Libre</div>
           <NavLink to="/" end className={cls}>Resumen</NavLink>
           <NavLink to="/cuentas" className={cls}>Cuentas</NavLink>
-          {me?.es_admin && <NavLink to="/clonar" className={cls}>Clonar</NavLink>}
+          <NavLink to="/clonar" className={cls}>Clonar</NavLink>
           <NavLink to="/conexiones" className={cls}>Conexiones</NavLink>
           <NavLink to="/ventas" className={cls}>Ventas</NavLink>
           <NavLink to="/reportes" className={cls}>Reportes</NavLink>
@@ -144,7 +144,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Resumen />} />
           <Route path="/cuentas" element={<Dashboard me={me} />} />
-          <Route path="/clonar" element={me && !me.es_admin ? <Navigate to="/" replace /> : <ClonarML />} />
+          <Route path="/clonar" element={<ClonarML />} />
           <Route path="/conexiones" element={<Conexiones />} />
           <Route path="/inventario" element={<Inventario me={me} />} />
           <Route path="/cotizador" element={<Cotizador />} />
