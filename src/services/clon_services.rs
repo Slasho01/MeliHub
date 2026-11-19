@@ -5,6 +5,30 @@
 use crate::models::Producto;
 use serde_json::{json, Map, Value};
 
+/// Atributos que NO se deben enviar al crear: de solo lectura/sistema (ML los asigna),
+/// dimensiones de empaque/medidas (dan errores de formato) y el formato de venta
+/// (crea requisitos condicionales como "Cantidad de envases").
+fn attr_bloqueado(id: &str) -> bool {
+    id.starts_with("PACKAGE_")
+        || id.ends_with("_DATA_SOURCE")
+        || matches!(
+            id,
+            "SYI_PYMES_ID"
+                | "ITEM_CONDITION"
+                | "SALE_FORMAT"
+                | "UNITS_PER_PACK"
+                | "LENGTH"
+                | "WIDTH"
+                | "HEIGHT"
+                | "DEPTH"
+                | "WEIGHT"
+                | "DIAMETER"
+                | "VOLUME_CAPACITY"
+                | "GTIN"
+                | "EMPTY_GTIN_REASON"
+        )
+}
+
 /// Construye el cuerpo de `POST /items` para recrear `p` en otra cuenta.
 /// La descripción se envía aparte (ver `datos.descripcion`).
 ///
@@ -46,9 +70,17 @@ pub fn payload(p: &Producto, con_familia: bool) -> Value {
                         }
                         return None;
                     }
+                    // Atributos de solo lectura/sistema o de medida: ML los rechaza al crear.
+                    if attr_bloqueado(id) {
+                        return None;
+                    }
+                    // Medidas/números (value_struct) → formato distinto; se omiten para evitar errores.
+                    if a.get("value_struct").map(|v| !v.is_null()).unwrap_or(false) {
+                        return None;
+                    }
                     let mut o = Map::new();
                     o.insert("id".into(), json!(id));
-                    if let Some(vid) = a.get("value_id").and_then(|v| v.as_str()) {
+                    if let Some(vid) = a.get("value_id").and_then(|v| v.as_str()).filter(|s| !s.is_empty()) {
                         o.insert("value_id".into(), json!(vid));
                     } else if let Some(vn) = a.get("value_name").and_then(|v| v.as_str()).filter(|s| !s.is_empty()) {
                         o.insert("value_name".into(), json!(vn));
