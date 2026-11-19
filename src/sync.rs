@@ -25,15 +25,9 @@ pub async fn empujar_stock_ml(pool: &web::Data<DbPool>, client: &MlClient, venta
         None => client.update_stock(&token, &venta.ml_item_id, venta.nuevo_stock).await,
     };
     match res {
-        Ok(()) => {
-            // Tras descontar en esta cuenta, espeja el stock a publicaciones hermanas
-            // (mismo SELLER_SKU en otra cuenta de ML) para no sobrevender entre cuentas.
-            let (cid2, iid2) = (venta.ml_cuenta_id, venta.ml_item_id.clone());
-            if let Ok(Some(pid)) = db::run(pool, move |conn| svc::producto_id_por_item(conn, cid2, &iid2)).await {
-                espejar_hermanos(pool, client, pid).await;
-            }
-            true
-        }
+        // El espejo entre cuentas se hace SOLO en el webhook de ML (no aquí), para no
+        // meter trabajo extra en esta función compartida (jobs/JarStore/kits).
+        Ok(()) => true,
         Err(e) => {
             log::warn!("No se pudo empujar stock a ML ({}): {e}", venta.ml_item_id);
             let cid = venta.ml_cuenta_id;
