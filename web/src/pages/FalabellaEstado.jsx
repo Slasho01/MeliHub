@@ -13,6 +13,17 @@ export default function FalabellaEstado({ cuenta }) {
   const [mapa, setMapa] = useState({}) // seller_sku -> { producto_id, titulo } (mapeo local, para acciones)
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState('')
+  const [msg, setMsg] = useState(null)
+
+  const vincular = async () => {
+    if (!cuenta) return
+    setBusy('vincular'); setError(null); setMsg(null)
+    try {
+      const r = await post(`/falabella/vincular?cuenta=${cuenta.id}`)
+      setMsg(`${r.vinculados} publicación(es) re-vinculada(s)${r.no_encontrados ? ` · ${r.no_encontrados} sin producto en el hub` : ''}. El stock ya vuelve a sincronizarse.`)
+      cargar()
+    } catch (e) { setError(e.message) } finally { setBusy('') }
+  }
 
   const cargar = () => {
     if (!cuenta) return
@@ -56,7 +67,13 @@ export default function FalabellaEstado({ cuenta }) {
 
   return (
     <div className="card stack" style={{ gap: 10 }}>
-      <div className="row between"><div className="strong">Mis publicaciones en Falabella</div><button className="btn btn-sm" onClick={cargar}>↻ Actualizar</button></div>
+      <div className="row between" style={{ flexWrap: 'wrap', gap: 8 }}><div className="strong">Mis publicaciones en Falabella</div>
+        <div className="row" style={{ gap: 8 }}>
+          <button className="btn btn-sm btn-accent" disabled={busy === 'vincular'} onClick={vincular} title="Re-enlaza las publicaciones de Falabella con tus productos por SKU (repara la sincronización de stock)">{busy === 'vincular' ? 'Vinculando…' : '🔗 Vincular por SKU'}</button>
+          <button className="btn btn-sm" onClick={cargar}>↻ Actualizar</button>
+        </div>
+      </div>
+      {msg && <div className="alert alert-ok">{msg}</div>}
       {error && <div className="alert alert-bad">{error}</div>}
       {prods == null ? (
         <div className="muted">Cargando…</div>

@@ -67,6 +67,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(r("/falabella/categorias").route(get().to(fala::categorias)))
             .service(r("/falabella/categorias/atributos").route(get().to(fala::atributos)))
             .service(r("/falabella/publicar").route(post().to(fala::publicar)))
+            .service(r("/falabella/vincular").route(post().to(fala::vincular)))
             .service(r("/falabella/republicar").route(post().to(fala::republicar)))
             .service(r("/falabella/imagenes").route(post().to(fala::subir_imagenes)))
             .service(r("/falabella/estado").route(post().to(fala::cambiar_estado)))

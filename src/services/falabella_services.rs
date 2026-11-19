@@ -47,6 +47,38 @@ pub fn mapeo_de(conn: &mut PgConnection, producto_id: Uuid, cuenta_id: Uuid) -> 
 }
 
 /// Para una cuenta Falabella, los productos publicados con su precio/stock ACTUAL del hub
+/// Re-vincula publicaciones de Falabella a los productos actuales por SKU (= `ml_item_id`).
+/// Útil cuando los enlaces se perdieron (p. ej. productos recreados al reconectar ML).
+/// Devuelve (vinculados, no_encontrados).
+pub fn revincular_por_sku(conn: &mut PgConnection, cuenta_id: Uuid, skus: &[String]) -> ApiResult<(usize, usize)> {
+    use crate::schema::{falabella_cuentas, ml_cuentas};
+    let vendedor_id: Uuid = falabella_cuentas::table.find(cuenta_id).select(falabella_cuentas::vendedor_id).first(conn)?;
+    let mut vinculados = 0usize;
+    let mut no_encontrados = 0usize;
+    for sku in skus {
+        let sku = sku.trim();
+        if sku.is_empty() {
+            continue;
+        }
+        // El SKU de Falabella es el ID de la publicación de ML (ml_item_id).
+        let pid: Option<Uuid> = productos::table
+            .inner_join(ml_cuentas::table)
+            .filter(ml_cuentas::vendedor_id.eq(vendedor_id))
+            .filter(productos::ml_item_id.eq(sku))
+            .select(productos::id)
+            .first(conn)
+            .optional()?;
+        match pid {
+            Some(pid) => {
+                registrar_publicacion(conn, pid, cuenta_id, sku, "", "", "", serde_json::json!({}))?;
+                vinculados += 1;
+            }
+            None => no_encontrados += 1,
+        }
+    }
+    Ok((vinculados, no_encontrados))
+}
+
 /// (para empujar `ProductUpdate`). Devuelve (seller_sku, precio, stock, operador).
 pub fn publicaciones_para_sync(conn: &mut PgConnection, cuenta_id: Uuid) -> ApiResult<Vec<(String, i64, i32, String)>> {
     let rows = falabella_publicaciones::table

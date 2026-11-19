@@ -69,6 +69,41 @@ pub async fn publicaciones(user: AuthVendedor, q: web::Query<CuentaQuery>, pool:
     Ok(HttpResponse::Ok().json(out))
 }
 
+/// Recolecta recursivamente todos los valores de "SellerSku" de un JSON de Falabella.
+fn colectar_skus(v: &serde_json::Value, out: &mut Vec<String>) {
+    match v {
+        serde_json::Value::Object(m) => {
+            for (k, val) in m {
+                if k == "SellerSku" {
+                    if let Some(s) = val.as_str() {
+                        out.push(s.to_string());
+                    }
+                } else {
+                    colectar_skus(val, out);
+                }
+            }
+        }
+        serde_json::Value::Array(a) => a.iter().for_each(|x| colectar_skus(x, out)),
+        _ => {}
+    }
+}
+
+/// Re-vincula las publicaciones de Falabella con los productos actuales (por SKU = ml_item_id).
+/// Repara los enlaces perdidos para que el stock/precio vuelva a sincronizarse.
+pub async fn vincular(user: AuthVendedor, q: web::Query<CuentaQuery>, pool: web::Data<DbPool>, client: web::Data<FalabellaClient>) -> ApiResult<HttpResponse> {
+    let (vid, cid) = (user.id, q.cuenta);
+    let cuenta = db::run(&pool, move |conn| svc::get(conn, cid, vid)).await?;
+    let api_key = crate::crypto::descifrar(&cuenta.api_key);
+    let catalogo = client.get_products(&cuenta.user_id, &api_key, None).await?;
+    let mut skus = Vec::new();
+    colectar_skus(&catalogo, &mut skus);
+    skus.sort();
+    skus.dedup();
+    let total = skus.len();
+    let (vinculados, no_encontrados) = db::run(&pool, move |conn| svc::revincular_por_sku(conn, cid, &skus)).await?;
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "total": total, "vinculados": vinculados, "no_encontrados": no_encontrados })))
+}
+
 /// Productos ya publicados en Falabella (para ver su estado/stock/imágenes).
 pub async fn productos_fala(user: AuthVendedor, q: web::Query<CuentaQuery>, pool: web::Data<DbPool>, client: web::Data<FalabellaClient>) -> ApiResult<HttpResponse> {
     let (vid, cid) = (user.id, q.cuenta);
