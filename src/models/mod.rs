@@ -378,6 +378,8 @@ pub struct Producto {
     pub costo: Option<i64>,
     pub precio_jarstore: Option<i64>,
     pub precio_falabella: Option<i64>,
+    pub comision_pct: Option<f64>,
+    pub comision_fija: Option<i64>,
 }
 
 #[derive(Insertable, AsChangeset)]
@@ -396,6 +398,9 @@ pub struct UpsertProducto {
     pub variantes: serde_json::Value,
     pub datos: serde_json::Value,
     pub sincronizado_at: NaiveDateTime,
+    /// Comisión real de ML (None = no recalculada en esta sync → AsChangeset conserva la guardada).
+    pub comision_pct: Option<f64>,
+    pub comision_fija: Option<i64>,
 }
 
 // ----------------------------- Config de ganancias -----------------------------

@@ -149,6 +149,8 @@ pub async fn sincronizar_cuenta(pool: &web::Data<DbPool>, client: &MlClient, cue
     // Cachés: nombres de categoría y stock de depósito (varios ítems comparten).
     let mut cat_cache: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
     let mut dep_cache: std::collections::HashMap<String, Option<i64>> = std::collections::HashMap::new();
+    // Comisión real de ML cacheada por (categoría | tipo de publicación): el % es constante ahí.
+    let mut fee_cache: std::collections::HashMap<String, (f64, i64)> = std::collections::HashMap::new();
     loop {
         let search = client.list_item_ids(&token, cuenta.ml_user_id, offset).await?;
         if search.results.is_empty() {
@@ -175,6 +177,19 @@ pub async fn sincronizar_cuenta(pool: &web::Data<DbPool>, client: &MlClient, cue
                         dep_cache.insert(upid.clone(), d);
                     }
                     it.deposito_stock = dep_cache.get(&upid).cloned().flatten();
+                }
+                // Comisión real de ML (listing_prices): depende de categoría + tipo de publicación.
+                if let (Some(cat), Some(lt), Some(precio)) = (it.category_id.clone(), it.listing_type_id.clone(), it.price) {
+                    let key = format!("{cat}|{lt}");
+                    if !fee_cache.contains_key(&key) {
+                        if let Some(fee) = client.sale_fee(&token, &cuenta.sitio, &cat, &lt, precio.round() as i64).await {
+                            fee_cache.insert(key.clone(), fee);
+                        }
+                    }
+                    if let Some(&(pct, fija)) = fee_cache.get(&key) {
+                        it.comision_pct = Some(pct);
+                        it.comision_fija = Some(fija);
+                    }
                 }
             }
             let cuenta_id = cuenta.id;

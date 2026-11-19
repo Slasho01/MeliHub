@@ -93,6 +93,8 @@ diesel::table! {
         costo -> Nullable<Int8>,
         precio_jarstore -> Nullable<Int8>,
         precio_falabella -> Nullable<Int8>,
+        comision_pct -> Nullable<Float8>,
+        comision_fija -> Nullable<Int8>,
     }
 }
 

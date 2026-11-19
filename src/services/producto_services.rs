@@ -42,6 +42,9 @@ fn a_registro(cuenta_id: Uuid, it: &MlItem) -> UpsertProducto {
         variantes: it.variations.clone(),
         datos: serde_json::to_value(it).unwrap_or_else(|_| serde_json::json!({})),
         sincronizado_at: now(),
+        // None = no se recalculó en esta sync → AsChangeset conserva la comisión guardada.
+        comision_pct: it.comision_pct,
+        comision_fija: it.comision_fija,
     }
 }
 

@@ -47,7 +47,10 @@ function GanCell({ g }) {
   return (
     <div>
       <b style={{ color: `var(--${tone})` }}>{money(g.ganancia)}</b>
-      <div className="muted sm">{g.margen}% · comis. {money(g.comision)}</div>
+      <div className="muted sm">
+        {g.margen}% · comis. {money(g.comision)}
+        {g.comision_real && <span title="Comisión real traída de Mercado Libre (listing_prices)" style={{ marginLeft: 4, color: 'var(--ok)', fontWeight: 700 }}>✓ real</span>}
+      </div>
     </div>
   )
 }

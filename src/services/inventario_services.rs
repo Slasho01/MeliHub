@@ -180,10 +180,13 @@ pub struct Ganancia {
     pub comision: i64,
     pub ganancia: i64,
     pub margen: f64, // % sobre el precio
+    /// true = la comisión viene de la API real de Mercado Libre; false = estimada por config.
+    pub comision_real: bool,
 }
 
-/// Ganancia estimada de un canal. `costo` se asume NETO (sin IVA).
-fn calcular(precio: i64, costo: i64, com_pct: f64, com_fija: i64, cfg: &ConfigGanancias) -> Ganancia {
+/// Ganancia de un canal. `costo` se asume NETO (sin IVA). `real` marca si la comisión
+/// proviene de la API de ML (true) o de la configuración del vendedor (false).
+fn calcular(precio: i64, costo: i64, com_pct: f64, com_fija: i64, real: bool, cfg: &ConfigGanancias) -> Ganancia {
     let div = if cfg.precios_con_iva { 1.0 + cfg.iva_pct / 100.0 } else { 1.0 };
     let p = precio as f64;
     let neto = p / div;
@@ -198,6 +201,7 @@ fn calcular(precio: i64, costo: i64, com_pct: f64, com_fija: i64, cfg: &ConfigGa
         comision: comision.round() as i64,
         ganancia: ganancia.round() as i64,
         margen: (margen * 10.0).round() / 10.0,
+        comision_real: real,
     }
 }
 
@@ -251,8 +255,13 @@ pub fn listar(conn: &mut PgConnection, vendedor_id: Uuid, es_admin: bool, filtro
         .into_iter()
         .map(|p| {
             let costo = p.costo.unwrap_or(0);
-            let ml = if p.precio > 0 { Some(calcular(p.precio, costo, cfg.comision_ml_pct, cfg.comision_ml_fija, &cfg)) } else { None };
-            let jarstore = p.precio_jarstore.filter(|v| *v > 0).map(|pj| calcular(pj, costo, cfg.comision_mp_pct, cfg.comision_mp_fija, &cfg));
+            // Comisión real de ML (de listing_prices) si la tenemos; si no, la configurada.
+            let (ml_pct, ml_fija, ml_real) = match p.comision_pct {
+                Some(pct) => (pct, p.comision_fija.unwrap_or(0), true),
+                None => (cfg.comision_ml_pct, cfg.comision_ml_fija, false),
+            };
+            let ml = if p.precio > 0 { Some(calcular(p.precio, costo, ml_pct, ml_fija, ml_real, &cfg)) } else { None };
+            let jarstore = p.precio_jarstore.filter(|v| *v > 0).map(|pj| calcular(pj, costo, cfg.comision_mp_pct, cfg.comision_mp_fija, false, &cfg));
             let precio_sugerido = if costo > 0 { sugerir_precio(costo, &cfg) } else { None };
             ProductoInventario { producto: p, ml, jarstore, precio_sugerido }
         })

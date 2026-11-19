@@ -83,6 +83,14 @@ pub struct MlItem {
     pub video_id: Option<String>,
     #[serde(default)]
     pub category_id: Option<String>,
+    /// Tipo de publicación ("gold_special" = Clásica, "gold_pro" = Premium). Afecta la comisión.
+    #[serde(default)]
+    pub listing_type_id: Option<String>,
+    /// Comisión real de ML (la rellena la sync con listing_prices; se persiste).
+    #[serde(default, skip_deserializing)]
+    pub comision_pct: Option<f64>,
+    #[serde(default, skip_deserializing)]
+    pub comision_fija: Option<i64>,
     #[serde(default)]
     pub currency_id: Option<String>,
     #[serde(default)]
@@ -204,7 +212,7 @@ impl MlClient {
         if ids.is_empty() {
             return Ok(vec![]);
         }
-        const ATTRS: &str = "id,title,price,available_quantity,status,permalink,thumbnail,pictures,video_id,category_id,currency_id,variations,attributes,catalog_product_id,catalog_listing,shipping,user_product_id";
+        const ATTRS: &str = "id,title,price,available_quantity,status,permalink,thumbnail,pictures,video_id,category_id,listing_type_id,currency_id,variations,attributes,catalog_product_id,catalog_listing,shipping,user_product_id";
         use futures_util::stream::StreamExt;
         let items: Vec<MlItem> = futures_util::stream::iter(ids.iter().cloned())
             .map(|id| async move {
@@ -445,6 +453,29 @@ impl MlClient {
     }
 
     /// Actualiza el stock disponible de una publicación en Mercado Libre.
+    /// Comisión real de Mercado Libre para un producto, vía `listing_prices`.
+    /// Devuelve (porcentaje, cargo fijo CLP). `None` si falla o faltan datos.
+    pub async fn sale_fee(&self, access_token: &str, site: &str, category_id: &str, listing_type_id: &str, price: i64) -> Option<(f64, i64)> {
+        if site.is_empty() || category_id.is_empty() || listing_type_id.is_empty() || price <= 0 {
+            return None;
+        }
+        let path = format!("/sites/{site}/listing_prices?price={price}&category_id={category_id}&listing_type_id={listing_type_id}");
+        let v = self.get(access_token, &path).await.ok()?;
+        // Con listing_type_id, ML devuelve un objeto; por robustez aceptamos también un array.
+        let obj = if v.is_array() { v.get(0)?.clone() } else { v };
+        let det = obj.get("sale_fee_details");
+        let pct = det.and_then(|d| d.get("percentage_fee")).and_then(|x| x.as_f64());
+        let fija = det.and_then(|d| d.get("fixed_fee")).and_then(|x| x.as_f64()).map(|f| f.round() as i64);
+        match pct {
+            Some(p) => Some((p, fija.unwrap_or(0))),
+            None => {
+                // Fallback: deriva el % del monto total si no vienen los detalles.
+                let amount = obj.get("sale_fee_amount").and_then(|x| x.as_f64())?;
+                Some(((amount / price as f64 * 100.0).clamp(0.0, 100.0), 0))
+            }
+        }
+    }
+
     pub async fn update_stock(&self, access_token: &str, item_id: &str, qty: i32) -> ApiResult<()> {
         let res = self
             .http
