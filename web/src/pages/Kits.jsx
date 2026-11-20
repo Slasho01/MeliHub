@@ -1,20 +1,21 @@
 import { useEffect, useState } from 'react'
-import { get, post, del } from '../api'
+import { get, post, del, money } from '../api'
 
-// Buscador de productos del inventario (type-ahead sobre /productos?q=).
-function BuscadorProducto({ placeholder, excluir = [], onPick }) {
+// Buscador de productos del inventario (type-ahead sobre /productos), filtrado por cuenta.
+function BuscadorProducto({ placeholder, excluir = [], onPick, cuenta }) {
   const [q, setQ] = useState('')
   const [res, setRes] = useState([])
   const [abierto, setAbierto] = useState(false)
   useEffect(() => {
     if (q.trim().length < 2) { setRes([]); return }
     const t = setTimeout(() => {
-      get('/productos?q=' + encodeURIComponent(q.trim()))
+      const qs = (cuenta ? `cuenta_id=${cuenta}&` : '') + 'q=' + encodeURIComponent(q.trim())
+      get('/productos?' + qs)
         .then((d) => setRes((Array.isArray(d) ? d : d?.data || []).filter((p) => !excluir.includes(p.id)).slice(0, 8)))
         .catch(() => setRes([]))
     }, 250)
     return () => clearTimeout(t)
-  }, [q, excluir])
+  }, [q, excluir, cuenta])
   return (
     <div style={{ position: 'relative' }}>
       <input className="input" value={q} placeholder={placeholder} style={{ width: '100%' }}
@@ -29,6 +30,7 @@ function BuscadorProducto({ placeholder, excluir = [], onPick }) {
               style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 10px', background: 'none', border: 'none', borderBottom: '1px solid var(--line)', cursor: 'pointer', textAlign: 'left' }}>
               {p.thumbnail ? <img src={p.thumbnail} alt="" style={{ width: 32, height: 32, objectFit: 'cover', borderRadius: 4, flexShrink: 0 }} /> : <span style={{ width: 32 }} />}
               <span style={{ flex: 1, fontSize: 13, lineHeight: 1.2 }}>{p.titulo}</span>
+              <b className="sm" style={{ whiteSpace: 'nowrap' }}>{money(p.precio)}</b>
               <i className="muted sm" style={{ whiteSpace: 'nowrap' }}>stock {p.stock}</i>
             </button>
           ))}
@@ -44,6 +46,8 @@ export default function Kits() {
   const [error, setError] = useState('')
   const [msg, setMsg] = useState('')
   // Formulario de nuevo kit.
+  const [cuentas, setCuentas] = useState([])
+  const [cuenta, setCuenta] = useState('')
   const [kitProd, setKitProd] = useState(null)
   const [comps, setComps] = useState([]) // [{ producto, cantidad }]
   const [guardando, setGuardando] = useState(false)
@@ -53,6 +57,10 @@ export default function Kits() {
     get('/kits').then((d) => setKits(d?.kits || [])).catch((e) => setError(e.message)).finally(() => setCargando(false))
   }
   useEffect(cargar, [])
+  useEffect(() => { get('/ml/cuentas').then((d) => setCuentas(d || [])).catch(() => {}) }, [])
+
+  // Al cambiar de cuenta, reinicia la selección (los productos son de esa cuenta).
+  const cambiarCuenta = (id) => { setCuenta(id); setKitProd(null); setComps([]); setError('') }
 
   const addComp = (p) => {
     setError('')
@@ -83,6 +91,7 @@ export default function Kits() {
 
   const excluir = [kitProd?.id, ...comps.map((c) => c.producto.id)].filter(Boolean)
   const dispNuevo = comps.length ? Math.min(...comps.map((c) => Math.floor((c.producto.stock || 0) / c.cantidad))) : 0
+  const sugerido = comps.reduce((s, c) => s + (c.producto.precio || 0) * c.cantidad, 0)
 
   return (
     <div>
@@ -95,48 +104,66 @@ export default function Kits() {
       {/* Nuevo kit */}
       <div className="card" style={{ marginBottom: 18 }}>
         <h3 style={{ marginTop: 0 }}>Nuevo kit</h3>
-        <label className="muted sm">1 · Producto que será el kit (la publicación que vendes como pack)</label>
-        {kitProd ? (
-          <div className="row" style={{ alignItems: 'center', gap: 8, margin: '6px 0 14px' }}>
-            {kitProd.thumbnail && <img src={kitProd.thumbnail} alt="" style={{ width: 36, height: 36, objectFit: 'cover', borderRadius: 4 }} />}
-            <b style={{ flex: 1 }}>{kitProd.titulo}</b>
-            <button className="btn btn-sm" onClick={() => setKitProd(null)}>Cambiar</button>
-          </div>
+        <label className="muted sm">1 · Elige la cuenta de Mercado Libre</label>
+        <div style={{ margin: '6px 0 14px' }}>
+          <select className="input" value={cuenta} onChange={(e) => cambiarCuenta(e.target.value)} style={{ maxWidth: 360 }}>
+            <option value="">— Elige una cuenta —</option>
+            {cuentas.map((c) => <option key={c.id} value={c.id}>{c.nickname || `Usuario ${c.ml_user_id}`}</option>)}
+          </select>
+        </div>
+
+        {!cuenta ? (
+          <p className="muted sm" style={{ margin: 0 }}>Elige una cuenta para buscar sus productos.</p>
         ) : (
-          <div style={{ margin: '6px 0 14px' }}>
-            <BuscadorProducto placeholder="Busca el producto del kit…" excluir={comps.map((c) => c.producto.id)} onPick={setKitProd} />
-          </div>
+          <>
+            <label className="muted sm">2 · Producto que será el kit (la publicación que vendes como pack)</label>
+            {kitProd ? (
+              <div className="row" style={{ alignItems: 'center', gap: 8, margin: '6px 0 14px' }}>
+                {kitProd.thumbnail && <img src={kitProd.thumbnail} alt="" style={{ width: 36, height: 36, objectFit: 'cover', borderRadius: 4 }} />}
+                <b style={{ flex: 1 }}>{kitProd.titulo}</b>
+                <span className="muted sm">{money(kitProd.precio)}</span>
+                <button className="btn btn-sm" onClick={() => setKitProd(null)}>Cambiar</button>
+              </div>
+            ) : (
+              <div style={{ margin: '6px 0 14px' }}>
+                <BuscadorProducto placeholder="Busca el producto del kit…" excluir={comps.map((c) => c.producto.id)} onPick={setKitProd} cuenta={cuenta} />
+              </div>
+            )}
+
+            <label className="muted sm">3 · Componentes (qué productos y cuántas unidades consume cada kit)</label>
+            <div style={{ margin: '6px 0 10px' }}>
+              <BuscadorProducto placeholder="Busca un componente para agregar…" excluir={excluir} onPick={addComp} cuenta={cuenta} />
+            </div>
+
+            {comps.length > 0 && (
+              <table className="table" style={{ marginBottom: 12 }}>
+                <thead><tr><th>Componente</th><th style={{ width: 86 }}>Cant/kit</th><th style={{ width: 90 }}>Precio</th><th style={{ width: 90 }}>Subtotal</th><th style={{ width: 70 }}>Stock</th><th style={{ width: 64 }}>Aporta</th><th style={{ width: 40 }} /></tr></thead>
+                <tbody>
+                  {comps.map((c) => {
+                    const aporta = Math.floor((c.producto.stock || 0) / c.cantidad)
+                    return (
+                      <tr key={c.producto.id}>
+                        <td>{c.producto.titulo}</td>
+                        <td><input className="input" type="number" min="1" value={c.cantidad} style={{ width: 66 }} onChange={(e) => setCant(c.producto.id, +e.target.value)} /></td>
+                        <td className="muted sm">{money(c.producto.precio)}</td>
+                        <td>{money((c.producto.precio || 0) * c.cantidad)}</td>
+                        <td>{c.producto.stock ?? 0}</td>
+                        <td><span className={aporta === dispNuevo ? 'tag' : 'muted'}>{aporta}</span></td>
+                        <td><button className="btn btn-sm" title="Quitar" onClick={() => rmComp(c.producto.id)}>✕</button></td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            )}
+
+            <div className="row" style={{ alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+              <button className="btn btn-accent" onClick={guardar} disabled={guardando}>{guardando ? 'Guardando…' : 'Guardar kit'}</button>
+              {comps.length > 0 && <span className="muted sm">Disponibilidad del kit: <b>{dispNuevo}</b></span>}
+              {comps.length > 0 && <span className="muted sm">Valor sugerido (suma de componentes): <b>{money(sugerido)}</b></span>}
+            </div>
+          </>
         )}
-
-        <label className="muted sm">2 · Componentes (qué productos y cuántas unidades consume cada kit)</label>
-        <div style={{ margin: '6px 0 10px' }}>
-          <BuscadorProducto placeholder="Busca un componente para agregar…" excluir={excluir} onPick={addComp} />
-        </div>
-
-        {comps.length > 0 && (
-          <table className="table" style={{ marginBottom: 12 }}>
-            <thead><tr><th>Componente</th><th style={{ width: 90 }}>Cant/kit</th><th style={{ width: 80 }}>Stock</th><th style={{ width: 70 }}>Aporta</th><th style={{ width: 40 }} /></tr></thead>
-            <tbody>
-              {comps.map((c) => {
-                const aporta = Math.floor((c.producto.stock || 0) / c.cantidad)
-                return (
-                  <tr key={c.producto.id}>
-                    <td>{c.producto.titulo}</td>
-                    <td><input className="input" type="number" min="1" value={c.cantidad} style={{ width: 70 }} onChange={(e) => setCant(c.producto.id, +e.target.value)} /></td>
-                    <td>{c.producto.stock ?? 0}</td>
-                    <td><span className={aporta === dispNuevo ? 'tag' : 'muted'}>{aporta}</span></td>
-                    <td><button className="btn btn-sm" title="Quitar" onClick={() => rmComp(c.producto.id)}>✕</button></td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        )}
-
-        <div className="row" style={{ alignItems: 'center', gap: 12 }}>
-          <button className="btn btn-accent" onClick={guardar} disabled={guardando}>{guardando ? 'Guardando…' : 'Guardar kit'}</button>
-          {comps.length > 0 && <span className="muted sm">Disponibilidad resultante del kit: <b>{dispNuevo}</b></span>}
-        </div>
       </div>
 
       {/* Kits existentes */}

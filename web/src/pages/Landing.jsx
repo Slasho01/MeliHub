@@ -8,6 +8,7 @@ const CANALES = ['Mercado Libre', 'Falabella', 'Shopify', 'WooCommerce', 'Tu tie
 
 const FEATURES = [
   { ic: '🔗', t: 'Todas tus cuentas juntas', d: 'Conecta cuantas cuentas de Mercado Libre quieras con OAuth y gestiónalas desde un solo panel.' },
+  { ic: '🧬', t: 'Clona entre cuentas', d: 'NUEVO: copia las publicaciones de una cuenta de Mercado Libre a otra en lote, y su stock queda sincronizado entre ambas automáticamente.' },
   { ic: '📦', t: 'Inventario unificado', d: 'Un catálogo central con el stock, precio y estado de cada publicación de todas tus cuentas.' },
   { ic: '🔄', t: 'Stock en dos vías', d: 'Vendes en cualquier canal y el stock baja solo en Mercado Libre y el resto. Sin sobreventa ni descuadres.' },
   { ic: '💰', t: 'Ganancia real', d: 'Ventas del día con la ganancia neta ya calculada: precio − comisión de ML − tu costo.' },
@@ -36,6 +37,7 @@ const FAQ = [
   { q: '¿Necesito saber de programación?', a: 'No. Conectas tus cuentas con unos clics (OAuth) y Ventoki hace el resto. Si usas tu propia tienda, instalas un plugin y listo.' },
   { q: '¿Cómo evita la sobreventa?', a: 'Mantiene un stock central y lo sincroniza en todos tus canales en dos vías. Si una conexión falla, te avisa al instante (campana + correo) para que no vendas lo que no tienes.' },
   { q: '¿Funciona con varias cuentas de Mercado Libre?', a: 'Sí. Conecta cuantas cuentas quieras (según tu plan) y gestiónalas desde un solo panel.' },
+  { q: '¿Puedo copiar mis productos de una cuenta a otra?', a: 'Sí. Con la función Clonar publicas en lote las publicaciones de una cuenta en otra, y el stock queda sincronizado entre ambas para que no te sobrevendas.' },
   { q: '¿Qué canales soporta?', a: 'Mercado Libre, Falabella, Shopify y tu propia tienda (WooCommerce). Más canales en camino.' },
   { q: '¿Puedo probarlo gratis?', a: 'Sí. El plan Free es gratis para siempre, y los planes pagados incluyen 3 días de prueba.' },
   { q: '¿Qué pasa si cancelo?', a: 'Mantienes tu plan hasta que termine el período ya pagado (o el trial). No se corta de inmediato.' },
