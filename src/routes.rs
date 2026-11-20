@@ -49,6 +49,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(r("/ml/promociones/quitar").route(post().to(promo::quitar)))
             // Kits / combos
             .service(r("/kits").route(get().to(kit::listar)).route(post().to(kit::definir)))
+            .service(r("/kits/publicacion").route(post().to(kit::crear_publicacion)))
             .service(r("/kits/{id}").route(delete().to(kit::eliminar)))
             .service(r("/ml/reclamos/responder").route(post().to(reclamo::responder)))
             .service(r("/ml/reclamos/{cuenta}/{claim}").route(get().to(reclamo::detalle)))

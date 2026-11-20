@@ -48,8 +48,12 @@ export default function Kits() {
   // Formulario de nuevo kit.
   const [cuentas, setCuentas] = useState([])
   const [cuenta, setCuenta] = useState('')
+  const [modo, setModo] = useState('nueva') // 'nueva' = crear publicación en ML | 'existente'
   const [kitProd, setKitProd] = useState(null)
   const [comps, setComps] = useState([]) // [{ producto, cantidad }]
+  const [base, setBase] = useState('') // producto_id del componente base (hereda ficha de ML)
+  const [titulo, setTitulo] = useState('')
+  const [precioKit, setPrecioKit] = useState('')
   const [guardando, setGuardando] = useState(false)
 
   const cargar = () => {
@@ -60,7 +64,7 @@ export default function Kits() {
   useEffect(() => { get('/ml/cuentas').then((d) => setCuentas(d || [])).catch(() => {}) }, [])
 
   // Al cambiar de cuenta, reinicia la selección (los productos son de esa cuenta).
-  const cambiarCuenta = (id) => { setCuenta(id); setKitProd(null); setComps([]); setError('') }
+  const cambiarCuenta = (id) => { setCuenta(id); setKitProd(null); setComps([]); setBase(''); setTitulo(''); setPrecioKit(''); setError('') }
 
   const addComp = (p) => {
     setError('')
@@ -80,6 +84,29 @@ export default function Kits() {
       await post('/kits', { kit_producto_id: kitProd.id, componentes: comps.map((c) => ({ producto_id: c.producto.id, cantidad: c.cantidad })) })
       setMsg('Kit guardado. El stock del kit ya refleja sus componentes ✓')
       setKitProd(null); setComps([]); cargar()
+    } catch (e) { setError(e.message) } finally { setGuardando(false) }
+  }
+
+  const guardarNueva = async () => {
+    setError(''); setMsg('')
+    if (!cuenta) { setError('Elige una cuenta.'); return }
+    if (comps.length === 0) { setError('Agrega al menos un componente.'); return }
+    const baseId = base || comps[0]?.producto.id
+    if (!baseId) { setError('Elige el componente base.'); return }
+    if (!titulo.trim()) { setError('Ponle un título al kit.'); return }
+    const precio = Number(precioKit) || sugerido
+    if (precio <= 0) { setError('Ponle un precio al kit.'); return }
+    setGuardando(true)
+    try {
+      const r = await post('/kits/publicacion', {
+        cuenta_id: cuenta,
+        base_producto_id: baseId,
+        titulo: titulo.trim(),
+        precio,
+        componentes: comps.map((c) => ({ producto_id: c.producto.id, cantidad: c.cantidad })),
+      })
+      setMsg('✅ Kit creado como publicación nueva en Mercado Libre. Stock sincronizado con los componentes.' + (r.permalink ? ` Ver: ${r.permalink}` : ''))
+      setComps([]); setBase(''); setTitulo(''); setPrecioKit(''); cargar()
     } catch (e) { setError(e.message) } finally { setGuardando(false) }
   }
 
@@ -104,6 +131,15 @@ export default function Kits() {
       {/* Nuevo kit */}
       <div className="card" style={{ marginBottom: 18 }}>
         <h3 style={{ marginTop: 0 }}>Nuevo kit</h3>
+
+        <div className="row" style={{ gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+          <button className={'btn btn-sm ' + (modo === 'nueva' ? 'btn-accent' : '')} onClick={() => setModo('nueva')}>🆕 Crear publicación nueva en ML</button>
+          <button className={'btn btn-sm ' + (modo === 'existente' ? 'btn-accent' : '')} onClick={() => setModo('existente')}>Usar una publicación existente</button>
+        </div>
+        <p className="muted xs" style={{ marginTop: 0 }}>{modo === 'nueva'
+          ? 'Se crea una publicación NUEVA en Mercado Libre, heredando categoría/atributos/fotos de un componente base.'
+          : 'El kit reutiliza una publicación que ya tienes en Mercado Libre.'}</p>
+
         <label className="muted sm">1 · Elige la cuenta de Mercado Libre</label>
         <div style={{ margin: '6px 0 14px' }}>
           <select className="input" value={cuenta} onChange={(e) => cambiarCuenta(e.target.value)} style={{ maxWidth: 360 }}>
@@ -116,33 +152,38 @@ export default function Kits() {
           <p className="muted sm" style={{ margin: 0 }}>Elige una cuenta para buscar sus productos.</p>
         ) : (
           <>
-            <label className="muted sm">2 · Producto que será el kit (la publicación que vendes como pack)</label>
-            {kitProd ? (
-              <div className="row" style={{ alignItems: 'center', gap: 8, margin: '6px 0 14px' }}>
-                {kitProd.thumbnail && <img src={kitProd.thumbnail} alt="" style={{ width: 36, height: 36, objectFit: 'cover', borderRadius: 4 }} />}
-                <b style={{ flex: 1 }}>{kitProd.titulo}</b>
-                <span className="muted sm">{money(kitProd.precio)}</span>
-                <button className="btn btn-sm" onClick={() => setKitProd(null)}>Cambiar</button>
-              </div>
-            ) : (
-              <div style={{ margin: '6px 0 14px' }}>
-                <BuscadorProducto placeholder="Busca el producto del kit…" excluir={comps.map((c) => c.producto.id)} onPick={setKitProd} cuenta={cuenta} />
-              </div>
+            {modo === 'existente' && (
+              <>
+                <label className="muted sm">2 · Producto que será el kit (la publicación que vendes como pack)</label>
+                {kitProd ? (
+                  <div className="row" style={{ alignItems: 'center', gap: 8, margin: '6px 0 14px' }}>
+                    {kitProd.thumbnail && <img src={kitProd.thumbnail} alt="" style={{ width: 36, height: 36, objectFit: 'cover', borderRadius: 4 }} />}
+                    <b style={{ flex: 1 }}>{kitProd.titulo}</b>
+                    <span className="muted sm">{money(kitProd.precio)}</span>
+                    <button className="btn btn-sm" onClick={() => setKitProd(null)}>Cambiar</button>
+                  </div>
+                ) : (
+                  <div style={{ margin: '6px 0 14px' }}>
+                    <BuscadorProducto placeholder="Busca el producto del kit…" excluir={comps.map((c) => c.producto.id)} onPick={setKitProd} cuenta={cuenta} />
+                  </div>
+                )}
+              </>
             )}
 
-            <label className="muted sm">3 · Componentes (qué productos y cuántas unidades consume cada kit)</label>
+            <label className="muted sm">{modo === 'nueva' ? '2' : '3'} · Componentes (qué productos y cuántas unidades consume cada kit){modo === 'nueva' ? '. Marca cuál es la “base” (de ahí se hereda la ficha de ML).' : ''}</label>
             <div style={{ margin: '6px 0 10px' }}>
               <BuscadorProducto placeholder="Busca un componente para agregar…" excluir={excluir} onPick={addComp} cuenta={cuenta} />
             </div>
 
             {comps.length > 0 && (
               <table className="table" style={{ marginBottom: 12 }}>
-                <thead><tr><th>Componente</th><th style={{ width: 86 }}>Cant/kit</th><th style={{ width: 90 }}>Precio</th><th style={{ width: 90 }}>Subtotal</th><th style={{ width: 70 }}>Stock</th><th style={{ width: 64 }}>Aporta</th><th style={{ width: 40 }} /></tr></thead>
+                <thead><tr>{modo === 'nueva' && <th style={{ width: 48 }}>Base</th>}<th>Componente</th><th style={{ width: 86 }}>Cant/kit</th><th style={{ width: 90 }}>Precio</th><th style={{ width: 90 }}>Subtotal</th><th style={{ width: 64 }}>Stock</th><th style={{ width: 60 }}>Aporta</th><th style={{ width: 40 }} /></tr></thead>
                 <tbody>
                   {comps.map((c) => {
                     const aporta = Math.floor((c.producto.stock || 0) / c.cantidad)
                     return (
                       <tr key={c.producto.id}>
+                        {modo === 'nueva' && <td style={{ textAlign: 'center' }}><input type="radio" name="base" checked={(base || comps[0]?.producto.id) === c.producto.id} onChange={() => setBase(c.producto.id)} title="Hereda categoría, atributos y fotos de este componente" /></td>}
                         <td>{c.producto.titulo}</td>
                         <td><input className="input" type="number" min="1" value={c.cantidad} style={{ width: 66 }} onChange={(e) => setCant(c.producto.id, +e.target.value)} /></td>
                         <td className="muted sm">{money(c.producto.precio)}</td>
@@ -157,10 +198,24 @@ export default function Kits() {
               </table>
             )}
 
+            {modo === 'nueva' && comps.length > 0 && (
+              <div className="row" style={{ gap: 10, flexWrap: 'wrap', marginBottom: 12, alignItems: 'flex-end' }}>
+                <label className="stack" style={{ gap: 4, flex: '1 1 260px' }}><span className="sm">Título del kit en ML</span>
+                  <input className="input" value={titulo} onChange={(e) => setTitulo(e.target.value)} placeholder="Pack …" />
+                </label>
+                <label className="stack" style={{ gap: 4, flex: '0 1 150px' }}><span className="sm">Precio del kit</span>
+                  <input className="input" type="number" min="1" value={precioKit} onChange={(e) => setPrecioKit(e.target.value)} placeholder={String(sugerido || '')} />
+                </label>
+                <button type="button" className="btn btn-sm" onClick={() => setPrecioKit(String(sugerido))} title="Usar la suma de los componentes">Sugerido {money(sugerido)}</button>
+              </div>
+            )}
+
             <div className="row" style={{ alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-              <button className="btn btn-accent" onClick={guardar} disabled={guardando}>{guardando ? 'Guardando…' : 'Guardar kit'}</button>
+              {modo === 'nueva'
+                ? <button className="btn btn-accent" onClick={guardarNueva} disabled={guardando}>{guardando ? 'Creando en ML…' : '🆕 Crear kit en Mercado Libre'}</button>
+                : <button className="btn btn-accent" onClick={guardar} disabled={guardando}>{guardando ? 'Guardando…' : 'Guardar kit'}</button>}
               {comps.length > 0 && <span className="muted sm">Disponibilidad del kit: <b>{dispNuevo}</b></span>}
-              {comps.length > 0 && <span className="muted sm">Valor sugerido (suma de componentes): <b>{money(sugerido)}</b></span>}
+              {comps.length > 0 && <span className="muted sm">Valor sugerido (suma componentes): <b>{money(sugerido)}</b></span>}
             </div>
           </>
         )}
