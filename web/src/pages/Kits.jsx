@@ -90,22 +90,19 @@ export default function Kits() {
   const guardarNueva = async () => {
     setError(''); setMsg('')
     if (!cuenta) { setError('Elige una cuenta.'); return }
-    if (comps.length === 0) { setError('Agrega al menos un componente.'); return }
-    const baseId = base || comps[0]?.producto.id
-    if (!baseId) { setError('Elige el componente base.'); return }
+    if (comps.length < 2) { setError('Un kit de Mercado Libre necesita al menos 2 productos distintos.'); return }
+    if (comps.length > 6) { setError('Máximo 6 productos por kit.'); return }
     if (!titulo.trim()) { setError('Ponle un título al kit.'); return }
-    const precio = Number(precioKit) || sugerido
-    if (precio <= 0) { setError('Ponle un precio al kit.'); return }
     setGuardando(true)
     try {
       const r = await post('/kits/publicacion', {
         cuenta_id: cuenta,
-        base_producto_id: baseId,
+        base_producto_id: comps[0].producto.id, // ignorado por el backend (el kit nativo no usa base)
         titulo: titulo.trim(),
-        precio,
+        precio: Number(precioKit) || 0, // 0 = ML calcula el precio desde los componentes
         componentes: comps.map((c) => ({ producto_id: c.producto.id, cantidad: c.cantidad })),
       })
-      setMsg('✅ Kit creado como publicación nueva en Mercado Libre. Stock sincronizado con los componentes.' + (r.permalink ? ` Ver: ${r.permalink}` : ''))
+      setMsg('✅ Kit creado en Mercado Libre. ML generó el título/descripción y sincroniza el stock desde los componentes.' + (r.permalink ? ` Ver: ${r.permalink}` : ''))
       setComps([]); setBase(''); setTitulo(''); setPrecioKit(''); cargar()
     } catch (e) { setError(e.message) } finally { setGuardando(false) }
   }
@@ -137,7 +134,7 @@ export default function Kits() {
           <button className={'btn btn-sm ' + (modo === 'existente' ? 'btn-accent' : '')} onClick={() => setModo('existente')}>Usar una publicación existente</button>
         </div>
         <p className="muted xs" style={{ marginTop: 0 }}>{modo === 'nueva'
-          ? 'Se crea una publicación NUEVA en Mercado Libre, heredando categoría/atributos/fotos de un componente base.'
+          ? 'Crea un KIT NATIVO de Mercado Libre: combina 2 a 6 publicaciones tuyas. ML genera el título y la descripción y sincroniza el stock del kit desde los componentes.'
           : 'El kit reutiliza una publicación que ya tienes en Mercado Libre.'}</p>
 
         <label className="muted sm">1 · Elige la cuenta de Mercado Libre</label>
@@ -170,20 +167,19 @@ export default function Kits() {
               </>
             )}
 
-            <label className="muted sm">{modo === 'nueva' ? '2' : '3'} · Componentes (qué productos y cuántas unidades consume cada kit){modo === 'nueva' ? '. Marca cuál es la “base” (de ahí se hereda la ficha de ML).' : ''}</label>
+            <label className="muted sm">{modo === 'nueva' ? '2' : '3'} · Componentes (qué publicaciones y cuántas unidades por kit){modo === 'nueva' ? ' — de 2 a 6 productos' : ''}</label>
             <div style={{ margin: '6px 0 10px' }}>
               <BuscadorProducto placeholder="Busca un componente para agregar…" excluir={excluir} onPick={addComp} cuenta={cuenta} />
             </div>
 
             {comps.length > 0 && (
               <table className="table" style={{ marginBottom: 12 }}>
-                <thead><tr>{modo === 'nueva' && <th style={{ width: 48 }}>Base</th>}<th>Componente</th><th style={{ width: 86 }}>Cant/kit</th><th style={{ width: 90 }}>Precio</th><th style={{ width: 90 }}>Subtotal</th><th style={{ width: 64 }}>Stock</th><th style={{ width: 60 }}>Aporta</th><th style={{ width: 40 }} /></tr></thead>
+                <thead><tr><th>Componente</th><th style={{ width: 86 }}>Cant/kit</th><th style={{ width: 90 }}>Precio</th><th style={{ width: 90 }}>Subtotal</th><th style={{ width: 64 }}>Stock</th><th style={{ width: 60 }}>Aporta</th><th style={{ width: 40 }} /></tr></thead>
                 <tbody>
                   {comps.map((c) => {
                     const aporta = Math.floor((c.producto.stock || 0) / c.cantidad)
                     return (
                       <tr key={c.producto.id}>
-                        {modo === 'nueva' && <td style={{ textAlign: 'center' }}><input type="radio" name="base" checked={(base || comps[0]?.producto.id) === c.producto.id} onChange={() => setBase(c.producto.id)} title="Hereda categoría, atributos y fotos de este componente" /></td>}
                         <td>{c.producto.titulo}</td>
                         <td><input className="input" type="number" min="1" value={c.cantidad} style={{ width: 66 }} onChange={(e) => setCant(c.producto.id, +e.target.value)} /></td>
                         <td className="muted sm">{money(c.producto.precio)}</td>
@@ -203,8 +199,8 @@ export default function Kits() {
                 <label className="stack" style={{ gap: 4, flex: '1 1 260px' }}><span className="sm">Título del kit en ML</span>
                   <input className="input" value={titulo} onChange={(e) => setTitulo(e.target.value)} placeholder="Pack …" />
                 </label>
-                <label className="stack" style={{ gap: 4, flex: '0 1 150px' }}><span className="sm">Precio del kit</span>
-                  <input className="input" type="number" min="1" value={precioKit} onChange={(e) => setPrecioKit(e.target.value)} placeholder={String(sugerido || '')} />
+                <label className="stack" style={{ gap: 4, flex: '0 1 160px' }}><span className="sm">Precio (opcional)</span>
+                  <input className="input" type="number" min="1" value={precioKit} onChange={(e) => setPrecioKit(e.target.value)} placeholder={`ML calcula (${money(sugerido)})`} />
                 </label>
                 <button type="button" className="btn btn-sm" onClick={() => setPrecioKit(String(sugerido))} title="Usar la suma de los componentes">Sugerido {money(sugerido)}</button>
               </div>

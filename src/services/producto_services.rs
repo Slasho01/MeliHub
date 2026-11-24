@@ -308,6 +308,16 @@ pub fn set_inventario_masivo(
     Ok(propios.len())
 }
 
+/// Títulos de todas las publicaciones del vendedor (para cruzar con tendencias).
+pub fn titulos_de(conn: &mut PgConnection, vendedor_id: Uuid) -> ApiResult<Vec<String>> {
+    productos::table
+        .inner_join(ml_cuentas::table)
+        .filter(ml_cuentas::vendedor_id.eq(vendedor_id))
+        .select(productos::titulo)
+        .load::<String>(conn)
+        .map_err(ApiError::from)
+}
+
 /// Productos de UNA cuenta por sus ids (para clonar a otra cuenta). La cuenta ya debe
 /// estar validada como del vendedor por el controlador.
 pub fn por_ids_de_cuenta(conn: &mut PgConnection, cuenta_id: Uuid, ids: &[Uuid]) -> ApiResult<Vec<Producto>> {

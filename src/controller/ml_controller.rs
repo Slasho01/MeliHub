@@ -163,6 +163,76 @@ pub async fn callback(
 }
 
 /// Lista las cuentas ML conectadas por el vendedor.
+#[derive(Deserialize)]
+pub struct TendQuery {
+    #[serde(default)]
+    pub categoria: Option<String>,
+}
+
+/// Tendencias de Mercado Libre: lo más buscado (y lo que más crece) + lo más vendido por categoría.
+/// Usa el token de cualquier cuenta de ML conectada del vendedor.
+pub async fn tendencias(
+    user: AuthVendedor,
+    q: web::Query<TendQuery>,
+    pool: web::Data<DbPool>,
+    client: web::Data<MlClient>,
+) -> ApiResult<HttpResponse> {
+    let (vid, admin) = (user.id, user.es_admin());
+    let cuentas = db::run(&pool, move |conn| svc::listar_cuentas(conn, vid, admin)).await?;
+    let cuenta = cuentas
+        .into_iter()
+        .next()
+        .ok_or_else(|| ApiError::bad_request("Conecta una cuenta de Mercado Libre para ver las tendencias."))?;
+    let token = crate::sync::access_token_valido(&pool, &client, &cuenta).await?;
+    let site = cuenta.sitio.clone();
+    let cat = q.categoria.clone().filter(|s| !s.trim().is_empty());
+
+    // Lo más buscado / lo que más crece.
+    let mut buscado = client.trends(&token, &site, cat.as_deref()).await.unwrap_or_else(|_| json!([]));
+    // Cruce con el inventario: marca cada tendencia como `tengo` (la cubres) o no (oportunidad).
+    let titulos: Vec<String> = db::run(&pool, move |conn| prod::titulos_de(conn, vid))
+        .await
+        .unwrap_or_default()
+        .iter()
+        .map(|t| t.to_lowercase())
+        .collect();
+    if let Some(arr) = buscado.as_array_mut() {
+        for t in arr.iter_mut() {
+            let kw = t.get("keyword").and_then(|v| v.as_str()).unwrap_or("").to_lowercase();
+            let palabras: Vec<&str> = kw.split_whitespace().filter(|w| w.len() > 2).collect();
+            let tengo = !palabras.is_empty() && titulos.iter().any(|tit| palabras.iter().all(|w| tit.contains(w)));
+            if let Some(o) = t.as_object_mut() {
+                o.insert("tengo".into(), json!(tengo));
+            }
+        }
+    }
+    // Categorías para el filtro.
+    let categorias = client.categorias_sitio(&token, &site).await.unwrap_or_else(|_| json!([]));
+
+    // Lo más vendido (requiere categoría): IDs por ranking → detalle de cada ítem (orden conservado).
+    let mut vendido = json!([]);
+    if let Some(c) = cat.as_deref() {
+        if let Ok(h) = client.highlights(&token, &site, c).await {
+            let ids: Vec<String> = h
+                .get("content")
+                .and_then(|v| v.as_array())
+                .map(|arr| arr.iter().filter_map(|x| x.get("id").and_then(|v| v.as_str())).take(20).map(|s| s.to_string()).collect())
+                .unwrap_or_default();
+            if !ids.is_empty() {
+                let items = client.get_items(&token, &ids).await.unwrap_or_default();
+                let por_id: std::collections::HashMap<&str, &crate::ml::MlItem> = items.iter().map(|it| (it.id.as_str(), it)).collect();
+                let out: Vec<serde_json::Value> = ids
+                    .iter()
+                    .filter_map(|id| por_id.get(id.as_str()))
+                    .map(|it| json!({ "id": it.id, "titulo": it.title, "precio": it.price, "thumbnail": it.thumbnail, "permalink": it.permalink }))
+                    .collect();
+                vendido = json!(out);
+            }
+        }
+    }
+    Ok(HttpResponse::Ok().json(json!({ "buscado": buscado, "vendido": vendido, "categorias": categorias })))
+}
+
 pub async fn listar_cuentas(user: AuthVendedor, pool: web::Data<DbPool>) -> ApiResult<HttpResponse> {
     let (vid, admin) = (user.id, user.es_admin());
     let cuentas = db::run(&pool, move |conn| svc::listar_cuentas(conn, vid, admin)).await?;

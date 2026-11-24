@@ -5,6 +5,7 @@ import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Inventario from './pages/Inventario'
 import ClonarML from './pages/ClonarML'
+import Tendencias from './pages/Tendencias'
 import Ganancias from './pages/Ganancias'
 import ApiKeys from './pages/ApiKeys'
 import Ventas from './pages/Ventas'
@@ -89,6 +90,7 @@ export default function App() {
           <NavLink to="/" end className={cls}>Resumen</NavLink>
           <NavLink to="/cuentas" className={cls}>Cuentas</NavLink>
           <NavLink to="/clonar" className={cls}>Clonar</NavLink>
+          <NavLink to="/tendencias" className={cls}>Tendencias</NavLink>
           <NavLink to="/conexiones" className={cls}>Conexiones</NavLink>
           <NavLink to="/ventas" className={cls}>Ventas</NavLink>
           <NavLink to="/reportes" className={cls}>Reportes</NavLink>
@@ -145,6 +147,7 @@ export default function App() {
           <Route path="/" element={<Resumen />} />
           <Route path="/cuentas" element={<Dashboard me={me} />} />
           <Route path="/clonar" element={<ClonarML />} />
+          <Route path="/tendencias" element={<Tendencias />} />
           <Route path="/conexiones" element={<Conexiones />} />
           <Route path="/inventario" element={<Inventario me={me} />} />
           <Route path="/cotizador" element={<Cotizador />} />

@@ -578,6 +578,39 @@ impl MlClient {
         serde_json::from_str(&text).map_err(|e| ApiError::internal(format!("Respuesta de ML no reconocida: {e}")))
     }
 
+    /// Crea un KIT NATIVO de Mercado Libre (`POST /items/kits`): combina publicaciones
+    /// existentes (componentes por `item_id` + `quantity`). ML genera título/descripción y
+    /// sincroniza el stock del kit desde los componentes. Requiere 2 a 6 componentes.
+    pub async fn crear_kit(&self, access_token: &str, family_name: &str, componentes: &[(String, i32)], price: Option<i64>) -> ApiResult<serde_json::Value> {
+        let comps: Vec<serde_json::Value> = componentes
+            .iter()
+            .map(|(id, q)| serde_json::json!({ "item_id": id, "quantity": (*q).clamp(1, 10) }))
+            .collect();
+        let mut body = serde_json::json!({
+            "family_name": family_name,
+            "type": "kit",
+            "components": comps,
+        });
+        if let Some(p) = price {
+            body["price"] = serde_json::json!(p.max(0));
+        }
+        let res = self
+            .http
+            .post(format!("{}/items/kits", self.cfg.api_base))
+            .bearer_auth(access_token)
+            .header("Accept", "application/json")
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| ApiError::internal(format!("Mercado Libre no respondió: {e}")))?;
+        let status = res.status();
+        let text = res.text().await.unwrap_or_default();
+        if !status.is_success() {
+            return Err(ApiError::bad_request(format!("ML rechazó el kit ({status}): {}", resumen_error_ml(&text))));
+        }
+        serde_json::from_str(&text).map_err(|e| ApiError::internal(format!("Respuesta de ML no reconocida: {e}")))
+    }
+
     /// Fija la descripción (texto plano) de una publicación (POST /items/{id}/description).
     pub async fn set_item_description(&self, access_token: &str, item_id: &str, plain_text: &str) -> ApiResult<()> {
         let res = self
@@ -617,6 +650,25 @@ impl MlClient {
             return Err(ApiError::bad_request(format!("Mercado Libre rechazó actualizar stock de depósito ({status}): {text}")));
         }
         Ok(())
+    }
+
+    /// Tendencias de búsqueda del sitio (lo más buscado / lo que más crece). Opcional por categoría.
+    pub async fn trends(&self, access_token: &str, site: &str, categoria: Option<&str>) -> ApiResult<serde_json::Value> {
+        let path = match categoria {
+            Some(c) if !c.trim().is_empty() => format!("/trends/{site}/{}", c.trim()),
+            _ => format!("/trends/{site}"),
+        };
+        self.get(access_token, &path).await
+    }
+
+    /// Más vendidos de una categoría (IDs de publicación por ranking).
+    pub async fn highlights(&self, access_token: &str, site: &str, categoria: &str) -> ApiResult<serde_json::Value> {
+        self.get(access_token, &format!("/highlights/{site}/category/{categoria}")).await
+    }
+
+    /// Categorías de primer nivel del sitio (para el filtro de tendencias).
+    pub async fn categorias_sitio(&self, access_token: &str, site: &str) -> ApiResult<serde_json::Value> {
+        self.get(access_token, &format!("/sites/{site}/categories")).await
     }
 
     async fn get(&self, access_token: &str, path: &str) -> ApiResult<serde_json::Value> {

@@ -64,76 +64,47 @@ pub async fn crear_publicacion(
     pool: web::Data<DbPool>,
     client: web::Data<MlClient>,
 ) -> ApiResult<HttpResponse> {
-    use crate::services::{clon_services, ml_services, producto_services as prod};
+    use crate::services::{ml_services, producto_services as prod};
     user.exigir_edicion()?;
     let (vid, admin) = (user.id, user.es_admin());
-    let CrearPubReq { cuenta_id, base_producto_id, titulo, precio, componentes } = body.into_inner();
+    let CrearPubReq { cuenta_id, base_producto_id: _, titulo, precio, componentes } = body.into_inner();
     let titulo = titulo.trim().to_string();
     if titulo.is_empty() {
         return Err(ApiError::bad_request("Ponle un título al kit."));
     }
-    if precio <= 0 {
-        return Err(ApiError::bad_request("Ponle un precio válido al kit."));
+    if componentes.len() < 2 {
+        return Err(ApiError::bad_request("Un kit de Mercado Libre necesita al menos 2 productos distintos."));
     }
-    if componentes.is_empty() {
-        return Err(ApiError::bad_request("Agrega al menos un componente."));
+    if componentes.len() > 6 {
+        return Err(ApiError::bad_request("Un kit de Mercado Libre admite máximo 6 productos distintos."));
     }
-    let comps: Vec<(Uuid, i32)> = componentes.iter().map(|c| (c.producto_id, c.cantidad.max(1))).collect();
+    let comps: Vec<(Uuid, i32)> = componentes.iter().map(|c| (c.producto_id, c.cantidad.clamp(1, 10))).collect();
     let cuenta = db::run(&pool, move |conn| ml_services::get_cuenta(conn, cuenta_id, vid, admin)).await?;
-    // Base + componentes deben ser de esa cuenta.
-    let mut ids: Vec<Uuid> = comps.iter().map(|c| c.0).collect();
-    ids.push(base_producto_id);
+    let ids: Vec<Uuid> = comps.iter().map(|c| c.0).collect();
     let prods = db::run(&pool, move |conn| prod::por_ids_de_cuenta(conn, cuenta_id, &ids)).await?;
-    let base = prods
-        .iter()
-        .find(|p| p.id == base_producto_id)
-        .cloned()
-        .ok_or_else(|| ApiError::bad_request("El componente base no pertenece a esa cuenta."))?;
-    // Disponibilidad del kit = mínimo de (stock de cada componente ÷ cantidad).
-    let mut disponible = i32::MAX;
+    // Componentes como (ml_item_id, cantidad) para el kit NATIVO de ML.
+    let mut componentes_ml: Vec<(String, i32)> = Vec::new();
     for (pid, cant) in &comps {
-        let stock = prods.iter().find(|p| p.id == *pid).map(|p| p.stock).unwrap_or(0);
-        disponible = disponible.min(stock / cant.max(&1));
+        let p = prods
+            .iter()
+            .find(|p| p.id == *pid)
+            .ok_or_else(|| ApiError::bad_request("Un componente no pertenece a esa cuenta."))?;
+        componentes_ml.push((p.ml_item_id.clone(), *cant));
     }
-    if disponible == i32::MAX {
-        disponible = 0;
-    }
-    // Payload heredado del base, con el título/precio/stock del kit y sin variaciones.
-    let armar = |con_familia: bool| -> serde_json::Value {
-        let mut p = clon_services::payload(&base, con_familia);
-        p["price"] = json!(precio.max(0));
-        if let Some(o) = p.as_object_mut() {
-            o.remove("variations");
-        }
-        p["available_quantity"] = json!(disponible.max(0));
-        if con_familia {
-            p["family_name"] = json!(titulo.clone());
-        } else {
-            p["title"] = json!(titulo.clone());
-        }
-        p
-    };
     let token = crate::sync::access_token_valido(&pool, &client, &cuenta).await?;
-    let mut res = client.crear_item(&token, &armar(false)).await;
-    if let Err(e) = &res {
-        if e.to_string().contains("family_name") {
-            res = client.crear_item(&token, &armar(true)).await;
-        }
-    }
-    let creado = res?;
+    let precio_opt = if precio > 0 { Some(precio) } else { None };
+    // Crea el kit nativo: ML genera título/descripción y sincroniza su stock desde los componentes.
+    let creado = client.crear_kit(&token, &titulo, &componentes_ml, precio_opt).await?;
     let new_id = creado.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
     if new_id.is_empty() {
-        return Err(ApiError::internal("Mercado Libre no devolvió el ID de la publicación."));
+        return Err(ApiError::internal("Mercado Libre no devolvió el ID del kit."));
     }
-    // Importa la publicación nueva al hub (crea su producto) y la enlaza como kit.
-    crate::sync::refrescar_item(&pool, &client, &cuenta, &new_id).await?;
+    // Importa el kit al hub (ML ya maneja su stock nativo) y lo registra como kit para verlo
+    // y propagarlo a otros canales. No se empuja stock a ML: lo gestiona ML nativamente.
+    let _ = crate::sync::refrescar_item(&pool, &client, &cuenta, &new_id).await;
     let nid = new_id.clone();
-    let kit_pid = db::run(&pool, move |conn| ml_services::producto_id_por_item(conn, cuenta_id, &nid))
-        .await?
-        .ok_or_else(|| ApiError::internal("No se pudo registrar la publicación del kit en el hub."))?;
-    let venta = db::run(&pool, move |conn| kit_services::definir_kit(conn, vid, kit_pid, comps)).await?;
-    if let Some(v) = venta {
-        crate::sync::empujar_stock_ml(&pool, &client, &v).await;
+    if let Ok(Some(kit_pid)) = db::run(&pool, move |conn| ml_services::producto_id_por_item(conn, cuenta_id, &nid)).await {
+        let _ = db::run(&pool, move |conn| kit_services::definir_kit(conn, vid, kit_pid, comps)).await;
     }
     let permalink = creado.get("permalink").and_then(|v| v.as_str()).map(|s| s.to_string());
     Ok(HttpResponse::Ok().json(json!({ "ok": true, "item_id": new_id, "permalink": permalink })))
