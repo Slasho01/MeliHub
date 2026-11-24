@@ -666,6 +666,12 @@ impl MlClient {
         self.get(access_token, &format!("/highlights/{site}/category/{categoria}")).await
     }
 
+    /// Búsqueda pública de publicaciones por categoría (respaldo de "más vendidos" cuando
+    /// el endpoint highlights está bloqueado por políticas).
+    pub async fn buscar_categoria(&self, access_token: &str, site: &str, categoria: &str, limit: i32) -> ApiResult<serde_json::Value> {
+        self.get(access_token, &format!("/sites/{site}/search?category={categoria}&limit={}", limit.clamp(1, 50))).await
+    }
+
     /// Producto del catálogo de ML (`/products/{id}`): usado por "más vendidos" (type PRODUCT).
     pub async fn get_product(&self, access_token: &str, product_id: &str) -> ApiResult<serde_json::Value> {
         self.get(access_token, &format!("/products/{product_id}")).await

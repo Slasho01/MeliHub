@@ -69,7 +69,8 @@ export default function Tendencias() {
       </div>
 
       <div className="card stack" style={{ gap: 10 }}>
-        <b>🏆 Más vendido</b>
+        <b>🏆 {data?.fuente_vendido === 'destacados' ? 'Destacados de la categoría' : 'Más vendido'}</b>
+        {cat && data?.fuente_vendido === 'destacados' && <span className="muted xs" style={{ marginTop: -4 }}>Mercado Libre no habilita el ranking de "más vendidos" para apps externas, así que mostramos las publicaciones destacadas de la categoría.</span>}
         {!cat ? (
           <span className="muted sm">Elige una categoría arriba para ver sus productos más vendidos.</span>
         ) : vendido.length === 0 ? (

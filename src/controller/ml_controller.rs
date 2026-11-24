@@ -211,49 +211,72 @@ pub async fn tendencias(
 
     // Lo más vendido (requiere categoría): IDs por ranking → detalle de cada ítem (orden conservado).
     let mut vendido = json!([]);
+    let mut fuente = "";
     if let Some(c) = cat.as_deref() {
-        let hres = client.highlights(&token, &site, c).await;
-        if let Err(e) = &hres {
-            log::warn!("[tendencias] highlights cat={c} falló: {e}");
-        }
-        if let Ok(h) = hres {
-            let content = h.get("content").and_then(|v| v.as_array()).cloned().unwrap_or_default();
-            log::info!("[tendencias] highlights cat={c}: {} items en content. Crudo: {}", content.len(), h.to_string().chars().take(220).collect::<String>());
-            let mut out: Vec<serde_json::Value> = Vec::new();
-            for entry in content.iter().take(20) {
-                let id = entry.get("id").and_then(|v| v.as_str()).unwrap_or("");
-                if id.is_empty() {
-                    continue;
-                }
-                let tipo = entry.get("type").and_then(|v| v.as_str()).unwrap_or("");
-                if tipo == "PRODUCT" {
-                    // Producto de catálogo.
-                    if let Ok(p) = client.get_product(&token, id).await {
-                        let name = p.get("name").and_then(|v| v.as_str()).unwrap_or("");
-                        let thumb = p
-                            .get("pictures")
-                            .and_then(|a| a.as_array())
-                            .and_then(|a| a.first())
-                            .and_then(|x| x.get("url").or_else(|| x.get("secure_url")))
-                            .and_then(|v| v.as_str());
-                        let precio = p.get("buy_box_winner").and_then(|b| b.get("price")).and_then(|v| v.as_f64());
-                        let permalink = p.get("permalink").and_then(|v| v.as_str());
-                        out.push(json!({ "id": id, "titulo": name, "precio": precio, "thumbnail": thumb, "permalink": permalink }));
+        // 1) Intenta los MÁS VENDIDOS (highlights). ML suele bloquearlo por políticas (403).
+        match client.highlights(&token, &site, c).await {
+            Ok(h) => {
+                let content = h.get("content").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+                let mut out: Vec<serde_json::Value> = Vec::new();
+                for entry in content.iter().take(20) {
+                    let id = entry.get("id").and_then(|v| v.as_str()).unwrap_or("");
+                    if id.is_empty() {
+                        continue;
                     }
-                } else {
-                    // Publicación normal (ITEM).
-                    if let Ok(items) = client.get_items(&token, &[id.to_string()]).await {
+                    if entry.get("type").and_then(|v| v.as_str()) == Some("PRODUCT") {
+                        if let Ok(p) = client.get_product(&token, id).await {
+                            let name = p.get("name").and_then(|v| v.as_str()).unwrap_or("");
+                            let thumb = p.get("pictures").and_then(|a| a.as_array()).and_then(|a| a.first()).and_then(|x| x.get("url").or_else(|| x.get("secure_url"))).and_then(|v| v.as_str());
+                            let precio = p.get("buy_box_winner").and_then(|b| b.get("price")).and_then(|v| v.as_f64());
+                            let permalink = p.get("permalink").and_then(|v| v.as_str());
+                            out.push(json!({ "id": id, "titulo": name, "precio": precio, "thumbnail": thumb, "permalink": permalink }));
+                        }
+                    } else if let Ok(items) = client.get_items(&token, &[id.to_string()]).await {
                         if let Some(it) = items.first() {
                             out.push(json!({ "id": it.id, "titulo": it.title, "precio": it.price, "thumbnail": it.thumbnail, "permalink": it.permalink }));
                         }
                     }
                 }
+                if !out.is_empty() {
+                    vendido = json!(out);
+                    fuente = "vendidos";
+                }
             }
-            log::info!("[tendencias] vendido resuelto: {} producto(s)", out.len());
-            vendido = json!(out);
+            Err(e) => log::warn!("[tendencias] highlights cat={c} bloqueado por ML: {e}"),
         }
+        // 2) Respaldo: si no hubo best-sellers, muestra los DESTACADOS de la categoría (búsqueda).
+        if vendido.as_array().map(|a| a.is_empty()).unwrap_or(true) {
+            match client.buscar_categoria(&token, &site, c, 20).await {
+                Ok(s) => {
+                    let out: Vec<serde_json::Value> = s
+                        .get("results")
+                        .and_then(|v| v.as_array())
+                        .map(|arr| {
+                            arr.iter()
+                                .take(20)
+                                .map(|r| {
+                                    json!({
+                                        "id": r.get("id").and_then(|v| v.as_str()),
+                                        "titulo": r.get("title").and_then(|v| v.as_str()),
+                                        "precio": r.get("price").and_then(|v| v.as_f64()),
+                                        "thumbnail": r.get("thumbnail").and_then(|v| v.as_str()),
+                                        "permalink": r.get("permalink").and_then(|v| v.as_str()),
+                                    })
+                                })
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    if !out.is_empty() {
+                        vendido = json!(out);
+                        fuente = "destacados";
+                    }
+                }
+                Err(e) => log::warn!("[tendencias] búsqueda cat={c} falló: {e}"),
+            }
+        }
+        log::info!("[tendencias] cat={c} vendido={} fuente={fuente}", vendido.as_array().map(|a| a.len()).unwrap_or(0));
     }
-    Ok(HttpResponse::Ok().json(json!({ "buscado": buscado, "vendido": vendido, "categorias": categorias })))
+    Ok(HttpResponse::Ok().json(json!({ "buscado": buscado, "vendido": vendido, "fuente_vendido": fuente, "categorias": categorias })))
 }
 
 pub async fn listar_cuentas(user: AuthVendedor, pool: web::Data<DbPool>) -> ApiResult<HttpResponse> {
