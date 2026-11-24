@@ -666,6 +666,11 @@ impl MlClient {
         self.get(access_token, &format!("/highlights/{site}/category/{categoria}")).await
     }
 
+    /// Producto del catálogo de ML (`/products/{id}`): usado por "más vendidos" (type PRODUCT).
+    pub async fn get_product(&self, access_token: &str, product_id: &str) -> ApiResult<serde_json::Value> {
+        self.get(access_token, &format!("/products/{product_id}")).await
+    }
+
     /// Categorías de primer nivel del sitio (para el filtro de tendencias).
     pub async fn categorias_sitio(&self, access_token: &str, site: &str) -> ApiResult<serde_json::Value> {
         self.get(access_token, &format!("/sites/{site}/categories")).await
