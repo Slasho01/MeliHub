@@ -127,6 +127,23 @@ pub struct LinkReq {
     pub link: String,
 }
 
+/// Lee un ítem para clonar desde link: primero con el token (tus propios ítems); si ML lo
+/// bloquea (otros vendedores), intenta lectura pública; si todo falla, mensaje claro.
+async fn leer_item_link(client: &web::Data<MlClient>, token: &str, item_id: &str) -> ApiResult<crate::ml::MlItem> {
+    if let Ok(it) = client.get_item(token, item_id).await {
+        return Ok(it);
+    }
+    match client.get_item_publico(item_id).await {
+        Ok(it) => Ok(it),
+        Err(e) => {
+            log::warn!("[link] no se pudo leer '{item_id}' (token + público): {e}");
+            Err(ApiError::bad_request(
+                "Mercado Libre no permite leer esta publicación por API — suele pasar con publicaciones de OTROS vendedores. Esta función funciona con TUS propias publicaciones; para copiar un producto de otro vendedor tendrías que recrearlo a mano.",
+            ))
+        }
+    }
+}
+
 /// Previsualiza una publicación de ML desde su link (para clonarla luego).
 pub async fn previsualizar_link(user: AuthVendedor, body: web::Json<LinkReq>, pool: web::Data<DbPool>, client: web::Data<MlClient>) -> ApiResult<HttpResponse> {
     user.exigir_edicion()?;
@@ -136,13 +153,7 @@ pub async fn previsualizar_link(user: AuthVendedor, body: web::Json<LinkReq>, po
     let cuentas = db::run(&pool, move |conn| svc::listar_cuentas(conn, vid, admin)).await?;
     let cuenta = cuentas.into_iter().next().ok_or_else(|| ApiError::bad_request("Conecta una cuenta de Mercado Libre primero."))?;
     let token = crate::sync::access_token_valido(&pool, &client, &cuenta).await?;
-    let it = match client.get_item(&token, &item_id).await {
-        Ok(it) => it,
-        Err(e) => {
-            log::warn!("[link] get_item '{item_id}' falló: {e}");
-            return Err(e);
-        }
-    };
+    let it = leer_item_link(&client, &token, &item_id).await?;
     Ok(HttpResponse::Ok().json(json!({
         "item_id": it.id,
         "titulo": it.title,
@@ -172,7 +183,7 @@ pub async fn clonar_link(user: AuthVendedor, body: web::Json<ClonarLinkReq>, poo
     let item_id = item_id_de_link(&link).ok_or_else(|| ApiError::bad_request("No reconocí un link de publicación de Mercado Libre."))?;
     let destino = db::run(&pool, move |conn| svc::get_cuenta(conn, destino_cuenta_id, vid, admin)).await?;
     let token = crate::sync::access_token_valido(&pool, &client, &destino).await?;
-    let it = client.get_item(&token, &item_id).await?;
+    let it = leer_item_link(&client, &token, &item_id).await?;
     let desc = client.get_description(&token, &it.id).await;
     let datos = serde_json::to_value(&it).unwrap_or_else(|_| json!({}));
     let titulo_final = titulo.map(|t| t.trim().to_string()).filter(|s| !s.is_empty()).unwrap_or_else(|| it.title.clone());

@@ -666,6 +666,24 @@ impl MlClient {
         self.get(access_token, &format!("/highlights/{site}/category/{categoria}")).await
     }
 
+    /// Lee una publicación SIN token (datos públicos). ML a veces permite esto para ítems
+    /// activos aunque sean de otro vendedor; otras veces también lo bloquea.
+    pub async fn get_item_publico(&self, item_id: &str) -> ApiResult<MlItem> {
+        let res = self
+            .http
+            .get(format!("{}/items/{item_id}", self.cfg.api_base))
+            .header("Accept", "application/json")
+            .send()
+            .await
+            .map_err(|e| ApiError::internal(format!("Mercado Libre no respondió: {e}")))?;
+        let status = res.status();
+        let text = res.text().await.unwrap_or_default();
+        if !status.is_success() {
+            return Err(ApiError::bad_request(format!("Mercado Libre respondió {status}: {}", resumen_error_ml(&text))));
+        }
+        serde_json::from_str(&text).map_err(|e| ApiError::internal(format!("Respuesta de ML no reconocida: {e}")))
+    }
+
     /// Lee UNA publicación por su ID, surfacando el error real de ML (404/403/etc.).
     /// A diferencia de `get_items`, no se traga el error (sirve para clonar desde link).
     pub async fn get_item(&self, access_token: &str, item_id: &str) -> ApiResult<MlItem> {
