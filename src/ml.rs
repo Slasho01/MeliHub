@@ -666,6 +666,13 @@ impl MlClient {
         self.get(access_token, &format!("/highlights/{site}/category/{categoria}")).await
     }
 
+    /// Lee UNA publicación por su ID, surfacando el error real de ML (404/403/etc.).
+    /// A diferencia de `get_items`, no se traga el error (sirve para clonar desde link).
+    pub async fn get_item(&self, access_token: &str, item_id: &str) -> ApiResult<MlItem> {
+        let v = self.get(access_token, &format!("/items/{item_id}")).await?;
+        serde_json::from_value(v).map_err(|e| ApiError::internal(format!("Respuesta de ML no reconocida: {e}")))
+    }
+
     /// Búsqueda pública de publicaciones por categoría (respaldo de "más vendidos" cuando
     /// el endpoint highlights está bloqueado por políticas).
     pub async fn buscar_categoria(&self, access_token: &str, site: &str, categoria: &str, limit: i32) -> ApiResult<serde_json::Value> {
