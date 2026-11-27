@@ -13,6 +13,39 @@ export default function ClonarML() {
   const [rep, setRep] = useState(null)
   const [agrupando, setAgrupando] = useState(false)
   const [agrMsg, setAgrMsg] = useState(null)
+  // Clonar desde un link.
+  const [linkInput, setLinkInput] = useState('')
+  const [preview, setPreview] = useState(null)
+  const [prevBusy, setPrevBusy] = useState(false)
+  const [linkDestino, setLinkDestino] = useState('')
+  const [linkTitulo, setLinkTitulo] = useState('')
+  const [linkPrecio, setLinkPrecio] = useState('')
+  const [linkBusy, setLinkBusy] = useState(false)
+  const [linkRep, setLinkRep] = useState(null)
+
+  const previsualizar = async () => {
+    if (!linkInput.trim()) return
+    setPrevBusy(true); setError(''); setPreview(null); setLinkRep(null)
+    try {
+      const d = await post('/ml/link/previsualizar', { link: linkInput.trim() })
+      setPreview(d); setLinkTitulo(d.titulo || ''); setLinkPrecio(d.precio ? String(Math.round(d.precio)) : '')
+    } catch (e) { setError(e.message) } finally { setPrevBusy(false) }
+  }
+  const clonarLink = async () => {
+    if (!preview) return
+    if (!linkDestino) { setError('Elige la cuenta donde crear la publicación.'); return }
+    if (!linkTitulo.trim()) { setError('Ponle un título.'); return }
+    setLinkBusy(true); setError(''); setLinkRep(null)
+    try {
+      const r = await post('/ml/link/clonar', {
+        link: linkInput.trim(),
+        destino_cuenta_id: linkDestino,
+        titulo: linkTitulo.trim(),
+        precio: Number(linkPrecio) || 0,
+      })
+      setLinkRep(r)
+    } catch (e) { setError(e.message) } finally { setLinkBusy(false) }
+  }
 
   const agrupar = async () => {
     setAgrupando(true); setError(''); setAgrMsg(null)
@@ -71,6 +104,48 @@ export default function ClonarML() {
 
       {error && <div className="alert alert-bad">{error}</div>}
       {agrMsg && <div className="alert alert-ok">{agrMsg}</div>}
+
+      <div className="card stack" style={{ gap: 10 }}>
+        <div>
+          <b>🔗 Clonar desde un link</b>
+          <p className="muted xs" style={{ margin: 0 }}>Pega el link de cualquier publicación de Mercado Libre y créala en tu cuenta. Puedes editar título y precio antes de publicar.</p>
+        </div>
+        <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+          <input className="input" style={{ flex: '1 1 320px' }} placeholder="https://articulo.mercadolibre.cl/MLC-..." value={linkInput} onChange={(e) => setLinkInput(e.target.value)} />
+          <button className="btn" disabled={prevBusy || !linkInput.trim()} onClick={previsualizar}>{prevBusy ? 'Leyendo…' : 'Ver'}</button>
+        </div>
+
+        {preview && (
+          <div className="stack" style={{ gap: 10 }}>
+            <div className="row" style={{ gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+              {preview.thumbnail && <img src={preview.thumbnail} alt="" width="54" height="54" style={{ borderRadius: 8, objectFit: 'cover', flexShrink: 0 }} />}
+              <span className="muted xs">Origen: {preview.item_id} · {preview.categoria || 'sin categoría'}{preview.permalink && <> · <a href={preview.permalink} target="_blank" rel="noreferrer">ver original ↗</a></>}</span>
+            </div>
+            <div className="row" style={{ gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+              <label className="stack" style={{ gap: 4, flex: '1 1 260px' }}><span className="sm">Título (editable)</span>
+                <input className="input" value={linkTitulo} onChange={(e) => setLinkTitulo(e.target.value)} />
+              </label>
+              <label className="stack" style={{ gap: 4, flex: '0 1 140px' }}><span className="sm">Precio</span>
+                <input className="input" type="number" min="1" value={linkPrecio} onChange={(e) => setLinkPrecio(e.target.value)} />
+              </label>
+              <label className="stack" style={{ gap: 4, flex: '0 1 220px' }}><span className="sm">Crear en la cuenta</span>
+                <select className="input" value={linkDestino} onChange={(e) => setLinkDestino(e.target.value)}>
+                  <option value="">— Elige —</option>
+                  {cuentas.map((c) => <option key={c.id} value={c.id}>{c.nickname || `Usuario ${c.ml_user_id}`}</option>)}
+                </select>
+              </label>
+              <button className="btn btn-accent" disabled={linkBusy} onClick={clonarLink}>{linkBusy ? 'Creando…' : 'Crear en mi cuenta'}</button>
+            </div>
+            <span className="muted xs">⚠️ Copiar la publicación de otro vendedor (fotos/marca) puede chocar con las reglas de Mercado Libre. Ideal para tus propios productos o editando fotos/título.</span>
+          </div>
+        )}
+
+        {linkRep && (
+          <div className="alert alert-ok" style={{ display: 'block' }}>
+            ✅ Publicación creada {linkRep.permalink ? <>· <a href={linkRep.permalink} target="_blank" rel="noreferrer">ver en ML ↗</a></> : `(${linkRep.item_id})`}
+          </div>
+        )}
+      </div>
 
       <div className="card row" style={{ gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
         <label className="stack" style={{ gap: 4, flex: '1 1 220px' }}><span className="sm">Cuenta de origen</span>

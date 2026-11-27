@@ -88,6 +88,119 @@ pub async fn clonar(
     Ok(HttpResponse::Ok().json(json!({ "total": resultados.len(), "creados": creados, "resultados": resultados })))
 }
 
+/// Extrae el ID de publicación (p. ej. MLC123456789) de un link de Mercado Libre.
+fn item_id_de_link(link: &str) -> Option<String> {
+    let chars: Vec<char> = link.to_uppercase().chars().collect();
+    let n = chars.len();
+    let mut i = 0;
+    while i < n {
+        if chars[i].is_ascii_uppercase() {
+            let start = i;
+            while i < n && chars[i].is_ascii_uppercase() {
+                i += 1;
+            }
+            let letras = i - start;
+            if (2..=3).contains(&letras) {
+                let mut j = i;
+                if j < n && chars[j] == '-' {
+                    j += 1;
+                }
+                let dstart = j;
+                while j < n && chars[j].is_ascii_digit() {
+                    j += 1;
+                }
+                if j - dstart >= 6 {
+                    let prefijo: String = chars[start..start + letras].iter().collect();
+                    let digitos: String = chars[dstart..j].iter().collect();
+                    return Some(format!("{prefijo}{digitos}"));
+                }
+            }
+        } else {
+            i += 1;
+        }
+    }
+    None
+}
+
+#[derive(Deserialize)]
+pub struct LinkReq {
+    pub link: String,
+}
+
+/// Previsualiza una publicación de ML desde su link (para clonarla luego).
+pub async fn previsualizar_link(user: AuthVendedor, body: web::Json<LinkReq>, pool: web::Data<DbPool>, client: web::Data<MlClient>) -> ApiResult<HttpResponse> {
+    user.exigir_edicion()?;
+    let (vid, admin) = (user.id, user.es_admin());
+    let item_id = item_id_de_link(&body.link).ok_or_else(|| ApiError::bad_request("No reconocí un link de publicación de Mercado Libre. Pega la URL completa."))?;
+    let cuentas = db::run(&pool, move |conn| svc::listar_cuentas(conn, vid, admin)).await?;
+    let cuenta = cuentas.into_iter().next().ok_or_else(|| ApiError::bad_request("Conecta una cuenta de Mercado Libre primero."))?;
+    let token = crate::sync::access_token_valido(&pool, &client, &cuenta).await?;
+    let it = client
+        .get_items(&token, &[item_id])
+        .await?
+        .into_iter()
+        .next()
+        .ok_or_else(|| ApiError::bad_request("No se pudo leer esa publicación (revisa el link)."))?;
+    Ok(HttpResponse::Ok().json(json!({
+        "item_id": it.id,
+        "titulo": it.title,
+        "precio": it.price,
+        "moneda": it.currency_id,
+        "thumbnail": it.thumbnail,
+        "categoria": it.category_id,
+        "permalink": it.permalink,
+    })))
+}
+
+#[derive(Deserialize)]
+pub struct ClonarLinkReq {
+    pub link: String,
+    pub destino_cuenta_id: Uuid,
+    #[serde(default)]
+    pub titulo: Option<String>,
+    #[serde(default)]
+    pub precio: Option<i64>,
+}
+
+/// Clona una publicación (de cualquier vendedor) a una cuenta del usuario, desde su link.
+pub async fn clonar_link(user: AuthVendedor, body: web::Json<ClonarLinkReq>, pool: web::Data<DbPool>, client: web::Data<MlClient>) -> ApiResult<HttpResponse> {
+    user.exigir_edicion()?;
+    let (vid, admin) = (user.id, user.es_admin());
+    let ClonarLinkReq { link, destino_cuenta_id, titulo, precio } = body.into_inner();
+    let item_id = item_id_de_link(&link).ok_or_else(|| ApiError::bad_request("No reconocí un link de publicación de Mercado Libre."))?;
+    let destino = db::run(&pool, move |conn| svc::get_cuenta(conn, destino_cuenta_id, vid, admin)).await?;
+    let token = crate::sync::access_token_valido(&pool, &client, &destino).await?;
+    let it = client
+        .get_items(&token, &[item_id])
+        .await?
+        .into_iter()
+        .next()
+        .ok_or_else(|| ApiError::bad_request("No se pudo leer esa publicación (revisa el link)."))?;
+    let desc = client.get_description(&token, &it.id).await;
+    let datos = serde_json::to_value(&it).unwrap_or_else(|_| json!({}));
+    let titulo_final = titulo.map(|t| t.trim().to_string()).filter(|s| !s.is_empty()).unwrap_or_else(|| it.title.clone());
+    let precio_final = precio.filter(|p| *p > 0).unwrap_or_else(|| it.price.map(|p| p.round() as i64).unwrap_or(0));
+    let stock = it.available_quantity.map(|q| q as i32).unwrap_or(1).max(1);
+    let moneda = it.currency_id.clone().unwrap_or_else(|| "CLP".into());
+    let armar = |con_familia: bool| clon_services::payload_core(&datos, &titulo_final, precio_final, &moneda, stock, it.category_id.as_deref(), con_familia);
+    let mut res = client.crear_item(&token, &armar(false)).await;
+    if let Err(e) = &res {
+        if e.to_string().contains("family_name") {
+            res = client.crear_item(&token, &armar(true)).await;
+        }
+    }
+    let creado = res?;
+    let new_id = creado.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    if !new_id.is_empty() {
+        if let Some(d) = desc.filter(|s| !s.trim().is_empty()) {
+            let _ = client.set_item_description(&token, &new_id, &d).await;
+        }
+        let _ = crate::sync::refrescar_item(&pool, &client, &destino, &new_id).await;
+    }
+    let permalink = creado.get("permalink").and_then(|v| v.as_str());
+    Ok(HttpResponse::Ok().json(json!({ "ok": true, "item_id": new_id, "permalink": permalink })))
+}
+
 fn exigir_ml(cfg: &Config) -> ApiResult<()> {
     if !cfg.ml.configurado() {
         return Err(ApiError::bad_request(

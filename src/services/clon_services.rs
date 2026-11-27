@@ -29,14 +29,16 @@ fn attr_bloqueado(id: &str) -> bool {
         )
 }
 
-/// Construye el cuerpo de `POST /items` para recrear `p` en otra cuenta.
-/// La descripción se envía aparte (ver `datos.descripcion`).
-///
-/// `con_familia`: en categorías de catálogo, ML exige `family_name` y GENERA el título
-/// (no se puede enviar `title`). Se intenta primero sin familia (con título) y, si ML
-/// pide `family_name`, se reintenta con `con_familia = true`.
+/// Construye el payload de `POST /items` para recrear un Producto del hub en otra cuenta.
 pub fn payload(p: &Producto, con_familia: bool) -> Value {
-    let d = &p.datos;
+    payload_core(&p.datos, &p.titulo, p.precio, &p.moneda, p.stock, p.categoria_ml.as_deref(), con_familia)
+}
+
+/// Núcleo: arma el cuerpo de `POST /items` desde datos crudos (del hub o de un link de ML).
+/// La descripción se envía aparte. `con_familia`: categorías de catálogo exigen `family_name`
+/// (ML genera el título); se intenta primero con título y se reintenta con familia si ML lo pide.
+pub fn payload_core(datos: &Value, titulo: &str, precio: i64, moneda: &str, stock: i32, categoria_ml: Option<&str>, con_familia: bool) -> Value {
+    let d = datos;
 
     // Fotos: ML las reingesta por URL de origen.
     let pics: Vec<Value> = d
@@ -105,9 +107,9 @@ pub fn payload(p: &Producto, con_familia: bool) -> Value {
         .unwrap_or("gold_special");
 
     let mut body = json!({
-        "category_id": p.categoria_ml,
-        "price": p.precio,
-        "currency_id": p.moneda,
+        "category_id": categoria_ml,
+        "price": precio,
+        "currency_id": moneda,
         "buying_mode": "buy_it_now",
         "listing_type_id": listing_type,
         "condition": condition,
@@ -121,9 +123,9 @@ pub fn payload(p: &Producto, con_familia: bool) -> Value {
 
     // Modo normal: va el título. Modo familia (catálogo): va family_name y ML genera el título.
     if con_familia {
-        body["family_name"] = json!(p.titulo.chars().take(60).collect::<String>());
+        body["family_name"] = json!(titulo.chars().take(60).collect::<String>());
     } else {
-        body["title"] = json!(p.titulo);
+        body["title"] = json!(titulo);
     }
 
     // Variaciones: se copian las combinaciones y cantidades (sin picture_ids, que son del origen).
@@ -149,7 +151,7 @@ pub fn payload(p: &Producto, con_familia: bool) -> Value {
             .collect();
         body["variations"] = json!(vout);
     } else {
-        body["available_quantity"] = json!(p.stock.max(1));
+        body["available_quantity"] = json!(stock.max(1));
     }
 
     body
