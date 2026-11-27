@@ -37,8 +37,6 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(r("/ml/cuentas/{id}").route(delete().to(ml::desconectar)))
             .service(r("/ml/cuentas/{id}/sincronizar").route(post().to(ml::sincronizar)))
             .service(r("/ml/clonar").route(post().to(ml::clonar)))
-            .service(r("/ml/link/previsualizar").route(post().to(ml::previsualizar_link)))
-            .service(r("/ml/link/clonar").route(post().to(ml::clonar_link)))
             .service(r("/tendencias").route(get().to(ml::tendencias)))
             // Preguntas de compradores (centralizadas de todas las cuentas)
             .service(r("/ml/preguntas").route(get().to(preg::listar)))
